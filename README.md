@@ -62,8 +62,41 @@ The results CSV contains:
 - **Positional Accuracy**: Epoch 1 has positional accuracy of ~0.5-1 arcsec. The 5 arcmin search radius should be sufficient to account for this.
 - **VLASS Sky Coverage**: VLASS covers declinations > -40°. Targets with dec < -40° will not be found.
 
+## Example VLASS Images
+
+We downloaded radio images for three targets with varying VLASS coverage using `download_vlass_image.py`:
+
+**A1644 - High coverage (26 observations)**
+- Multiple bright radio sources scattered across the field
+- More uniform coverage
+
+**A1307 - Medium coverage (4 observations)**
+- One very bright central source (likely the cluster's BCG or central AGN)
+- A few fainter sources in the field
+
+**A1736 - Low coverage (2 observations)**
+- Shows a particularly interesting field with what appears to be a complex radio galaxy (the bright double/multiple source structure)
+- Could be a double-lobed radio galaxy or interacting system
+- A few other compact sources visible
+
+### Image Visualization
+
+The images use an asinh (inverse hyperbolic sine) stretch which is approximately:
+- **Linear** for faint/low values (preserves subtle features)
+- **Logarithmic** for bright/high values (compresses bright sources)
+
+This allows visualization of both bright radio galaxies and fainter extended emission in the same image, which is essential for radio astronomy data with large dynamic range.
+
+### Usage
+
+```bash
+source venv/bin/activate
+python download_vlass_image.py
+```
+
+Note: VLASS images are downloaded via CIRADA cutout service with NVSS as fallback. FITS files are gitignored.
+
 ## Future Work
 
 - Add support for VLASS Epochs 2 and 3 when they become available via Vizier
 - Implement direct catalog download from CIRADA/CADC if needed
-- Add image cutout retrieval for detected sources

@@ -170,22 +170,43 @@ def main():
         print(f"  {row['name']:30s} - {row['n_obs']:2d} observations")
     print()
 
-    # Select target with most observations
-    target = in_vlass.iloc[0]
-    print(f"\nSelected target: {target['name']} ({target['n_obs']} observations)")
-    print("=" * 70)
-    print()
+    # Select three targets: high, medium, and low observation counts
+    # High: first one
+    target_high = in_vlass.iloc[0]
 
-    # Download and display
-    hdu = download_vlass_cutout(
-        ra=target['ra'],
-        dec=target['dec'],
-        size=0.3,  # 0.3 degrees = 18 arcmin
-        name=target['name']
-    )
+    # Medium: middle of the list
+    target_med = in_vlass.iloc[len(in_vlass)//2]
 
-    if hdu:
-        display_vlass_image(hdu, name=target['name'])
+    # Low: near the end (but not the absolute last to avoid single observation)
+    low_obs = in_vlass[in_vlass['n_obs'] <= 3]
+    if len(low_obs) > 0:
+        target_low = low_obs.iloc[len(low_obs)//2]
+    else:
+        target_low = in_vlass.iloc[-3]
+
+    targets = [
+        (target_high, "high"),
+        (target_med, "medium"),
+        (target_low, "low")
+    ]
+
+    for target, category in targets:
+        print(f"\nProcessing {category} coverage target: {target['name']} ({target['n_obs']} observations)")
+        print("=" * 70)
+        print()
+
+        # Download and display
+        hdu = download_vlass_cutout(
+            ra=target['ra'],
+            dec=target['dec'],
+            size=0.3,  # 0.3 degrees = 18 arcmin
+            name=target['name']
+        )
+
+        if hdu:
+            display_vlass_image(hdu, name=target['name'])
+
+        print("\n")
 
 if __name__ == "__main__":
     main()
