@@ -10,12 +10,12 @@ from astropy import units as u
 from astropy.io import fits
 from astropy.wcs import WCS
 from astropy.visualization import ImageNormalize, AsinhStretch
-from astroquery.skyview import SkyView
+from astroquery.cadc import Cadc
 import numpy as np
 
 def download_vlass_cutout(ra, dec, size=0.5, name="target"):
     """
-    Download a VLASS image cutout using the CIRADA cutout service.
+    Download a VLASS image cutout using CADC.
 
     Parameters:
     -----------
@@ -39,75 +39,84 @@ def download_vlass_cutout(ra, dec, size=0.5, name="target"):
     print(f"  Size: {size:.2f} degrees ({size*60:.1f} arcmin)")
     print()
 
-    # Use the CIRADA VLASS cutout service
     try:
-        import requests
-        from io import BytesIO
+        cadc = Cadc()
 
-        # Convert size to arcminutes for the cutout service
-        size_arcmin = size * 60
+        # Query for VLASS images at this position
+        print("Querying CADC for VLASS data...")
+        result = cadc.query_region(
+            coord,
+            collection='VLASS',
+            radius=size*u.degree
+        )
 
-        # CIRADA cutout service URL
-        url = f"https://cutouts.cirada.ca/vlass_cutout"
-        params = {
-            'ra': ra,
-            'dec': dec,
-            'size': size_arcmin,  # size in arcminutes
-            'units': 'arcmin'
-        }
+        if result is None or len(result) == 0:
+            print("No VLASS data found at this position")
+            return None
 
-        print("Requesting cutout from CIRADA service...")
-        response = requests.get(url, params=params, timeout=60)
+        print(f"Found {len(result)} VLASS observations")
+        print(f"Available columns: {result.colnames[:10]}...")
 
-        if response.status_code == 200:
-            # Load the FITS data
-            hdu_list = fits.open(BytesIO(response.content))
+        # Get the first observation
+        obs = result[0]
+        print(f"\nUsing observation: {obs.get('observationID', 'N/A')}")
 
-            # Save the FITS file
-            filename = f"vlass_{name.replace(' ', '_')}.fits"
-            hdu_list.writeto(filename, overwrite=True)
-            print(f"Saved FITS file: {filename}")
-            return hdu_list
+        # Get images
+        print("Downloading images...")
+        cutout_hdu_list = cadc.get_images(
+            coord,
+            radius=size*u.degree,
+            collection='VLASS'
+        )
+
+        if cutout_hdu_list and len(cutout_hdu_list) > 0:
+            print(f"Downloaded {len(cutout_hdu_list)} image(s)")
+
+            # Find the image that actually contains our target
+            best_hdu = None
+            best_flux = -1
+
+            for i, hdu in enumerate(cutout_hdu_list):
+                data = np.squeeze(hdu[0].data)
+                wcs_full = WCS(hdu[0].header)
+                wcs_2d = wcs_full.celestial if wcs_full.naxis > 2 else wcs_full
+
+                # Check if target is in this image
+                target_pix = wcs_2d.world_to_pixel_values(ra, dec)
+                ny, nx = data.shape
+                in_image = (0 <= target_pix[0] < nx) and (0 <= target_pix[1] < ny)
+
+                if in_image:
+                    max_flux = np.nanmax(data)
+                    obs_id = hdu[0].header.get('OBJECT', f'image_{i}')
+                    print(f"  Image {i+1} ({obs_id}): contains target, max flux = {max_flux:.6f} Jy/beam")
+
+                    # Keep the image with highest max flux
+                    if max_flux > best_flux:
+                        best_flux = max_flux
+                        best_hdu = hdu
+
+            if best_hdu is not None:
+                # Save the FITS file
+                filename = f"vlass_{name.replace(' ', '_')}.fits"
+                best_hdu.writeto(filename, overwrite=True)
+                print(f"\nSaved FITS file: {filename} (max flux: {best_flux:.6f} Jy/beam)")
+                return best_hdu
+            else:
+                print("Warning: No image contains the target position!")
+                # Fall back to first image
+                filename = f"vlass_{name.replace(' ', '_')}.fits"
+                cutout_hdu_list[0].writeto(filename, overwrite=True)
+                print(f"Saved FITS file: {filename} (using first image)")
+                return cutout_hdu_list[0]
         else:
-            print(f"Error: HTTP {response.status_code}")
-            print("Trying alternative NVSS survey instead...")
-
-            # Fallback to NVSS if VLASS not available
-            hdu_list = SkyView.get_images(
-                position=coord,
-                survey='NVSS',
-                pixels=1000,
-                radius=size*u.degree
-            )
-
-            if hdu_list:
-                filename = f"nvss_{name.replace(' ', '_')}.fits"
-                hdu_list[0].writeto(filename, overwrite=True)
-                print(f"Saved NVSS FITS file instead: {filename}")
-                return hdu_list[0]
+            print("No image data returned")
             return None
 
     except Exception as e:
         print(f"Error downloading image: {str(e)}")
-        print("Trying NVSS as fallback...")
-
-        try:
-            # Fallback to NVSS
-            hdu_list = SkyView.get_images(
-                position=coord,
-                survey='NVSS',
-                pixels=1000,
-                radius=size*u.degree
-            )
-
-            if hdu_list:
-                filename = f"nvss_{name.replace(' ', '_')}.fits"
-                hdu_list[0].writeto(filename, overwrite=True)
-                print(f"Saved NVSS FITS file: {filename}")
-                return hdu_list[0]
-        except Exception as e2:
-            print(f"NVSS fallback also failed: {str(e2)}")
-
+        import traceback
+        traceback.print_exc()
         return None
 
 def display_vlass_image(hdu, name="target"):
@@ -123,10 +132,20 @@ def display_vlass_image(hdu, name="target"):
     """
     # Extract data and WCS
     data = hdu[0].data
-    wcs = WCS(hdu[0].header)
+    header = hdu[0].header
 
-    # Remove NaN values for better visualization
+    # Remove extra dimensions (e.g., frequency and Stokes)
     data = np.squeeze(data)  # Remove extra dimensions
+
+    # Create a 2D WCS from the full WCS
+    # VLASS images often have 4 dimensions (RA, Dec, Frequency, Stokes)
+    # We need to slice to just the spatial dimensions
+    full_wcs = WCS(header)
+    if full_wcs.naxis > 2:
+        # Drop the extra axes (typically frequency and Stokes)
+        wcs = full_wcs.celestial
+    else:
+        wcs = full_wcs
 
     # Create figure with WCS projection
     fig = plt.figure(figsize=(12, 10))
