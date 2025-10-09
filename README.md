@@ -64,20 +64,23 @@ The results CSV contains:
 
 ## Example VLASS Images
 
-We downloaded radio images for three targets with varying VLASS coverage using `download_vlass_image.py`:
+We downloaded VLASS radio images for three targets with varying coverage using `download_vlass_image.py`:
 
 **A1644 - High coverage (26 observations)**
-- Multiple bright radio sources scattered across the field
-- More uniform coverage
+- Relatively clean field with faint diffuse emission
+- Max flux: 0.18 Jy/beam
+- Shows VLASS's high resolution (~2.5" vs NVSS's 45")
 
 **A1307 - Medium coverage (4 observations)**
-- One very bright central source (likely the cluster's BCG or central AGN)
-- A few fainter sources in the field
+- Very bright central source (0.007 Jy/beam) - likely the cluster's BCG or central AGN
+- **Strong diagonal stripe artifacts** across the image - typical imaging artifacts from interferometric deconvolution
+- These patterns are common in radio interferometry, especially around bright sources
 
 **A1736 - Low coverage (2 observations)**
-- Shows a particularly interesting field with what appears to be a complex radio galaxy (the bright double/multiple source structure)
-- Could be a double-lobed radio galaxy or interacting system
-- A few other compact sources visible
+- Multiple faint sources in the field (0.02 Jy/beam)
+- **Prominent diagonal striping artifacts** throughout the image
+- Extended structures visible in the lower right (may be real diffuse emission or artifacts)
+- Artifacts are more severe with lower coverage - fewer observations mean incomplete uv-coverage and poorer image quality
 
 ### Image Visualization
 
@@ -87,6 +90,16 @@ The images use an asinh (inverse hyperbolic sine) stretch which is approximately
 
 This allows visualization of both bright radio galaxies and fainter extended emission in the same image, which is essential for radio astronomy data with large dynamic range.
 
+### Technical Notes
+
+The script:
+1. Queries CADC for VLASS observations overlapping the target coordinates
+2. Downloads multiple image tiles (VLASS sky is tiled)
+3. **Automatically selects the tile that contains the target position** with the highest flux
+4. Extracts 2D images from 4D FITS cubes for display
+
+This ensures the displayed image actually contains the cluster center, not just an overlapping tile.
+
 ### Usage
 
 ```bash
@@ -94,7 +107,7 @@ source venv/bin/activate
 python download_vlass_image.py
 ```
 
-Note: VLASS images are downloaded via CIRADA cutout service with NVSS as fallback. FITS files are gitignored.
+Note: VLASS images are downloaded from CADC using astroquery. FITS files are gitignored.
 
 ## Future Work
 
