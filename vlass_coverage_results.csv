@@ -1,4 +1,4 @@
-id,name,ra,dec,in_vlass,n_obs
+id,name,ra,dec,in_vlass,n_sources
 4,A401,44.74,13.58,False,0
 7,A85,10.46,-9.3,True,7
 9,A3667,303.13,-56.83,False,0

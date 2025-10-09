@@ -55,7 +55,7 @@ def query_vlass(ra, dec, radius_arcmin=5.0):
 
     Returns:
     --------
-    int : Number of VLASS sources found within the search radius
+    int : Number of VLASS catalog sources found within the search radius
     """
     try:
         from astroquery.vizier import Vizier
@@ -96,14 +96,14 @@ def main():
         count = query_vlass(target['ra'], target['dec'])
 
         if count > 0:
-            print(f"✓ FOUND ({count} observations)")
-            results.append({**target, 'in_vlass': True, 'n_obs': count})
+            print(f"✓ FOUND ({count} catalog sources)")
+            results.append({**target, 'in_vlass': True, 'n_sources': count})
         elif count == 0:
             print("✗ NOT FOUND")
-            results.append({**target, 'in_vlass': False, 'n_obs': 0})
+            results.append({**target, 'in_vlass': False, 'n_sources': 0})
         else:
             print("? ERROR")
-            results.append({**target, 'in_vlass': None, 'n_obs': -1})
+            results.append({**target, 'in_vlass': None, 'n_sources': -1})
 
     print("\n" + "=" * 80)
     print("\nSUMMARY")
@@ -129,7 +129,7 @@ def main():
         print("\nTargets found in VLASS:")
         for r in results:
             if r['in_vlass']:
-                print(f"  - {r['name']} ({r['n_obs']} observations)")
+                print(f"  - {r['name']} ({r['n_sources']} catalog sources)")
 
 if __name__ == "__main__":
     main()

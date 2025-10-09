@@ -10,9 +10,9 @@ This repository contains scripts to check which LoVoCCS (Local Volume Complete C
 
 ## Results Summary
 
-**76 out of 106 targets (71.7%) were found in VLASS Epoch 1**
+**76 out of 106 targets (71.7%) have radio sources in VLASS Epoch 1**
 
-The script queries the VLASS Epoch 1 Quick Look Catalog (Gordon+, 2021; catalog ID: J/ApJS/255/30) available through Vizier, using a 5 arcminute search radius around each target position.
+The script queries the VLASS Epoch 1 Quick Look Catalog (Gordon+, 2021; catalog ID: J/ApJS/255/30) available through Vizier, using a 5 arcminute search radius around each target position. For each target, we count the number of distinct catalog radio sources detected within this radius (not the number of observations/epochs).
 
 ### Targets Not Found (30 targets)
 
@@ -53,8 +53,8 @@ The results CSV contains:
 - `name` - Target name (cluster designation)
 - `ra` - Right Ascension in degrees
 - `dec` - Declination in degrees
-- `in_vlass` - Boolean indicating if target was found
-- `n_obs` - Number of VLASS sources detected within search radius
+- `in_vlass` - Boolean indicating if target was found in VLASS
+- `n_sources` - **Number of distinct radio sources** in the VLASS catalog within 5 arcmin of the target
 
 ## Notes
 
@@ -66,21 +66,22 @@ The results CSV contains:
 
 We downloaded VLASS radio images for three targets with varying coverage using `download_vlass_image.py`:
 
-**A1644 - High coverage (26 observations)**
+**A1644 - High source count (26 catalog sources)**
 - Relatively clean field with faint diffuse emission
 - Max flux: 0.18 Jy/beam
 - Shows VLASS's high resolution (~2.5" vs NVSS's 45")
+- Many catalog sources are faint and not prominently visible in this cutout
 
-**A1307 - Medium coverage (4 observations)**
+**A1307 - Medium source count (4 catalog sources)**
 - Very bright central source (0.007 Jy/beam) - likely the cluster's BCG or central AGN
 - **Strong diagonal stripe artifacts** across the image - typical imaging artifacts from interferometric deconvolution
 - These patterns are common in radio interferometry, especially around bright sources
 
-**A1736 - Low coverage (2 observations)**
+**A1736 - Low source count (2 catalog sources)**
 - Multiple faint sources in the field (0.02 Jy/beam)
 - **Prominent diagonal striping artifacts** throughout the image
 - Extended structures visible in the lower right (may be real diffuse emission or artifacts)
-- Artifacts are more severe with lower coverage - fewer observations mean incomplete uv-coverage and poorer image quality
+- Artifacts are more prominent in some VLASS tiles due to imaging quality variations
 
 ### Image Visualization
 

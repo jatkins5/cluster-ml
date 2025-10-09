@@ -181,25 +181,25 @@ def main():
     results = pd.read_csv("vlass_coverage_results.csv")
 
     # Filter for targets in VLASS
-    in_vlass = results[results['in_vlass'] == True].sort_values('n_obs', ascending=False)
+    in_vlass = results[results['in_vlass'] == True].sort_values('n_sources', ascending=False)
 
-    print("LoVoCCS targets in VLASS (sorted by number of observations):")
+    print("LoVoCCS targets in VLASS (sorted by number of catalog sources):")
     print("=" * 70)
     for idx, row in in_vlass.head(10).iterrows():
-        print(f"  {row['name']:30s} - {row['n_obs']:2d} observations")
+        print(f"  {row['name']:30s} - {row['n_sources']:2d} catalog sources")
     print()
 
-    # Select three targets: high, medium, and low observation counts
+    # Select three targets: high, medium, and low source counts
     # High: first one
     target_high = in_vlass.iloc[0]
 
     # Medium: middle of the list
     target_med = in_vlass.iloc[len(in_vlass)//2]
 
-    # Low: near the end (but not the absolute last to avoid single observation)
-    low_obs = in_vlass[in_vlass['n_obs'] <= 3]
-    if len(low_obs) > 0:
-        target_low = low_obs.iloc[len(low_obs)//2]
+    # Low: near the end (but not the absolute last to avoid single source)
+    low_sources = in_vlass[in_vlass['n_sources'] <= 3]
+    if len(low_sources) > 0:
+        target_low = low_sources.iloc[len(low_sources)//2]
     else:
         target_low = in_vlass.iloc[-3]
 
@@ -210,7 +210,7 @@ def main():
     ]
 
     for target, category in targets:
-        print(f"\nProcessing {category} coverage target: {target['name']} ({target['n_obs']} observations)")
+        print(f"\nProcessing {category} coverage target: {target['name']} ({target['n_sources']} catalog sources)")
         print("=" * 70)
         print()
 
