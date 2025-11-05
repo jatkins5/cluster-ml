@@ -83,6 +83,12 @@ We downloaded VLASS radio images for three targets with varying coverage using `
 - Extended structures visible in the lower right (may be real diffuse emission or artifacts)
 - Artifacts are more prominent in some VLASS tiles due to imaging quality variations
 
+**A2415 - Very high source count (24 catalog sources)**
+- Relatively clean field appearance with max flux 0.185 Jy/beam
+- Despite 24 catalog sources within 5 arcmin, most are faint or at the edges of the cutout
+- Demonstrates that high catalog source counts don't always translate to crowded-looking images
+- Many sources may be near the detection threshold
+
 ### Image Visualization
 
 The images use an asinh (inverse hyperbolic sine) stretch which is approximately:
