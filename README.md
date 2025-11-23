@@ -1,11 +1,6 @@
 # Multi-wavelength Survey Coverage for LoVoCCS Targets
 
-This repository contains scripts to cross-match LoVoCCS (Local Volume Complete Cluster Survey) galaxy cluster targets with multi-wavelength survey data, including radio (VLASS) and X-ray (eROSITA) observations.
-
-I'm worried VLASS is not a great choice here:
-- bands are quite high frequency (2-4 GHz https://science.nrao.edu/facilities/vla/docs/manuals/propvla/frequency-bands-and-samplers) so may miss diffuse emission - maybe not needed if we're only looking for BCG/Xray offsets or other merger signatures? but ideally want to give an ML model as much data as possible
-- at S and B bands largest angular scale is 58" (https://science.nrao.edu/science/surveys/vlass/vlass-epoch-1-quick-look-users-guide), so if clusters are many arcmins scale we may miss a lot of diffuse emission
-- "We have no quantitative assessment at this time on the sensitivity and accuracy of the VLASS QL images to extended structure, and we caution users to keep this in mind when using these images."
+This repository contains scripts to cross-match LoVoCCS (Local Volume Complete Cluster Survey) galaxy cluster targets with multi-wavelength survey data, including radio (VLASS, LoTSS, FIRST) and X-ray (eROSITA) observations.
 
 ## Contents
 
@@ -337,11 +332,3 @@ Note: VLASS images are downloaded from CADC using astroquery. FITS files are git
 
 ### eROSITA
 - Download cutouts manually from eROSITA website https://erosita.mpe.mpg.de/dr1/erodat/
-
-## Other Surveys
-
-- MeerKAT (Chuiyang will do this one)
-- LoTSS https://lofar-surveys.org/dr2_release.html
--- maybe LoLSS as well? https://ui.adsabs.harvard.edu/abs/2021A%26A...648A.104D/abstract
-- MWA GLEAM: entire sky survey below +25 deg dec at 72-231 MHz. sensitive to structures up to 10 deg in size. https://www.cambridge.org/core/journals/publications-of-the-astronomical-society-of-australia/article/gleam-the-galactic-and-extragalactic-allsky-mwa-survey/31003E4628253D7A7BECBE5BCA07DC5D
-- FIRST, if we decide VLASS is a good fit; seems similar in some ways to VLASS but lower frequency (1.4 GHz) and better sensitivity to extended emission (largest angular scale ~2'), though lower resolution (5") and only covers part of the sky (10,575 deg²). https://sundog.stsci.edu/
