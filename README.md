@@ -1,6 +1,6 @@
-# VLASS Coverage Check for LoVoCCS Targets
+# Multi-wavelength Survey Coverage for LoVoCCS Targets
 
-This repository contains scripts to check which LoVoCCS (Local Volume Complete Cluster Survey) galaxy cluster targets are present in the VLASS (Very Large Array Sky Survey) dataset.
+This repository contains scripts to cross-match LoVoCCS (Local Volume Complete Cluster Survey) galaxy cluster targets with multi-wavelength survey data, including radio (VLASS) and X-ray (eROSITA) observations.
 
 I'm worried VLASS is not a great choice here:
 - bands are quite high frequency (2-4 GHz https://science.nrao.edu/facilities/vla/docs/manuals/propvla/frequency-bands-and-samplers) so may miss diffuse emission - maybe not needed if we're only looking for BCG/Xray offsets or other merger signatures? but ideally want to give an ML model as much data as possible
@@ -9,21 +9,42 @@ I'm worried VLASS is not a great choice here:
 
 ## Contents
 
-- `check_vlass_coverage.py` - Main script to query VLASS Epoch 1 catalog for target coverage
+### Scripts
+- `check_vlass_coverage.py` - Query VLASS Epoch 1 catalog for radio source coverage
+- `download_vlass_image.py` - Download and visualize VLASS radio images
+- `match_lovoccs_erosita.py` - Cross-match LoVoCCS targets with eROSITA X-ray sources
+
+### Data Files
 - `LoVoCCS_target_list - lovoccs.csv` - Input CSV file containing 106 galaxy cluster targets with coordinates
 - `vlass_coverage_results.csv` - Output results showing which targets were found in VLASS
+- `lovoccs_erosita_matches.csv` - Summary of eROSITA X-ray matches for each cluster
+- `lovoccs_erosita_matches_detailed.csv` - Detailed information for all matched X-ray sources
 
 ## Results Summary
+
+### VLASS Radio Coverage
 
 **76 out of 106 targets (71.7%) have radio sources in VLASS Epoch 1**
 
 The script queries the VLASS Epoch 1 Quick Look Catalog (Gordon+, 2021; catalog ID: J/ApJS/255/30) available through Vizier, using a 5 arcminute search radius around each target position. For each target, we count the number of distinct catalog radio sources detected within this radius (not the number of observations/epochs).
 
-### Targets Not Found (30 targets)
-
-The 30 targets not found are primarily:
+**Targets Not Found (30 targets):**
 - Targets with dec < -40° (outside VLASS coverage area)
 - A few targets within the nominal coverage that may be in gaps between tiles or below detection threshold
+
+### eROSITA X-ray Matches
+
+**LoVoCCS targets matched with eROSITA All-Sky Survey (eRASS1)**
+
+The matching script queries the eROSITA eRASS1 main catalog (Merloni+, 2024; catalog ID: J/A+A/685/A106) via Vizier, using a 5 arcminute search radius around each cluster center. For each match, we record:
+- Number of X-ray sources within the search radius
+- Separation of the closest source from the cluster center
+- X-ray flux in the 0.5-2 keV band
+- Detection likelihood and source extent
+
+The script generates two output files:
+- **Summary file** (`lovoccs_erosita_matches.csv`): One row per cluster with basic match statistics
+- **Detailed file** (`lovoccs_erosita_matches_detailed.csv`): Individual properties for each matched X-ray source
 
 ## Setup
 
@@ -35,10 +56,12 @@ source venv/bin/activate
 
 2. Install dependencies:
 ```bash
-pip install astroquery pandas astropy numpy
+pip install astroquery pandas astropy numpy matplotlib
 ```
 
 ## Usage
+
+### VLASS Radio Coverage Check
 
 ```bash
 source venv/bin/activate
@@ -51,21 +74,76 @@ The script will:
 3. Print progress and summary to console
 4. Save detailed results to `vlass_coverage_results.csv`
 
-## Output Format
-
-The results CSV contains:
+**Output format:**
 - `id` - Target ID from input file
 - `name` - Target name (cluster designation)
 - `ra` - Right Ascension in degrees
 - `dec` - Declination in degrees
 - `in_vlass` - Boolean indicating if target was found in VLASS
-- `n_sources` - **Number of distinct radio sources** in the VLASS catalog within 5 arcmin of the target
+- `n_sources` - Number of distinct radio sources in the VLASS catalog within 5 arcmin
+
+### eROSITA X-ray Source Matching
+
+```bash
+source venv/bin/activate
+python match_lovoccs_erosita.py
+```
+
+The script will:
+1. Parse the LoVoCCS target list
+2. Query the eROSITA eRASS1 catalog via Vizier for each cluster
+3. Calculate separations and extract source properties
+4. Save summary results to `lovoccs_erosita_matches.csv`
+5. Save detailed source information to `lovoccs_erosita_matches_detailed.csv`
+
+**Summary output format:**
+- `id`, `name`, `ra`, `dec` - Cluster identification
+- `has_erosita_match` - Boolean indicating if X-ray sources were found
+- `n_erosita_sources` - Number of eROSITA sources within 5 arcmin
+- `closest_sep_arcmin` - Angular separation to closest X-ray source
+- `closest_flux_0.5_2keV` - Flux of closest source in 0.5-2 keV band
+
+**Detailed output format:**
+- Cluster information (id, name, coordinates)
+- Source rank (sorted by separation)
+- Source coordinates and separation
+- X-ray flux, detection likelihood, and extent
+
+### Image Visualization
+
+**VLASS radio images:**
+```bash
+python download_vlass_image.py
+```
+
+This script will:
+1. Read the VLASS coverage results
+2. Select representative targets (high, medium, low source counts)
+3. Download image cutouts from CADC
+4. Generate publication-quality visualizations with WCS coordinates
+5. Save both FITS and PNG files
+
+**eROSITA X-ray images:**
+
+eROSITA images are not available through automated download tools yet. To view X-ray images for matched sources:
+
+1. Upload `lovoccs_erosita_matches.csv` to [Aladin](https://aladin.u-strasbg.fr/)
+2. In Aladin, load the eROSITA survey data layer
+3. The matched coordinates will be overlaid on the X-ray images
+
+Alternatively, you can use the detailed matches file (`lovoccs_erosita_matches_detailed.csv`) to view individual X-ray source positions.
 
 ## Notes
 
+### VLASS
 - **Epoch Coverage**: Currently only queries Epoch 1. Epochs 2 and 3 have been released but are not yet easily accessible via Vizier or standard TAP services.
 - **Positional Accuracy**: Epoch 1 has positional accuracy of ~0.5-1 arcsec. The 5 arcmin search radius should be sufficient to account for this.
-- **VLASS Sky Coverage**: VLASS covers declinations > -40°. Targets with dec < -40° will not be found.
+- **Sky Coverage**: VLASS covers declinations > -40°. Targets with dec < -40° will not be found.
+
+### eROSITA
+- **Catalog**: Uses eRASS1 (eROSITA All-Sky Survey, first all-sky scan)
+- **Extended Sources**: eROSITA sources include an extent measurement useful for identifying extended cluster emission
+- **Sky Coverage**: eRASS1 covers the entire sky
 
 ## Example VLASS Images
 
@@ -123,8 +201,12 @@ Note: VLASS images are downloaded from CADC using astroquery. FITS files are git
 
 ## Future Work
 
+### VLASS
 - Add support for VLASS Epochs 2 and 3 when they become available via Vizier
 - Implement direct catalog download from CIRADA/CADC if needed
+
+### eROSITA
+- Download cutouts manually from eROSITA website https://erosita.mpe.mpg.de/dr1/erodat/
 
 ## Other Surveys
 
