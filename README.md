@@ -14,6 +14,8 @@ I'm worried VLASS is not a great choice here:
 - `download_vlass_image.py` - Download and visualize VLASS radio images
 - `match_lovoccs_erosita.py` - Cross-match LoVoCCS targets with eROSITA X-ray sources
 - `match_lovoccs_lotss.py` - Cross-match LoVoCCS targets with LoTSS radio sources
+- `match_lovoccs_first.py` - Cross-match LoVoCCS targets with FIRST radio sources
+- `download_first_image.py` - Download and visualize FIRST radio images
 
 ### Data Files
 - `LoVoCCS_target_list - lovoccs.csv` - Input CSV file containing 106 galaxy cluster targets with coordinates
@@ -22,6 +24,8 @@ I'm worried VLASS is not a great choice here:
 - `lovoccs_erosita_matches_detailed.csv` - Detailed information for all matched X-ray sources
 - `lovoccs_lotss_matches.csv` - Summary of LoTSS radio matches for each cluster
 - `lovoccs_lotss_matches_detailed.csv` - Detailed information for all matched LoTSS sources
+- `lovoccs_first_matches.csv` - Summary of FIRST radio matches for each cluster
+- `lovoccs_first_matches_detailed.csv` - Detailed information for all matched FIRST sources
 
 ## Results Summary
 
@@ -65,6 +69,29 @@ The matching script queries the LoTSS DR2 value-added catalog (Shimwell+, 2022; 
 The script generates two output files:
 - **Summary file** (`lovoccs_lotss_matches.csv`): One row per cluster with basic match statistics
 - **Detailed file** (`lovoccs_lotss_matches_detailed.csv`): Individual properties for each matched radio source
+
+### FIRST Radio Matches
+
+**LoVoCCS targets matched with FIRST (Faint Images of the Radio Sky at Twenty Centimeters)**
+
+The matching script queries the FIRST catalog (White+, 2020; catalog ID: VIII/92/first14) via Vizier, using a 5 arcminute search radius around each cluster center. FIRST provides 1.4 GHz radio observations with excellent resolution and sensitivity to point sources and compact emission. For each match, we record:
+- Number of radio sources within the search radius
+- Separation of the closest source from the cluster center
+- Peak and integrated flux density (mJy)
+- Source morphology (major/minor axes)
+- **Extended source flag** - automatically calculated for sources with major axis > 5.4" (beam size)
+
+**Sky coverage**: FIRST covers 10,575 deg², mostly northern sky (Dec > -40°)
+
+**Survey properties**:
+- Frequency: 1.4 GHz (20 cm)
+- Resolution: ~5" (between VLASS's ~2.5" and LoTSS's ~6")
+- Sensitivity: ~1 mJy/beam RMS
+- Best for: Point sources, AGN, and moderately extended emission
+
+The script generates two output files:
+- **Summary file** (`lovoccs_first_matches.csv`): One row per cluster with basic match statistics
+- **Detailed file** (`lovoccs_first_matches_detailed.csv`): Individual properties for each matched radio source
 
 ## Setup
 
@@ -157,6 +184,34 @@ The script will:
 - Source coordinates and separation
 - Peak and total flux density, source morphology, resolved flag
 
+### FIRST Radio Source Matching
+
+```bash
+source venv/bin/activate
+python match_lovoccs_first.py
+```
+
+The script will:
+1. Parse the LoVoCCS target list
+2. Query the FIRST catalog via Vizier for each cluster
+3. Calculate separations and extract source properties
+4. Save summary results to `lovoccs_first_matches.csv`
+5. Save detailed source information to `lovoccs_first_matches_detailed.csv`
+
+**Summary output format:**
+- `id`, `name`, `ra`, `dec` - Cluster identification
+- `has_first_match` - Boolean indicating if radio sources were found
+- `n_first_sources` - Number of FIRST sources within 5 arcmin
+- `closest_sep_arcmin` - Angular separation to closest radio source
+- `closest_int_flux_mJy` - Integrated flux of closest source in mJy
+- `closest_is_extended` - Flag indicating if closest source is extended (maj > 5.4")
+
+**Detailed output format:**
+- Cluster information (id, name, coordinates)
+- Source rank (sorted by separation)
+- Source coordinates and separation
+- Peak and integrated flux density, source morphology, RMS noise, sidelobe probability
+
 ### Image Visualization
 
 **VLASS radio images:**
@@ -168,6 +223,18 @@ This script will:
 1. Read the VLASS coverage results
 2. Select representative targets (high, medium, low source counts)
 3. Download image cutouts from CADC
+4. Generate publication-quality visualizations with WCS coordinates
+5. Save both FITS and PNG files
+
+**FIRST radio images:**
+```bash
+python download_first_image.py
+```
+
+This script will:
+1. Read the FIRST match results
+2. Select representative targets (high, medium, low source counts)
+3. Download image cutouts from the FIRST archive using astroquery
 4. Generate publication-quality visualizations with WCS coordinates
 5. Save both FITS and PNG files
 
@@ -199,6 +266,14 @@ Alternatively, you can use the detailed matches file (`lovoccs_erosita_matches_d
 - **Resolution**: ~6 arcsec - can resolve cluster-scale structures
 - **Sky Coverage**: Northern hemisphere, 0h < RA < 24h, +25° < Dec < +70° (~5720 deg²)
 - **Resolved Sources**: Catalog includes resolved flag to identify extended emission (radio halos/relics)
+
+### FIRST
+- **Catalog**: Uses FIRST 2014 catalog (White+, 2020)
+- **Frequency**: 1.4 GHz (20 cm) - intermediate frequency between VLASS and LoTSS
+- **Resolution**: ~5 arcsec - good for both point sources and moderately extended emission
+- **Sky Coverage**: 10,575 deg², mostly northern sky (Dec > -40°)
+- **Sensitivity**: ~1 mJy/beam RMS
+- **Extended Sources**: Script automatically flags sources with major axis > 5.4" (beam size)
 
 ## Example VLASS Images
 
