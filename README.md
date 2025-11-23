@@ -13,12 +13,15 @@ I'm worried VLASS is not a great choice here:
 - `check_vlass_coverage.py` - Query VLASS Epoch 1 catalog for radio source coverage
 - `download_vlass_image.py` - Download and visualize VLASS radio images
 - `match_lovoccs_erosita.py` - Cross-match LoVoCCS targets with eROSITA X-ray sources
+- `match_lovoccs_lotss.py` - Cross-match LoVoCCS targets with LoTSS radio sources
 
 ### Data Files
 - `LoVoCCS_target_list - lovoccs.csv` - Input CSV file containing 106 galaxy cluster targets with coordinates
 - `vlass_coverage_results.csv` - Output results showing which targets were found in VLASS
 - `lovoccs_erosita_matches.csv` - Summary of eROSITA X-ray matches for each cluster
 - `lovoccs_erosita_matches_detailed.csv` - Detailed information for all matched X-ray sources
+- `lovoccs_lotss_matches.csv` - Summary of LoTSS radio matches for each cluster
+- `lovoccs_lotss_matches_detailed.csv` - Detailed information for all matched LoTSS sources
 
 ## Results Summary
 
@@ -45,6 +48,23 @@ The matching script queries the eROSITA eRASS1 main catalog (Merloni+, 2024; cat
 The script generates two output files:
 - **Summary file** (`lovoccs_erosita_matches.csv`): One row per cluster with basic match statistics
 - **Detailed file** (`lovoccs_erosita_matches_detailed.csv`): Individual properties for each matched X-ray source
+
+### LoTSS Radio Matches
+
+**2 out of 106 LoVoCCS targets matched with LOFAR Two-metre Sky Survey (LoTSS) DR2**
+
+The matching script queries the LoTSS DR2 value-added catalog (Shimwell+, 2022; catalog ID: J/A+A/678/A151) via Vizier, using a 10 arcminute search radius around each cluster center. LoTSS provides low-frequency (144 MHz) radio observations with excellent sensitivity to diffuse emission. For each match, we record:
+- Number of radio sources within the search radius
+- Separation of the closest source from the cluster center
+- Peak and total flux density (mJy)
+- Source morphology (major/minor axes)
+- **Resolved flag** - indicates extended emission (important for cluster radio halos/relics)
+
+**Sky coverage**: LoTSS DR2 covers ~27% of the sky (5720 deg²) in the northern hemisphere (0h < RA < 24h, +25° < Dec < +70°). The low match rate (2/106) reflects that most LoVoCCS targets fall outside the LoTSS coverage area or at declinations below +25°.
+
+The script generates two output files:
+- **Summary file** (`lovoccs_lotss_matches.csv`): One row per cluster with basic match statistics
+- **Detailed file** (`lovoccs_lotss_matches_detailed.csv`): Individual properties for each matched radio source
 
 ## Setup
 
@@ -109,6 +129,34 @@ The script will:
 - Source coordinates and separation
 - X-ray flux, detection likelihood, and extent
 
+### LoTSS Radio Source Matching
+
+```bash
+source venv/bin/activate
+python match_lovoccs_lotss.py
+```
+
+The script will:
+1. Parse the LoVoCCS target list
+2. Query the LoTSS DR2 catalog via Vizier for each cluster
+3. Calculate separations and extract source properties
+4. Save summary results to `lovoccs_lotss_matches.csv`
+5. Save detailed source information to `lovoccs_lotss_matches_detailed.csv`
+
+**Summary output format:**
+- `id`, `name`, `ra`, `dec` - Cluster identification
+- `has_lotss_match` - Boolean indicating if radio sources were found
+- `n_lotss_sources` - Number of LoTSS sources within 10 arcmin
+- `closest_sep_arcmin` - Angular separation to closest radio source
+- `closest_total_flux_mJy` - Total flux of closest source in mJy
+- `closest_resolved` - Flag indicating if closest source is resolved/extended
+
+**Detailed output format:**
+- Cluster information (id, name, coordinates)
+- Source rank (sorted by separation)
+- Source coordinates and separation
+- Peak and total flux density, source morphology, resolved flag
+
 ### Image Visualization
 
 **VLASS radio images:**
@@ -144,6 +192,13 @@ Alternatively, you can use the detailed matches file (`lovoccs_erosita_matches_d
 - **Catalog**: Uses eRASS1 (eROSITA All-Sky Survey, first all-sky scan)
 - **Extended Sources**: eROSITA sources include an extent measurement useful for identifying extended cluster emission
 - **Sky Coverage**: eRASS1 covers the entire sky
+
+### LoTSS
+- **Catalog**: Uses LoTSS DR2 value-added catalog (Shimwell+, 2022)
+- **Frequency**: 144 MHz - excellent for detecting diffuse, steep-spectrum emission
+- **Resolution**: ~6 arcsec - can resolve cluster-scale structures
+- **Sky Coverage**: Northern hemisphere, 0h < RA < 24h, +25° < Dec < +70° (~5720 deg²)
+- **Resolved Sources**: Catalog includes resolved flag to identify extended emission (radio halos/relics)
 
 ## Example VLASS Images
 
