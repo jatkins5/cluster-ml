@@ -43,3 +43,4 @@ Thumbs.db
 
 # FITS files
 *.fits
+*.rpf

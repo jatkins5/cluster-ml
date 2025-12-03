@@ -11,6 +11,9 @@ This repository contains scripts to cross-match LoVoCCS (Local Volume Complete C
 - `match_lovoccs_lotss.py` - Cross-match LoVoCCS targets with LoTSS radio sources
 - `match_lovoccs_first.py` - Cross-match LoVoCCS targets with FIRST radio sources
 - `download_first_image.py` - Download and visualize FIRST radio images
+- `match_lovoccs_parkes.py` - Cross-match LoVoCCS targets with Parkes radio catalogs (PMN, PKSCAT90)
+- `download_parkes_data.py` - Download raw Parkes RPFITS data from ATOA (requires OPAL authentication)
+- `convert_rpfits_to_png.py` - Convert Parkes RPFITS spectral data to PNG spectrum plots
 
 ### Data Files
 - `LoVoCCS_target_list - lovoccs.csv` - Input CSV file containing 106 galaxy cluster targets with coordinates
@@ -21,6 +24,8 @@ This repository contains scripts to cross-match LoVoCCS (Local Volume Complete C
 - `lovoccs_lotss_matches_detailed.csv` - Detailed information for all matched LoTSS sources
 - `lovoccs_first_matches.csv` - Summary of FIRST radio matches for each cluster
 - `lovoccs_first_matches_detailed.csv` - Detailed information for all matched FIRST sources
+- `lovoccs_parkes_matches.csv` - Summary of Parkes catalog matches for each cluster
+- `lovoccs_parkes_matches_detailed.csv` - Detailed information for all matched Parkes sources
 
 ## Results Summary
 
@@ -88,6 +93,39 @@ The script generates two output files:
 - **Summary file** (`lovoccs_first_matches.csv`): One row per cluster with basic match statistics
 - **Detailed file** (`lovoccs_first_matches_detailed.csv`): Individual properties for each matched radio source
 
+### Parkes Radio Catalog Matches
+
+**28 out of 106 LoVoCCS targets (26.4%) matched with Parkes radio catalogs**
+
+The matching script queries Parkes survey catalogs via VizieR, using a 5 arcminute search radius around each cluster center:
+
+- **PMN** (VIII/38) - Parkes-MIT-NRAO 4.85 GHz survey
+- **PKSCAT90** (VIII/15) - Parkes Radio Sources Catalogue, multi-frequency (80 MHz to 5 GHz)
+
+**Results breakdown by catalog:**
+- PMN: 28 sources (4.85 GHz continuum)
+- PKSCAT90: 12 sources (historical multi-frequency catalog)
+
+**Notable matches:**
+- A780 (Hydra A): 23.5 Jy at 2700 MHz - famous radio galaxy
+- A2052: 2.3 Jy at 2700 MHz with multi-frequency detections
+
+The script generates two output files:
+- **Summary file** (`lovoccs_parkes_matches.csv`): One row per cluster with match counts per catalog
+- **Detailed file** (`lovoccs_parkes_matches_detailed.csv`): Individual properties for each matched source including multi-frequency flux measurements
+
+### Parkes Raw Data (ATOA)
+
+In addition to catalog matching, raw Parkes observation data can be downloaded from the Australia Telescope Online Archive (ATOA). These are **RPFITS format spectral data files**, not images.
+
+**Important notes:**
+- ATOA requires OPAL authentication to download data
+- Parkes is a single-dish telescope - it produces spectra, not interferometric images
+- The RPFITS files contain raw telescope data requiring specialized software to reduce
+- Use `convert_rpfits_to_png.py` to visualize spectra as PNG plots
+
+**18 out of 106 clusters** have Parkes observations within 0.25 degrees in ATOA, totaling ~1.8 GB of data.
+
 ## Setup
 
 1. Create a virtual environment:
@@ -98,7 +136,7 @@ source venv/bin/activate
 
 2. Install dependencies:
 ```bash
-pip install astroquery pandas astropy numpy matplotlib
+pip install astroquery pandas astropy numpy matplotlib pyvo casatools
 ```
 
 ## Usage
@@ -207,6 +245,49 @@ The script will:
 - Source coordinates and separation
 - Peak and integrated flux density, source morphology, RMS noise, sidelobe probability
 
+### Parkes Radio Catalog Matching
+
+```bash
+source venv/bin/activate
+python match_lovoccs_parkes.py
+```
+
+The script will:
+1. Parse the LoVoCCS target list
+2. Query multiple Parkes catalogs (HIPASS, PMN, PKSCAT90) via VizieR for each cluster
+3. Calculate separations and extract source properties
+4. Save summary results to `lovoccs_parkes_matches.csv`
+5. Save detailed source information to `lovoccs_parkes_matches_detailed.csv`
+
+### Parkes Raw Data Download
+
+```bash
+source venv/bin/activate
+# Query what's available (no download)
+python download_parkes_data.py --clusters A780
+
+# Download with authentication (will prompt for OPAL credentials)
+python download_parkes_data.py --download --clusters A780
+
+# Or set credentials via environment variables
+export OPAL_USERNAME="your_username"
+export OPAL_PASSWORD="your_password"
+python download_parkes_data.py --download --clusters A780
+```
+
+### Convert Parkes Spectra to PNG
+
+```bash
+source venv/bin/activate
+# Convert a single file
+python convert_rpfits_to_png.py parkes_data/A780/2003-11-27_1941-P440.rpf
+
+# Convert all files for a cluster
+python convert_rpfits_to_png.py parkes_data/A780/*.rpf
+```
+
+This generates spectrum plots (`*_spectrum.png`) and time-frequency waterfall plots (`*_waterfall.png`) for each RPFITS file.
+
 ### Image Visualization
 
 **VLASS radio images:**
@@ -269,6 +350,15 @@ Alternatively, you can use the detailed matches file (`lovoccs_erosita_matches_d
 - **Sky Coverage**: 10,575 deg², mostly northern sky (Dec > -40°)
 - **Sensitivity**: ~1 mJy/beam RMS
 - **Extended Sources**: Script automatically flags sources with major axis > 5.4" (beam size)
+
+### Parkes
+- **Catalogs**: PMN, PKSCAT90 via VizieR
+- **Frequencies**: 4850 MHz (PMN), multi-frequency (PKSCAT90)
+- **Telescope**: Single-dish (64m) - produces spectra, not interferometric images
+- **Sky Coverage**: Southern sky, various coverage per catalog
+- **Raw Data**: Available from ATOA in RPFITS format (requires OPAL account)
+- **Data Products**: Raw spectral/continuum data requiring reduction with Livedata/AIPS/MIRIAD
+- **Visualization**: Use `convert_rpfits_to_png.py` with casatools to view spectra
 
 ## Example VLASS Images
 
