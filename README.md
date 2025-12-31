@@ -14,6 +14,8 @@ This repository contains scripts to cross-match LoVoCCS (Local Volume Complete C
 - `match_lovoccs_parkes.py` - Cross-match LoVoCCS targets with Parkes radio catalogs (PMN, PKSCAT90)
 - `download_parkes_data.py` - Download raw Parkes RPFITS data from ATOA (requires OPAL authentication)
 - `convert_rpfits_to_png.py` - Convert Parkes RPFITS spectral data to PNG spectrum plots
+- `query_parkes_mapping.py` - Query ATOA for Parkes mapping observations with spatial diversity
+- `assemble_parkes_images.py` - Assemble Parkes single-dish spectra into spatial images
 
 ### Data Files
 - `LoVoCCS_target_list - lovoccs.csv` - Input CSV file containing 106 galaxy cluster targets with coordinates
@@ -287,6 +289,73 @@ python convert_rpfits_to_png.py parkes_data/A780/*.rpf
 ```
 
 This generates spectrum plots (`*_spectrum.png`) and time-frequency waterfall plots (`*_waterfall.png`) for each RPFITS file.
+
+### Parkes Image Assembly
+
+Parkes is a single-dish telescope, so each observation produces one spectrum at one sky position. To create spatial maps, you need observations at multiple different positions. The workflow is:
+
+**Step 1: Find clusters with mapping data**
+```bash
+source venv/bin/activate
+
+# Scan all clusters to find those with mapping-suitable observations
+python query_parkes_mapping.py --scan-all --output mappable_clusters.csv
+
+# Or query a specific cluster
+python query_parkes_mapping.py --cluster A780 --radius 2.0 --min-positions 5
+```
+
+This queries ATOA with a larger search radius (2 degrees) to find observations at multiple sky positions. Results show which clusters have enough spatial diversity for mapping:
+- Number of unique pointing positions
+- Spatial extent covered
+- Frequency bands available
+
+**Step 2: Download mapping observations**
+
+Once you've identified clusters with mapping data, download the observations using `download_parkes_data.py` with a larger search radius:
+
+```bash
+python download_parkes_data.py --download --clusters A780 --radius 2.0
+```
+
+**Step 3: Assemble into images**
+```bash
+source venv/bin/activate
+
+# First scan the downloaded data to check coverage
+python assemble_parkes_images.py parkes_data/A780/ --scan-only
+
+# Create a continuum (2D) image
+python assemble_parkes_images.py parkes_data/A780/ --output hydra_a.fits
+
+# Create a spectral cube (3D)
+python assemble_parkes_images.py parkes_data/A780/ --output hydra_a_cube.fits --mode cube
+
+# Specify custom pixel size (default is beam/3)
+python assemble_parkes_images.py parkes_data/A780/ --output hydra_a.fits --pixel-size 5
+```
+
+The script will:
+1. Scan all RPFITS files and extract coordinates/spectra (using subprocess isolation for stability)
+2. Analyze spatial coverage and determine if mapping is possible
+3. Grid spectra onto a regular RA/Dec pixel grid using Gaussian beam weighting
+4. Output FITS file with proper WCS headers and PNG visualization
+
+**Requirements:**
+- Minimum 5 unique sky positions for meaningful mapping
+- Observations should be at compatible frequencies
+- Parkes beam size is ~14.4 arcmin at 1 GHz (scales as 14.4/freq_GHz)
+
+**Example output for A780:**
+```
+Coverage Analysis:
+  Observations:      472
+  Unique positions:  12
+  Spatial extent:    216.4 arcmin
+  Mean frequency:    685.0 MHz
+  Beam size:         21.0 arcmin
+  Can make image:    YES
+```
 
 ### Image Visualization
 

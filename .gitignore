@@ -44,3 +44,6 @@ Thumbs.db
 # FITS files
 *.fits
 *.rpf
+
+# CASA log files
+casa-*.log
