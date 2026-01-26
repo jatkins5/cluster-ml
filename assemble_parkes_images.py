@@ -438,7 +438,7 @@ def grid_spectra_to_image(coverage: CoverageAnalysis,
     for obs in observations:
         # Convert observation position to pixel
         px, py = wcs.world_to_pixel_values(obs.ra_deg, obs.dec_deg)
-        px, py = int(round(px)), int(round(py))
+        px, py = int(np.round(float(px))), int(np.round(float(py)))
 
         # Skip if outside image bounds
         if px < 0 or px >= nx or py < 0 or py >= ny:

@@ -74,14 +74,15 @@ def query_parkes_observations(service, ra, dec, radius_deg=0.5, max_results=100)
     radius_deg : float
         Search radius in degrees
     max_results : int
-        Maximum number of results to return
+        Maximum number of results to return (0 for unlimited)
 
     Returns:
     --------
     list : List of observation dictionaries
     """
+    top_clause = f"TOP {max_results}" if max_results > 0 else ""
     query = f"""
-    SELECT TOP {max_results}
+    SELECT {top_clause}
         obs_id,
         target_name,
         obs_collection,
@@ -126,6 +127,94 @@ def query_parkes_observations(service, ra, dec, radius_deg=0.5, max_results=100)
     except Exception as e:
         print(f"  Error querying: {e}", file=sys.stderr)
         return []
+
+
+def select_diverse_observations(observations, max_total, position_tolerance_arcmin=1.0):
+    """
+    Select observations prioritizing spatial diversity.
+
+    Instead of just taking the first N observations (which may all be at
+    the same position), this function ensures observations at different
+    sky positions are included.
+
+    Parameters:
+    -----------
+    observations : list
+        List of observation dictionaries with 'ra' and 'dec' keys
+    max_total : int
+        Maximum total observations to return
+    position_tolerance_arcmin : float
+        Positions within this tolerance are considered the same
+
+    Returns:
+    --------
+    list : Selected observations with spatial diversity
+    """
+    if not observations or max_total <= 0:
+        return observations[:max_total] if max_total > 0 else observations
+
+    tolerance_deg = position_tolerance_arcmin / 60.0
+
+    # Group observations by unique position
+    position_groups = []  # List of (ra, dec, [observations])
+
+    for obs in observations:
+        if obs['ra'] is None or obs['dec'] is None:
+            continue
+
+        # Find if this position matches an existing group
+        found_group = False
+        for group in position_groups:
+            group_ra, group_dec, group_obs = group
+            dist = np.sqrt((obs['ra'] - group_ra)**2 + (obs['dec'] - group_dec)**2)
+            if dist < tolerance_deg:
+                group_obs.append(obs)
+                found_group = True
+                break
+
+        if not found_group:
+            position_groups.append((obs['ra'], obs['dec'], [obs]))
+
+    n_positions = len(position_groups)
+
+    if n_positions == 0:
+        return []
+
+    # Calculate how many observations per position
+    # Distribute evenly, with remainder going to positions with more data
+    base_per_position = max_total // n_positions
+    remainder = max_total % n_positions
+
+    selected = []
+
+    # Sort groups by number of observations (ascending) so smaller groups get picked first
+    # This ensures we don't over-allocate to groups with few observations
+    position_groups.sort(key=lambda g: len(g[2]))
+
+    for i, (ra, dec, group_obs) in enumerate(position_groups):
+        # How many to take from this group
+        n_to_take = base_per_position
+        if i >= n_positions - remainder:
+            n_to_take += 1
+
+        # Take up to n_to_take from this group
+        selected.extend(group_obs[:n_to_take])
+
+    # If we still have room (some groups had fewer than their allocation),
+    # fill with remaining observations from larger groups
+    if len(selected) < max_total:
+        already_selected = set(o['obs_id'] for o in selected)
+        for ra, dec, group_obs in sorted(position_groups, key=lambda g: -len(g[2])):
+            for obs in group_obs:
+                if obs['obs_id'] not in already_selected:
+                    selected.append(obs)
+                    already_selected.add(obs['obs_id'])
+                    if len(selected) >= max_total:
+                        break
+            if len(selected) >= max_total:
+                break
+
+    return selected[:max_total]
 
 
 def get_credentials(args):
@@ -254,6 +343,8 @@ def main():
                        help='OPAL username (or set OPAL_USERNAME env var)')
     parser.add_argument('--password', default=None,
                        help='OPAL password (or set OPAL_PASSWORD env var)')
+    parser.add_argument('--prioritize-diversity', action='store_true',
+                       help='Prioritize observations at different sky positions for mapping')
 
     args = parser.parse_args()
 
@@ -306,25 +397,44 @@ def main():
     all_observations = []
 
     print("=" * 80)
-    print(f"Querying ATOA (radius={args.radius} deg, max={args.max_per_cluster} per cluster)")
+    diversity_str = ", prioritizing diversity" if args.prioritize_diversity else ""
+    print(f"Querying ATOA (radius={args.radius} deg, max={args.max_per_cluster} per cluster{diversity_str})")
     print("=" * 80)
 
     for i, target in enumerate(targets, 1):
         print(f"\n[{i:3d}/{len(targets)}] {target['name']} (RA={target['ra']:.2f}, Dec={target['dec']:.2f})")
 
-        observations = query_parkes_observations(
-            service,
-            target['ra'],
-            target['dec'],
-            radius_deg=args.radius,
-            max_results=args.max_per_cluster
-        )
+        # If prioritizing diversity, query all observations first, then select diverse subset
+        if args.prioritize_diversity:
+            observations = query_parkes_observations(
+                service,
+                target['ra'],
+                target['dec'],
+                radius_deg=args.radius,
+                max_results=0  # No limit - get all
+            )
+        else:
+            observations = query_parkes_observations(
+                service,
+                target['ra'],
+                target['dec'],
+                radius_deg=args.radius,
+                max_results=args.max_per_cluster
+            )
 
         # Filter by frequency if requested
         if args.freq_min:
             observations = [o for o in observations if o['freq_mhz'] and o['freq_mhz'] >= args.freq_min]
         if args.freq_max:
             observations = [o for o in observations if o['freq_mhz'] and o['freq_mhz'] <= args.freq_max]
+
+        # Apply diversity selection if requested
+        if args.prioritize_diversity and len(observations) > args.max_per_cluster:
+            n_before = len(observations)
+            observations = select_diverse_observations(observations, args.max_per_cluster)
+            # Count unique positions
+            positions = set((o['ra'], o['dec']) for o in observations if o['ra'] and o['dec'])
+            print(f"  Diversity selection: {n_before} -> {len(observations)} obs at {len(positions)} positions")
 
         if observations:
             # Group by frequency

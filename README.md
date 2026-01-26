@@ -275,7 +275,19 @@ python download_parkes_data.py --download --clusters A780
 export OPAL_USERNAME="your_username"
 export OPAL_PASSWORD="your_password"
 python download_parkes_data.py --download --clusters A780
+
+# Prioritize spatial diversity for mapping (recommended for image assembly)
+python download_parkes_data.py --download --clusters A780 --prioritize-diversity --radius 2.0
 ```
+
+**Spatial Diversity Selection (`--prioritize-diversity`):**
+
+When downloading observations for image assembly, you typically want observations at many different sky positions rather than many observations at the same position. The `--prioritize-diversity` flag ensures the selected observations are spread across different pointings:
+
+- Without flag: Takes first N observations (may all be at same position)
+- With flag: Queries all available observations, then selects a diverse subset ensuring different sky positions are represented
+
+This is particularly useful when combined with `--max-per-cluster` to get a manageable number of observations while maximizing spatial coverage for mapping.
 
 ### Convert Parkes Spectra to PNG
 
