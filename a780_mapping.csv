@@ -1,0 +1,2 @@
+cluster_name,ra,dec,n_observations,n_unique_positions,ra_min,ra_max,dec_min,dec_max,spatial_extent_arcmin,freq_bands,can_make_image,reason
+A780,139.53,-12.09,472,12,138.50101,141.56903,-13.095833,-11.095277,216.3501217331836,402 MHz; 712 MHz; 750 MHz; 828 MHz; 1368 MHz; 1429 MHz; 1677 MHz; 3100 MHz; 3335 MHz; 4848 MHz; 6374 MHz; 8493 MHz; 12352 MHz; 13438 MHz; 17000 MHz; 22224 MHz,True,12 unique positions over 216.4 arcmin
