@@ -1,0 +1,11 @@
+{
+  "access_token": "YOUR_ACCESS_TOKEN",
+  "expires_in": 300,
+  "refresh_expires_in": 0,
+  "refresh_token": "YOUR_REFRESH_TOKEN",
+  "token_type": "Bearer",
+  "id_token": "YOUR_ID_TOKEN",
+  "not-before-policy": 0,
+  "session_state": "YOUR_SESSION_STATE",
+  "scope": "openid email profile offline_access"
+}

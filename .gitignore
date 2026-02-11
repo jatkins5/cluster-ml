@@ -47,3 +47,23 @@ Thumbs.db
 
 # CASA log files
 casa-*.log
+
+# Data directories
+parkes_data/
+vlass_images/
+overlay_images/
+legacy_images/
+parkes_images/
+
+# Generated images
+*.png
+
+# Credentials
+tokens.json
+
+# Large generated query caches
+mappable-clusters_details.csv
+a780_mapping_details.csv
+
+# Old/removed files
+Cluster Comparison*
