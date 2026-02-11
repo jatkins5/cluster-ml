@@ -34,9 +34,19 @@ from pathlib import Path
 import getpass
 
 
+def normalize_cluster_name(name):
+    """Normalize cluster name for consistency."""
+    name = str(name).strip()
+    # Normalize RXC names: "RXC J1217.6 + 0339" -> "RXC J1217.6+0339"
+    if name.startswith('RXC') or name.startswith('RX '):
+        name = name.replace(' + ', '+').replace(' - ', '-')
+    return name
+
+
 def parse_lovoccs_csv(filename):
     """Parse the LoVoCCS CSV file to extract target info."""
-    df = pd.read_csv(filename, skiprows=1)
+    # Don't skip any rows - let pandas use the first row as header
+    df = pd.read_csv(filename, skiprows=0)
 
     targets = []
     for idx, row in df.iterrows():
@@ -44,7 +54,7 @@ def parse_lovoccs_csv(filename):
             break
         try:
             target_id = row.iloc[0]
-            name = str(row.iloc[3]).strip()
+            name = normalize_cluster_name(row.iloc[3])
             ra = float(row.iloc[5])
             dec = float(row.iloc[7])
 
@@ -339,6 +349,8 @@ def main():
                        help='Maximum frequency in MHz')
     parser.add_argument('--clusters', nargs='+', default=None,
                        help='Specific cluster names to query (default: all)')
+    parser.add_argument('--from-mappable-csv', type=str, default=None,
+                       help='Read cluster list from mappable-clusters.csv (only clusters with can_make_image=True)')
     parser.add_argument('--username', default=None,
                        help='OPAL username (or set OPAL_USERNAME env var)')
     parser.add_argument('--password', default=None,
@@ -372,7 +384,17 @@ def main():
     print(f"Found {len(targets)} clusters\n")
 
     # Filter to specific clusters if requested
-    if args.clusters:
+    if args.from_mappable_csv:
+        # Read mappable clusters CSV and filter to those with can_make_image=True
+        try:
+            mappable_df = pd.read_csv(args.from_mappable_csv)
+            mappable_clusters = mappable_df[mappable_df['can_make_image'] == True]['cluster_name'].tolist()
+            targets = [t for t in targets if t['name'] in mappable_clusters]
+            print(f"Filtering to {len(targets)} mappable clusters from {args.from_mappable_csv}\n")
+        except Exception as e:
+            print(f"Error reading mappable CSV: {e}")
+            sys.exit(1)
+    elif args.clusters:
         targets = [t for t in targets if t['name'] in args.clusters]
         print(f"Filtering to {len(targets)} specified clusters\n")
 

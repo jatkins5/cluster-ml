@@ -8,8 +8,8 @@ contains spectrum data at a single pointing position.
 
 Usage:
     python assemble_parkes_images.py parkes_data/A780/ --scan-only
-    python assemble_parkes_images.py parkes_data/A780/ --output hydra_a.fits
-    python assemble_parkes_images.py parkes_data/A780/ --output hydra_a_cube.fits --mode cube
+    python assemble_parkes_images.py parkes_data/A780/ --output hydra_a.fits  # saves to parkes_data/A780/hydra_a.fits
+    python assemble_parkes_images.py parkes_data/A780/ --mode cube  # saves to parkes_data/A780/parkes_map_cube.fits
 """
 
 import numpy as np
@@ -587,7 +587,7 @@ def main():
     parser.add_argument('--scan-only', action='store_true',
                        help='Only scan and report coverage, do not create image')
     parser.add_argument('--output', '-o', type=str, default=None,
-                       help='Output FITS file path')
+                       help='Output FITS filename (saved in data_dir)')
     parser.add_argument('--mode', type=str, default='continuum',
                        choices=['continuum', 'cube'],
                        help='Output mode: continuum (2D) or cube (3D)')
@@ -659,11 +659,13 @@ def main():
     print(f"  Image shape: {data.shape}")
     print(f"  Pixel size:  {metadata['pixel_size_arcmin']:.2f} arcmin")
 
-    # Output
+    # Output (always in the same folder as input data)
+    data_dir_path = Path(args.data_dir)
     if args.output:
-        output_path = Path(args.output)
+        # Treat --output as filename only, place in data directory
+        output_path = data_dir_path / Path(args.output).name
     else:
-        output_path = Path(args.data_dir) / f"parkes_map_{args.mode}.fits"
+        output_path = data_dir_path / f"parkes_map_{args.mode}.fits"
 
     print(f"\nWriting FITS: {output_path}")
     write_fits_image(data, wcs, str(output_path), metadata)
