@@ -54,6 +54,7 @@ vlass_images/
 overlay_images/
 legacy_images/
 parkes_images/
+meerkat_images/
 
 # Generated images
 *.png

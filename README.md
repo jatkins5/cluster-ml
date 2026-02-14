@@ -16,6 +16,8 @@ This repository contains scripts to cross-match LoVoCCS (Local Volume Complete C
 - `convert_rpfits_to_png.py` - Convert Parkes RPFITS spectral data to PNG spectrum plots
 - `query_parkes_mapping.py` - Query ATOA for Parkes mapping observations with spatial diversity
 - `assemble_parkes_images.py` - Assemble Parkes single-dish spectra into spatial images
+- `verify_meerkat_observations.py` - Verify MeerKAT observations via MGCLS/SARAO archive
+- `download_meerkat_image.py` - Download and visualize MGCLS radio images
 
 ### Data Files
 - `LoVoCCS_target_list - lovoccs.csv` - Input CSV file containing 106 galaxy cluster targets with coordinates
@@ -28,6 +30,9 @@ This repository contains scripts to cross-match LoVoCCS (Local Volume Complete C
 - `lovoccs_first_matches_detailed.csv` - Detailed information for all matched FIRST sources
 - `lovoccs_parkes_matches.csv` - Summary of Parkes catalog matches for each cluster
 - `lovoccs_parkes_matches_detailed.csv` - Detailed information for all matched Parkes sources
+- `meerkat_verification_results.csv` - MeerKAT observation verification (MGCLS + SARAO archive)
+- `mgcls_clusters.csv` - MGCLS DR1 cluster catalog (115 clusters, coordinates, selection type)
+- `mgcls_table1.dat` - MGCLS Table 1 from Knowles et al. 2022
 
 ## Results Summary
 
@@ -127,6 +132,23 @@ In addition to catalog matching, raw Parkes observation data can be downloaded f
 - Use `convert_rpfits_to_png.py` to visualize spectra as PNG plots
 
 **18 out of 106 clusters** have Parkes observations within 0.25 degrees in ATOA, totaling ~1.8 GB of data.
+
+### MeerKAT (MGCLS)
+
+**18 out of 106 LoVoCCS targets (17.0%) are in the MGCLS DR1 survey**
+
+The MeerKAT Galaxy Cluster Legacy Survey (MGCLS; Knowles et al. 2022, A&A 657, A56) observed 115 galaxy clusters with MeerKAT L-band (~1.28 GHz, ~8" resolution). Cross-matching with LoVoCCS identifies 18 overlapping targets.
+
+**Data products available:**
+- **Basic products**: 16-plane FITS cubes per cluster
+  - Plane 0: Stokes I continuum at ~1283 MHz reference frequency
+  - Plane 1: Spectral index map
+  - Planes 2-15: 14 frequency channel images
+- **Enhanced products**: Higher-quality mosaics with improved calibration
+
+**Additional SARAO archive observations:** Beyond MGCLS, several LoVoCCS targets have MeerKAT observations from other programs (e.g., A780/Hydra A with 63 observations). These require SARAO authentication and visibility-level processing — see "Processing MeerKAT Visibility Data" below.
+
+**DOI:** [10.48479/7epd-w356](https://doi.org/10.48479/7epd-w356)
 
 ## Setup
 
@@ -383,6 +405,37 @@ This script will:
 4. Generate publication-quality visualizations with WCS coordinates
 5. Save both FITS and PNG files
 
+**MeerKAT MGCLS radio images:**
+```bash
+# Download sample of 3 clusters (A85, A3667, A133)
+python download_meerkat_image.py
+
+# Download all 18 MGCLS targets
+python download_meerkat_image.py --all
+
+# Download specific clusters
+python download_meerkat_image.py --clusters A85 A2597
+
+# Skip already-downloaded targets
+python download_meerkat_image.py --all --skip-existing
+
+# Regenerate PNGs from existing FITS files
+python download_meerkat_image.py --all --png-only
+
+# Validate that FITS files cover target positions
+python download_meerkat_image.py --all --validate
+
+# Download enhanced products instead of basic
+python download_meerkat_image.py --clusters A85 --product-type enhanced
+```
+
+The script will:
+1. Read the MGCLS verification results to identify the 18 overlapping clusters
+2. Fetch a JWT token from the MGCLS DR1 archive page
+3. Download FITS cubes and extract the Stokes I continuum plane (plane 0)
+4. Generate publication-quality PNG visualizations with WCS coordinates
+5. Save both FITS and PNG files to `meerkat_images/`
+
 **FIRST radio images:**
 ```bash
 python download_first_image.py
@@ -431,6 +484,15 @@ Alternatively, you can use the detailed matches file (`lovoccs_erosita_matches_d
 - **Sky Coverage**: 10,575 deg², mostly northern sky (Dec > -40°)
 - **Sensitivity**: ~1 mJy/beam RMS
 - **Extended Sources**: Script automatically flags sources with major axis > 5.4" (beam size)
+
+### MeerKAT
+- **Survey**: MGCLS DR1 (Knowles et al. 2022, A&A 657, A56)
+- **Frequency**: L-band ~1.28 GHz (23 cm)
+- **Resolution**: ~8 arcsec (basic products), ~5 arcsec (enhanced)
+- **Sensitivity**: ~3-5 µJy/beam RMS (typical)
+- **Sky Coverage**: 115 targeted galaxy clusters (southern sky)
+- **Archive**: [DOI 10.48479/7epd-w356](https://doi.org/10.48479/7epd-w356)
+- **Data Products**: FITS cubes with continuum, spectral index, and channel images
 
 ### Parkes
 - **Catalogs**: PMN, PKSCAT90 via VizieR
@@ -494,6 +556,37 @@ python download_vlass_image.py
 ```
 
 Note: VLASS images are downloaded from CADC using astroquery. FITS files are gitignored.
+
+## Processing MeerKAT Visibility Data
+
+For LoVoCCS targets with MeerKAT observations in the SARAO archive (beyond MGCLS pre-made images), visibility data can be processed into images using these pipelines:
+
+### processMeerKAT (IDIA)
+- **URL**: https://github.com/idia-astro/pipelines
+- Full calibration + imaging pipeline for MeerKAT data
+- SLURM-based, designed for IDIA/ilifu cluster but adaptable
+- Requires CASA 6.5+
+- Handles RFI flagging, cross-calibration, self-calibration, and imaging
+
+### oxkat (Ian Heywood)
+- **URL**: https://github.com/IanHeywood/oxkat
+- Semi-automated pipeline using WSClean + CubiCal
+- Well-suited for continuum imaging of individual targets
+- Modular design allows customization of calibration steps
+
+### CARACal
+- **URL**: https://github.com/caracal-pipeline/caracal
+- End-to-end containerized pipeline (formerly MeerKATHI)
+- Supports both continuum and spectral line processing
+- Uses Stimela containerization framework for reproducibility
+
+### katdal
+- **URL**: https://pypi.org/project/katdal/
+- Python library for programmatic access to SARAO archive data
+- `pip install katdal` — read MeerKAT visibility data directly
+- Useful for data inspection, flagging, and custom processing workflows
+
+**Note:** Processing MeerKAT visibilities requires significant compute resources (~100 GB RAM, GPU for imaging) and SARAO archive authentication. The MGCLS pre-made images (`download_meerkat_image.py`) are recommended for initial analysis.
 
 ## Future Work
 
