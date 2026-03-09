@@ -15,7 +15,7 @@ mkdir -p logs
 cd /oscar/data/idellant/cluster-ml
 source venv/bin/activate
 
-python train_cnn.py \
+python train_cnn_pooled.py \
     --folds 5 \
     --epochs 60 \
     --batch-size 32 \
