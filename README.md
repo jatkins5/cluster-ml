@@ -730,12 +730,22 @@ Trained with AdamW + cosine LR schedule + Huber loss. Best checkpoint per fold s
 
 ### Comparison
 
-| Model | OOF R² | MAE | RMSE | R² std |
-|---|---|---|---|---|
-| XGBoost (tabular features) | 0.290 | 0.469 | 0.632 | 0.173 |
-| Shallow CNN (radio images) | **0.472** | **0.414** | **0.544** | **0.084** |
+All results use 5-fold GroupKFold CV (grouped by cluster). Label definitions:
+- **tau=1.0**: `label_score_all_tau1.0` — soft merger activity score in last 1 Gyr
+- **pseudo-TSC**: interpolated tau where score first crosses 0.5 — proxy for Gyr since last major merger (34/352 quiescent clusters capped at 4.0 Gyr)
 
-CNN improves OOF R² by +0.18 and halves fold variance, confirming that spatial structure in the radio images carries information beyond what tabular morphology features capture. Fold 2 remains the hardest fold (9 zero-label clusters in the held-out set). Training loss continues decreasing at epoch 60, suggesting more epochs or a tuned LR schedule may help.
+| Model | Label | OOF R² | MAE | RMSE | R² std |
+|---|---|---|---|---|---|
+| XGBoost (tabular) | tau=1.0 | 0.290 | 0.469 | 0.632 | 0.173 |
+| XGBoost (tabular) | pseudo-TSC | 0.333 | 0.711 | 0.962 | 0.169 |
+| Shallow CNN (images) | tau=1.0 | 0.472 | 0.414 | 0.544 | 0.084 |
+| Shallow CNN (images) | **pseudo-TSC** | **0.529** | **0.587** | **0.806** | **0.095** |
+
+Key observations:
+- CNN consistently outperforms XGBoost, confirming spatial structure in radio images carries signal beyond tabular morphology features
+- Pseudo-TSC label improves CNN OOF R² by +0.057 and substantially reduces the train/val gap (train R²~0.65 vs val~0.45–0.61), suggesting it is a cleaner regression target
+- Fold 2 remains hardest across all runs due to an unlucky concentration of quiescent clusters in the held-out set
+- MAE/RMSE are not directly comparable across labels since pseudo-TSC is in Gyr (0.1–4.0) while tau=1.0 score is dimensionless (0–3.5)
 
 ## Future Work
 

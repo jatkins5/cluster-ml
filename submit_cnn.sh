@@ -16,7 +16,7 @@ cd /oscar/data/idellant/cluster-ml
 source venv/bin/activate
 
 python train_cnn.py \
-    --tau 1.0 \
     --folds 5 \
-    --epochs 150 \
-    --batch-size 32
+    --epochs 60 \
+    --batch-size 32 \
+    --pseudo-tsc
