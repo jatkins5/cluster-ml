@@ -588,7 +588,169 @@ For LoVoCCS targets with MeerKAT observations in the SARAO archive (beyond MGCLS
 
 **Note:** Processing MeerKAT visibilities requires significant compute resources (~100 GB RAM, GPU for imaging) and SARAO archive authentication. The MGCLS pre-made images (`download_meerkat_image.py`) are recommended for initial analysis.
 
+## ML Training Dataset (TNG-Cluster Radio Simulation)
+
+### Overview
+
+`Radio_Data/` contains simulated radio emission data for 352 TNG-Cluster galaxy clusters at z=0 (snapshot 99), used to train an ML model to predict **time since collision (TSC)** from radio observations.
+
+### Data Files
+
+- `Radio_Data/radio_FOF{haloID}_sub{subID}.npz` — 352 files, one per cluster:
+  - `pos`: (N, 3) float64 — 3D shock particle positions in physical kpc
+  - `w`: (N,) float64 — per-particle radio emission weight (pre-computed at reference DSA conditions; see below)
+- `Radio_Data/TNG-Cluster_Catalog.hdf5` — cluster properties (R500c, halo mass, zform, etc.) for all 352 clusters
+- `Radio_Data/normalized_psi_table.npz` — DSA radio emission lookup table Ψ(s, e_min); the `w` weights were computed using this table during `Radio_generation.py`
+- `feats_labels_dict_tngcluster.pkl` — pre-computed merger labels for all 352 clusters across snapshots 72–99
+
+### How `w` relates to radio emission
+
+Each particle's weight encodes:
+```
+w_i = 5.2e23 × E_i × B_i^(1 + s_i/2) / (B_i² + B_CMB²) × Ψ_norm(s_i, e_min_i)
+```
+where E is energy dissipation, B is magnetic field strength, s is DSA spectral index (from Mach number), and Ψ_norm is the normalised radio emission efficiency from the lookup table. The total radio power of a cluster is `sum(w)`.
+
+### Label: Time Since Collision (TSC)
+
+Two approaches are available for the training label:
+
+#### 1. `label_score` from `feats_labels_dict_tngcluster.pkl` (available now)
+
+The pkl file provides a continuous **merger activity score** per cluster per snapshot. The score sweeps over a time window parameter τ from 0.1 to 4.0 Gyr:
+
+```
+label_score_all_tau{τ}  — mergers within ±τ Gyr of the snapshot (past + future)
+label_score_pre_tau{τ}  — mergers within τ Gyr before the snapshot only
+```
+
+At snapshot 99 (z=0), `all == pre` since there are no future snapshots. The score accumulates merger mass ratio contributions weighted by proximity in time, so:
+- Score ≈ 0 at small τ → no recent major merger
+- Score crossing ~1 at τ* → last significant merger occurred ~τ* Gyr ago
+
+This is a **soft, continuous TSC proxy** tunable via τ. Use `label_score_all_tau{T}` at snap 99 as the regression or classification target.
+
+#### 2. Pericenter-based TSC from Lee et al. (in prep) — *not yet on disk*
+
+The paper [arXiv:2510.21632](https://arxiv.org/abs/2510.21632) defines TSC as the **time elapsed since first pericenter passage**:
+
+1. Track relative separation of two SUBFIND subhalos at each snapshot (~100 Myr cadence)
+2. Fit a second-order polynomial around the separation minimum
+3. TSC = age(z=0) − age(z_pericenter)
+
+Mass ratio = max(M_subcluster before pericenter) / M_main at that snapshot. The catalog is hosted at [tng-project.org/data/cluster/](https://www.tng-project.org/data/cluster/) but is not yet publicly released.
+
+| Property | `label_score` (pkl) | Pericenter TSC (Lee et al.) |
+|---|---|---|
+| Definition | Soft score: Σ(mass_ratio × time kernel) | Hard event: Δt since pericenter |
+| Tunable timescale | Yes, via τ parameter | No |
+| Includes multiple mergers | Yes | First pericenter only |
+| Available | ✅ In `feats_labels_dict_tngcluster.pkl` | ❌ Needs download |
+
+### Building the Training Dataset
+
+```bash
+source venv/bin/activate
+python build_dataset.py                          # defaults: 128×128 px, 4×R500c extent
+python build_dataset.py --img-size 256           # higher resolution
+python build_dataset.py --extent-r500 3.0        # tighter crop
+python build_dataset.py --output my_dataset.h5   # custom output path
+```
+
+Output HDF5 (`dataset.h5`) structure:
+```
+images/                  (352, 3, 128, 128) float32  — arcsinh-normalised projections
+  [dim 1: xy, yz, xz projections]
+meta/
+  halo_id                (352,) int64
+  mass_ratio             (352,) float32
+  r500c_kpc              (352,) float32
+labels/
+  tau_gyr                (40,)  float32  — τ values from 0.1 to 4.0 Gyr
+  label_score_all        (352, 40) float32
+  label_score_pre        (352, 40) float32
+```
+
+Loading example:
+```python
+import h5py, numpy as np
+
+with h5py.File("dataset.h5", "r") as f:
+    images = f["images"][:]               # (352, 3, 128, 128)
+    labels = f["labels/label_score_all"][:, 9]  # tau=1.0 Gyr (index 9)
+    halo_ids = f["meta/halo_id"][:]
+```
+
+## Model Results
+
+### XGBoost Baseline (`train_xgboost.py`)
+
+**Input:** 17 tabular morphology features per (cluster × projection) from `feats_labels_dict_tngcluster.pkl`
+(BIC scores, position/velocity dispersions, elongation ratio, R500c, mass ratio).
+1056 samples total (352 clusters × 3 projections). **Target:** `label_score_all_tau1.0` at snap 99.
+
+**5-fold GroupKFold CV (grouped by cluster):**
+
+| Fold | R² | MAE | RMSE |
+|------|-----|-----|------|
+| 1 | 0.374 | 0.501 | 0.688 |
+| 2 | −0.071 | 0.471 | 0.639 |
+| 3 | 0.366 | 0.439 | 0.568 |
+| 4 | 0.225 | 0.540 | 0.727 |
+| 5 | 0.378 | 0.391 | 0.539 |
+| **mean ± std** | **0.254 ± 0.173** | **0.469 ± 0.051** | **0.632 ± 0.071** |
+| **OOF** | **0.290** | | |
+
+**Notes:**
+- Tabular features explain ~29% of label variance with no image information — meaningful signal
+- MAE of ~0.47 on a 0–3.5 label scale corresponds to roughly ±0.5 Gyr TSC error
+- Fold 2 negative R² is a small-dataset artefact: that fold has 9 zero-label clusters (vs 0 in folds 1 and 5), causing the model trained without them to mispredict the tails
+- High fold variance (σ=0.173) reflects the 70-cluster held-out sets being too small for stable R² estimates, not model instability — MAE/RMSE are much more consistent (σ≈0.05–0.07)
+- Spatial structure not captured by tabular features; CNN expected to improve on this
+
+### Shallow CNN (`train_cnn.py`)
+
+**Input:** 128×128 arcsinh-normalised radio emission images from `dataset.h5`.
+Each projection treated as an independent sample (1056 total); augmented 8× on-the-fly (4 rotations × 2 flips).
+Architecture: 4 conv blocks (32→64→128→256 channels) + global avg pool + 2-layer MLP head.
+Trained with AdamW + cosine LR schedule + Huber loss. Best checkpoint per fold saved.
+**Target:** `label_score_all_tau1.0` at snap 99.
+
+**5-fold GroupKFold CV (grouped by cluster):**
+
+| Fold | R² | MAE | RMSE |
+|------|-----|-----|------|
+| 1 | 0.452 | 0.503 | 0.644 |
+| 2 | 0.305 | 0.425 | 0.515 |
+| 3 | 0.525 | 0.359 | 0.491 |
+| 4 | 0.454 | 0.432 | 0.610 |
+| 5 | 0.546 | 0.351 | 0.460 |
+| **mean ± std** | **0.456 ± 0.084** | **0.414 ± 0.055** | **0.544 ± 0.071** |
+| **OOF** | **0.472** | | |
+
+### Comparison
+
+| Model | OOF R² | MAE | RMSE | R² std |
+|---|---|---|---|---|
+| XGBoost (tabular features) | 0.290 | 0.469 | 0.632 | 0.173 |
+| Shallow CNN (radio images) | **0.472** | **0.414** | **0.544** | **0.084** |
+
+CNN improves OOF R² by +0.18 and halves fold variance, confirming that spatial structure in the radio images carries information beyond what tabular morphology features capture. Fold 2 remains the hardest fold (9 zero-label clusters in the held-out set). Training loss continues decreasing at epoch 60, suggesting more epochs or a tuned LR schedule may help.
+
 ## Future Work
+
+### Pretrained Vision Backbone (Linear Probing)
+
+The idea: freeze a pretrained vision backbone, extract embeddings, train a linear regression head on top. This is called **linear probing**.
+
+**Key finding from the literature:** [Bridging the Gap (arXiv:2409.11175)](https://arxiv.org/abs/2409.11175) benchmarked MAE, DINOv1, DINOv2, MSN, SigLIP, and AM-RADIO on radio astronomy tasks. Best performers on radio classification were SigLIP and AM-RADIO, but all models were tested on *discrete* radio sources (FR I/II morphologies), not diffuse cluster emission (halos/relics). No established pretrained model exists for diffuse emission.
+
+**Available options, roughly in order of relevance:**
+- **DINOv2** — strongest general-purpose feature extractor for linear probing; avoids ImageNet texture bias better than ResNet; available via `torch.hub`; best bet if trying this approach
+- **Radio Galaxy Zoo SSL model** ([RASTI 2024](https://academic.oup.com/rasti/article/3/1/19/7491070)) — only model trained on actual radio survey images (FIRST), but on discrete jet/lobe morphologies, not halos
+- **ResNet/SigLIP/AM-RADIO** — ImageNet-pretrained; large domain gap from natural images to arcsinh radio maps
+
+**Bottom line:** none of these were trained on diffuse cluster emission. The shallow CNN trained directly on this data may well outperform all of them. Worth trying DINOv2 as the best available option, but expectations should be low. Fine-tuning (unfreezing the backbone) is likely to overfit badly at N=352.
 
 ### VLASS
 - Add support for VLASS Epochs 2 and 3 when they become available via Vizier
