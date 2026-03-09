@@ -36,26 +36,29 @@ FEATURE_KEYS = [
 ]
 
 
-def build_tabular(pkl_path, dataset_path, tau):
+def build_tabular(pkl_path, dataset_path, tau, use_pseudo_tsc):
     with open(pkl_path, "rb") as f:
         pkl = pickle.load(f)
 
-    # get tau index from dataset
     with h5py.File(dataset_path, "r") as f:
         tau_vals = f["labels/tau_gyr"][:]
         halo_ids_ordered = f["meta/halo_id"][:]
         r500c_kpc = f["meta/r500c_kpc"][:]
         mass_ratio = f["meta/mass_ratio"][:]
-
-    tau_idx = int(np.argmin(np.abs(tau_vals - tau)))
-    actual_tau = float(tau_vals[tau_idx])
-    print(f"Using tau = {actual_tau:.1f} Gyr (index {tau_idx})")
+        if use_pseudo_tsc:
+            label_array = f["labels/pseudo_tsc"][:]
+            print("Using pseudo-TSC label")
+        else:
+            tau_idx = int(np.argmin(np.abs(tau_vals - tau)))
+            actual_tau = float(tau_vals[tau_idx])
+            label_array = f["labels/label_score_all"][:, tau_idx]
+            print(f"Using tau = {actual_tau:.1f} Gyr (index {tau_idx})")
 
     rows, labels, groups = [], [], []
 
     for i, halo_id in enumerate(halo_ids_ordered):
         entry = pkl[halo_id][SNAP]
-        label = float(entry[f"label_score_all_tau{actual_tau:.1f}"])
+        label = float(label_array[i])
 
         for proj in PROJ_NAMES:
             feats = entry["features"][proj]
@@ -126,12 +129,12 @@ def run_cv(X, y, groups, n_folds, seed):
     return oof_preds
 
 
-def main(tau, n_folds, seed):
+def main(tau, n_folds, seed, args):
     pkl_path     = "feats_labels_dict_tngcluster.pkl"
     dataset_path = "dataset.h5"
 
     print("Building feature matrix...")
-    X, y, groups, feat_names = build_tabular(pkl_path, dataset_path, tau)
+    X, y, groups, feat_names = build_tabular(pkl_path, dataset_path, tau, args.pseudo_tsc)
     print(f"X: {X.shape}  (samples × features)")
     print(f"y: min={y.min():.3f}  max={y.max():.3f}  mean={y.mean():.3f}")
     print()
@@ -143,10 +146,12 @@ def main(tau, n_folds, seed):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--tau",   type=float, default=1.0,
+    parser.add_argument("--tau",        type=float, default=1.0,
                         help="Time window tau in Gyr for label_score (default: 1.0)")
-    parser.add_argument("--folds", type=int,   default=5,
+    parser.add_argument("--folds",      type=int,   default=5,
                         help="Number of CV folds (default: 5)")
-    parser.add_argument("--seed",  type=int,   default=42)
+    parser.add_argument("--seed",       type=int,   default=42)
+    parser.add_argument("--pseudo-tsc", action="store_true",
+                        help="Use pseudo-TSC label instead of fixed-tau score")
     args = parser.parse_args()
-    main(args.tau, args.folds, args.seed)
+    main(args.tau, args.folds, args.seed, args)

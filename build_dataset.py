@@ -119,6 +119,7 @@ def main(img_size, extent_r500, output_path):
     all_r500c_kpc   = np.zeros(N, dtype=np.float32)
     all_labels_all  = np.zeros((N, n_tau), dtype=np.float32)  # all-merger score
     all_labels_pre  = np.zeros((N, n_tau), dtype=np.float32)  # pre-merger score
+    all_pseudo_tsc  = np.zeros(N, dtype=np.float32)           # interpolated TSC
 
     for i, halo_id in enumerate(halo_ids_ordered):
         if i % 50 == 0:
@@ -149,6 +150,22 @@ def main(img_size, extent_r500, output_path):
         for j, (ka, kp) in enumerate(zip(tau_keys_all, tau_keys_pre)):
             all_labels_all[i, j] = float(entry[ka])
             all_labels_pre[i, j] = float(entry[kp])
+
+        # pseudo-TSC: tau at which label_score_all first crosses 0.5
+        # interpolated linearly between bracketing tau values.
+        # Capped at tau_max for quiescent clusters that never reach 0.5.
+        score_curve = all_labels_all[i]
+        cross_idx = np.argmax(score_curve >= 0.5)
+        if score_curve[cross_idx] < 0.5:
+            # never crosses — genuinely quiescent, cap at tau_max
+            all_pseudo_tsc[i] = float(tau_vals[-1])
+        elif cross_idx == 0:
+            # already above 0.5 at tau=0.1, interpolate toward 0
+            all_pseudo_tsc[i] = float(tau_vals[0])
+        else:
+            t0, t1 = tau_vals[cross_idx - 1], tau_vals[cross_idx]
+            s0, s1 = score_curve[cross_idx - 1], score_curve[cross_idx]
+            all_pseudo_tsc[i] = float(t0 + (0.5 - s0) * (t1 - t0) / (s1 - s0))
 
     print(f"Saving to {output_path}...")
     with h5py.File(output_path, "w") as f:
@@ -182,10 +199,20 @@ def main(img_size, extent_r500, output_path):
                               compression="gzip", compression_opts=4)
         labels.create_dataset("label_score_pre",  data=all_labels_pre,
                               compression="gzip", compression_opts=4)
+        labels.create_dataset("pseudo_tsc",       data=all_pseudo_tsc)
+        labels.attrs["pseudo_tsc_description"] = (
+            "Interpolated tau [Gyr] at which label_score_all first crosses 0.5. "
+            "Proxy for time since last major merger. "
+            f"Capped at {float(tau_vals[-1]):.1f} Gyr for {int((all_pseudo_tsc == tau_vals[-1]).sum())} "
+            "quiescent clusters whose score never reaches 0.5."
+        )
 
     print("Done.")
     print(f"  images:           {all_images.shape}  ({all_images.nbytes/1e6:.1f} MB)")
     print(f"  label tau range:  {tau_vals[0]:.1f} – {tau_vals[-1]:.1f} Gyr  ({n_tau} steps)")
+    n_capped = int((all_pseudo_tsc == tau_vals[-1]).sum())
+    print(f"  pseudo_tsc:       min={all_pseudo_tsc.min():.2f}  max={all_pseudo_tsc.max():.2f}  "
+          f"mean={all_pseudo_tsc.mean():.2f}  ({n_capped} capped at {tau_vals[-1]:.1f} Gyr)")
 
 
 if __name__ == "__main__":

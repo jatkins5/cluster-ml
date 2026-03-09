@@ -189,18 +189,21 @@ def run_cv(images, labels, groups, n_folds, n_epochs, batch_size, seed):
     print(f"  OOF R²: {r2_score(labels, oof_preds):.3f}")
 
 
-def main(tau, n_folds, n_epochs, batch_size, seed):
+def main(tau, n_folds, n_epochs, batch_size, seed, pseudo_tsc=False):
     dataset_path = "dataset.h5"
 
     print("Loading dataset...")
     with h5py.File(dataset_path, "r") as f:
-        tau_vals = f["labels/tau_gyr"][:]
-        tau_idx  = int(np.argmin(np.abs(tau_vals - tau)))
-        actual_tau = float(tau_vals[tau_idx])
-        print(f"Using tau = {actual_tau:.1f} Gyr (index {tau_idx})")
-
         raw_images = f["images"][:]              # (352, 3, H, W)
-        all_labels = f["labels/label_score_all"][:, tau_idx]  # (352,)
+        if pseudo_tsc:
+            all_labels = f["labels/pseudo_tsc"][:]
+            print("Using pseudo-TSC label")
+        else:
+            tau_vals  = f["labels/tau_gyr"][:]
+            tau_idx   = int(np.argmin(np.abs(tau_vals - tau)))
+            actual_tau = float(tau_vals[tau_idx])
+            all_labels = f["labels/label_score_all"][:, tau_idx]
+            print(f"Using tau = {actual_tau:.1f} Gyr (index {tau_idx})")
 
     N, P, H, W = raw_images.shape   # 352, 3, 128, 128
 
@@ -224,5 +227,7 @@ if __name__ == "__main__":
     parser.add_argument("--epochs",     type=int,   default=60)
     parser.add_argument("--batch-size", type=int,   default=32)
     parser.add_argument("--seed",       type=int,   default=42)
+    parser.add_argument("--pseudo-tsc", action="store_true",
+                        help="Use pseudo-TSC label instead of fixed-tau score")
     args = parser.parse_args()
-    main(args.tau, args.folds, args.epochs, args.batch_size, args.seed)
+    main(args.tau, args.folds, args.epochs, args.batch_size, args.seed, args.pseudo_tsc)
