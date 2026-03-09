@@ -50,6 +50,12 @@ casa-*.log
 
 # Data directories
 parkes_data/
+Radio_Data
+
+# ML data and outputs
+dataset.h5
+feats_labels_dict_tngcluster.pkl
+logs/
 vlass_images/
 overlay_images/
 legacy_images/
