@@ -134,7 +134,7 @@ def evaluate(model, loader, device):
     return np.concatenate(all_preds), np.concatenate(all_labels)
 
 
-def run_cv(images, labels, n_folds, n_epochs, batch_size, seed):
+def run_cv(images, labels, n_folds, n_epochs, batch_size, seed, huber_delta=0.5):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
 
@@ -160,7 +160,7 @@ def run_cv(images, labels, n_folds, n_epochs, batch_size, seed):
         model     = PooledCNN().to(device)
         optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4, weight_decay=1e-3)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=n_epochs)
-        criterion = nn.HuberLoss(delta=0.5)
+        criterion = nn.HuberLoss(delta=huber_delta)
 
         best_rmse, best_preds = np.inf, None
         for epoch in range(n_epochs):
@@ -197,13 +197,30 @@ def run_cv(images, labels, n_folds, n_epochs, batch_size, seed):
     print(f"  OOF R²: {r2_score(labels, oof_preds):.3f}")
 
 
-def main(tau, n_folds, n_epochs, batch_size, seed, pseudo_tsc=False):
+def main(tau, n_folds, n_epochs, batch_size, seed, pseudo_tsc=False,
+         merger_tsc=False, huber_delta=0.5, log_transform=False):
     dataset_path = "dataset.h5"
 
     print("Loading dataset...")
     with h5py.File(dataset_path, "r") as f:
         images = f["images"][:]              # (352, 3, H, W)
-        if pseudo_tsc:
+        halo_ids = f["meta/halo_id"][:]
+
+        if merger_tsc:
+            # Load ground-truth TSC from merger catalog
+            tsc_path = "TSC_Cutimages/TSC_eachhalo_snap99.hdf5"
+            with h5py.File(tsc_path, "r") as ft:
+                tsc_hids = ft["halo_id"][:]
+                tsc_vals = ft["tsc_gyr"][:]
+            tsc_map = dict(zip(tsc_hids, tsc_vals))
+            labels = np.array([tsc_map[h] for h in halo_ids], dtype=np.float32)
+            # Drop clusters with no recorded collision (NaN TSC)
+            valid = ~np.isnan(labels)
+            images = images[valid]
+            labels = labels[valid]
+            print(f"Using merger-catalog TSC label ({valid.sum()}/{len(valid)} clusters, "
+                  f"{(~valid).sum()} dropped — no recorded collision)")
+        elif pseudo_tsc:
             labels = f["labels/pseudo_tsc"][:]
             print("Using pseudo-TSC label")
         else:
@@ -214,12 +231,16 @@ def main(tau, n_folds, n_epochs, batch_size, seed, pseudo_tsc=False):
             print(f"Using tau = {actual_tau:.1f} Gyr (index {tau_idx})")
 
     labels = labels.astype(np.float32)
+    if log_transform:
+        labels = np.log1p(labels)
+        print("Applied log1p transform to labels")
     N = len(labels)
     print(f"Clusters: {N}  (3 projections pooled per cluster)")
     print(f"Labels:  min={labels.min():.3f}  max={labels.max():.3f}  mean={labels.mean():.3f}")
     print()
 
-    run_cv(images, labels, n_folds, n_epochs, batch_size, seed)
+    print(f"Huber delta: {huber_delta}")
+    run_cv(images, labels, n_folds, n_epochs, batch_size, seed, huber_delta)
 
 
 if __name__ == "__main__":
@@ -232,5 +253,12 @@ if __name__ == "__main__":
     parser.add_argument("--seed",       type=int,   default=42)
     parser.add_argument("--pseudo-tsc", action="store_true",
                         help="Use pseudo-TSC label instead of fixed-tau score")
+    parser.add_argument("--merger-tsc", action="store_true",
+                        help="Use ground-truth TSC from merger catalog (TSC_Cutimages/)")
+    parser.add_argument("--huber-delta", type=float, default=0.5,
+                        help="Delta for Huber loss (default: 0.5)")
+    parser.add_argument("--log-transform", action="store_true",
+                        help="Apply log1p transform to labels")
     args = parser.parse_args()
-    main(args.tau, args.folds, args.epochs, args.batch_size, args.seed, args.pseudo_tsc)
+    main(args.tau, args.folds, args.epochs, args.batch_size, args.seed,
+         args.pseudo_tsc, args.merger_tsc, args.huber_delta, args.log_transform)
