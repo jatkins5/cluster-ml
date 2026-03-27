@@ -760,6 +760,7 @@ All results use 5-fold CV grouped by cluster. Label definitions:
 | Shallow CNN (images) | tau=1.0 | 0.472 | 0.414 | 0.544 | 0.084 |
 | Shallow CNN (images) | pseudo-TSC | 0.529 | 0.587 | 0.806 | 0.095 |
 | Shallow CNN (images) | merger-TSC (δ=2.0, 120ep) | 0.511 | 0.798 | 1.073 | 0.102 |
+| Shallow CNN (images) | merger-TSC (TSC≤2 Gyr, 120ep) | 0.149 | 0.439 | 0.541 | 0.025 |
 | Pooled CNN | pseudo-TSC | **0.564** | — | — | — |
 | Pooled CNN | merger-TSC (δ=0.5) | 0.494 | 0.779 | 1.103 | 0.150 |
 | Pooled CNN | merger-TSC (δ=2.0) | 0.528 | 0.782 | 1.067 | 0.188 |
@@ -773,6 +774,7 @@ Key observations:
 - Log-transforming merger-TSC labels did not help (OOF R² 0.443–0.480) — compressing the tail also compressed the discriminative part of the distribution
 - **Shallow CNN with merger-TSC (R²=0.511) is the most practical model** — it processes a single projection, so it can be applied directly to real observations where only one line-of-sight view is available. It retains most of the pooled CNN's performance (0.544) with lower fold variance (std 0.102 vs 0.196)
 - High fold variance persists across pooled CNN merger-TSC runs (R² std ~0.15–0.20), driven by Fold 1 consistently underperforming (R²~0.12), likely due to cluster composition in that split
+- **Filtering to recent mergers (TSC ≤ 2 Gyr, 258 clusters) collapsed R² to 0.149** — the CNN's performance on the full set is largely driven by separating "recently merged" vs "long ago merged" (a coarse distinction), not precisely timing recent mergers. Within the recent-merger subset, radio morphologies are too similar at 128×128 resolution for the model to distinguish 0.3 vs 1.5 Gyr. This is consistent with Lee et al. (2024), where the predictive signal comes from relic separation geometry at finer spatial scales
 
 ## Future Work
 
@@ -788,6 +790,14 @@ The idea: freeze a pretrained vision backbone, extract embeddings, train a linea
 - **ResNet/SigLIP/AM-RADIO** — ImageNet-pretrained; large domain gap from natural images to arcsinh radio maps
 
 **Bottom line:** none of these were trained on diffuse cluster emission. The shallow CNN trained directly on this data may well outperform all of them. Worth trying DINOv2 as the best available option, but expectations should be low. Fine-tuning (unfreezing the backbone) is likely to overfit badly at N=352.
+
+### Higher Resolution / Narrower Crop Images
+
+The CNN's poor performance on recent mergers (R²=0.149 for TSC ≤ 2 Gyr) suggests the 128×128 images at 4×R_500c extent (~60–80 kpc/pixel) are too coarse to resolve the relic geometry that Lee et al. (2024) showed correlates with TSC. Two approaches to try:
+
+- **256×256 images** — halve pixel size to ~30–40 kpc/pixel, closer to the 50 kpc bins Lee et al. use for relic identification. Rebuild dataset with `python build_dataset.py --img-size 256`.
+- **Narrower crop (2×R_500c)** — zoom in on the cluster core where relics live, effectively doubling resolution without increasing image size. Rebuild with `python build_dataset.py --extent-r500 2.0`.
+- Can also combine both (256×256 at 2×R_500c) for ~15–20 kpc/pixel, approaching simulation cell resolution.
 
 ### VLASS
 - Add support for VLASS Epochs 2 and 3 when they become available via Vizier

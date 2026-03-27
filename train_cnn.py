@@ -190,7 +190,7 @@ def run_cv(images, labels, groups, n_folds, n_epochs, batch_size, seed, huber_de
 
 
 def main(tau, n_folds, n_epochs, batch_size, seed, pseudo_tsc=False,
-         merger_tsc=False, huber_delta=0.5):
+         merger_tsc=False, huber_delta=0.5, tsc_max=None):
     dataset_path = "dataset.h5"
 
     print("Loading dataset...")
@@ -210,6 +210,11 @@ def main(tau, n_folds, n_epochs, batch_size, seed, pseudo_tsc=False,
             all_labels = all_labels[valid]
             print(f"Using merger-catalog TSC label ({valid.sum()}/{len(valid)} clusters, "
                   f"{(~valid).sum()} dropped — no recorded collision)")
+            if tsc_max is not None:
+                keep = all_labels <= tsc_max
+                raw_images = raw_images[keep]
+                all_labels = all_labels[keep]
+                print(f"Filtered to TSC <= {tsc_max} Gyr: {keep.sum()} clusters")
         elif pseudo_tsc:
             all_labels = f["labels/pseudo_tsc"][:]
             print("Using pseudo-TSC label")
@@ -249,6 +254,8 @@ if __name__ == "__main__":
                         help="Use ground-truth TSC from merger catalog (TSC_Cutimages/)")
     parser.add_argument("--huber-delta", type=float, default=0.5,
                         help="Delta for Huber loss (default: 0.5)")
+    parser.add_argument("--tsc-max", type=float, default=None,
+                        help="Keep only clusters with TSC <= this value (Gyr)")
     args = parser.parse_args()
     main(args.tau, args.folds, args.epochs, args.batch_size, args.seed,
-         args.pseudo_tsc, args.merger_tsc, args.huber_delta)
+         args.pseudo_tsc, args.merger_tsc, args.huber_delta, args.tsc_max)
