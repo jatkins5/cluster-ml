@@ -126,7 +126,7 @@ def evaluate(model, loader, device):
     return preds, labels
 
 
-def run_cv(images, labels, groups, n_folds, n_epochs, batch_size, seed):
+def run_cv(images, labels, groups, n_folds, n_epochs, batch_size, seed, huber_delta=0.5):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
 
@@ -152,7 +152,7 @@ def run_cv(images, labels, groups, n_folds, n_epochs, batch_size, seed):
         model     = ShallowCNN().to(device)
         optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4, weight_decay=1e-3)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=n_epochs)
-        criterion = nn.HuberLoss(delta=0.5)
+        criterion = nn.HuberLoss(delta=huber_delta)
 
         best_rmse, best_preds = np.inf, None
         for epoch in range(n_epochs):
@@ -189,13 +189,28 @@ def run_cv(images, labels, groups, n_folds, n_epochs, batch_size, seed):
     print(f"  OOF R²: {r2_score(labels, oof_preds):.3f}")
 
 
-def main(tau, n_folds, n_epochs, batch_size, seed, pseudo_tsc=False):
+def main(tau, n_folds, n_epochs, batch_size, seed, pseudo_tsc=False,
+         merger_tsc=False, huber_delta=0.5):
     dataset_path = "dataset.h5"
 
     print("Loading dataset...")
     with h5py.File(dataset_path, "r") as f:
         raw_images = f["images"][:]              # (352, 3, H, W)
-        if pseudo_tsc:
+        halo_ids = f["meta/halo_id"][:]
+
+        if merger_tsc:
+            tsc_path = "TSC_Cutimages/TSC_eachhalo_snap99.hdf5"
+            with h5py.File(tsc_path, "r") as ft:
+                tsc_hids = ft["halo_id"][:]
+                tsc_vals = ft["tsc_gyr"][:]
+            tsc_map = dict(zip(tsc_hids, tsc_vals))
+            all_labels = np.array([tsc_map[h] for h in halo_ids], dtype=np.float32)
+            valid = ~np.isnan(all_labels)
+            raw_images = raw_images[valid]
+            all_labels = all_labels[valid]
+            print(f"Using merger-catalog TSC label ({valid.sum()}/{len(valid)} clusters, "
+                  f"{(~valid).sum()} dropped — no recorded collision)")
+        elif pseudo_tsc:
             all_labels = f["labels/pseudo_tsc"][:]
             print("Using pseudo-TSC label")
         else:
@@ -205,18 +220,19 @@ def main(tau, n_folds, n_epochs, batch_size, seed, pseudo_tsc=False):
             all_labels = f["labels/label_score_all"][:, tau_idx]
             print(f"Using tau = {actual_tau:.1f} Gyr (index {tau_idx})")
 
-    N, P, H, W = raw_images.shape   # 352, 3, 128, 128
+    N, P, H, W = raw_images.shape
 
     # flatten projections into separate samples; track cluster group
-    images = raw_images.reshape(N * P, H, W)         # (1056, H, W)
-    labels = np.repeat(all_labels, P).astype(np.float32)  # (1056,)
+    images = raw_images.reshape(N * P, H, W)         # (N*3, H, W)
+    labels = np.repeat(all_labels, P).astype(np.float32)  # (N*3,)
     groups = np.repeat(np.arange(N), P)              # cluster index per sample
 
     print(f"Samples: {len(images)}  (clusters={N}, projections={P})")
     print(f"Labels:  min={labels.min():.3f}  max={labels.max():.3f}  mean={labels.mean():.3f}")
     print()
 
-    run_cv(images, labels, groups, n_folds, n_epochs, batch_size, seed)
+    print(f"Huber delta: {huber_delta}")
+    run_cv(images, labels, groups, n_folds, n_epochs, batch_size, seed, huber_delta)
 
 
 if __name__ == "__main__":
@@ -229,5 +245,10 @@ if __name__ == "__main__":
     parser.add_argument("--seed",       type=int,   default=42)
     parser.add_argument("--pseudo-tsc", action="store_true",
                         help="Use pseudo-TSC label instead of fixed-tau score")
+    parser.add_argument("--merger-tsc", action="store_true",
+                        help="Use ground-truth TSC from merger catalog (TSC_Cutimages/)")
+    parser.add_argument("--huber-delta", type=float, default=0.5,
+                        help="Delta for Huber loss (default: 0.5)")
     args = parser.parse_args()
-    main(args.tau, args.folds, args.epochs, args.batch_size, args.seed, args.pseudo_tsc)
+    main(args.tau, args.folds, args.epochs, args.batch_size, args.seed,
+         args.pseudo_tsc, args.merger_tsc, args.huber_delta)
