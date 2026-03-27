@@ -759,6 +759,7 @@ All results use 5-fold CV grouped by cluster. Label definitions:
 | XGBoost (tabular) | pseudo-TSC | 0.333 | 0.711 | 0.962 | 0.169 |
 | Shallow CNN (images) | tau=1.0 | 0.472 | 0.414 | 0.544 | 0.084 |
 | Shallow CNN (images) | pseudo-TSC | 0.529 | 0.587 | 0.806 | 0.095 |
+| Shallow CNN (images) | merger-TSC (δ=2.0, 120ep) | 0.511 | 0.798 | 1.073 | 0.102 |
 | Pooled CNN | pseudo-TSC | **0.564** | — | — | — |
 | Pooled CNN | merger-TSC (δ=0.5) | 0.494 | 0.779 | 1.103 | 0.150 |
 | Pooled CNN | merger-TSC (δ=2.0) | 0.528 | 0.782 | 1.067 | 0.188 |
@@ -770,7 +771,8 @@ Key observations:
 - Merger-catalog TSC is a harder target than pseudo-TSC (wider range 0–7.7 Gyr, right-skewed), but the pooled CNN still achieves R²=0.544 with tuned Huber delta and more epochs
 - Increasing Huber delta from 0.5 to 2.0 improved merger-TSC results (+0.034 OOF R²), as the default delta was too aggressive for the wider label range
 - Log-transforming merger-TSC labels did not help (OOF R² 0.443–0.480) — compressing the tail also compressed the discriminative part of the distribution
-- High fold variance persists across all merger-TSC runs (R² std ~0.15–0.20), driven by Fold 1 consistently underperforming (R²~0.12), likely due to cluster composition in that split
+- **Shallow CNN with merger-TSC (R²=0.511) is the most practical model** — it processes a single projection, so it can be applied directly to real observations where only one line-of-sight view is available. It retains most of the pooled CNN's performance (0.544) with lower fold variance (std 0.102 vs 0.196)
+- High fold variance persists across pooled CNN merger-TSC runs (R² std ~0.15–0.20), driven by Fold 1 consistently underperforming (R²~0.12), likely due to cluster composition in that split
 
 ## Future Work
 
