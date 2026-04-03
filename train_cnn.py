@@ -76,14 +76,17 @@ class ConvBlock(nn.Module):
 
 
 class ShallowCNN(nn.Module):
-    def __init__(self):
+    def __init__(self, img_size=128):
         super().__init__()
-        self.encoder = nn.Sequential(
-            ConvBlock(1,  32),   # 128 → 64
-            ConvBlock(32, 64),   # 64  → 32
-            ConvBlock(64, 128),  # 32  → 16
-            ConvBlock(128, 256), # 16  →  8
-        )
+        blocks = [
+            ConvBlock(1,  32),   # /2
+            ConvBlock(32, 64),   # /4
+            ConvBlock(64, 128),  # /8
+            ConvBlock(128, 256), # /16
+        ]
+        if img_size >= 256:
+            blocks.append(ConvBlock(256, 256))  # /32
+        self.encoder = nn.Sequential(*blocks)
         self.pool = nn.AdaptiveAvgPool2d(1)
         self.head = nn.Sequential(
             nn.Flatten(),
@@ -126,7 +129,7 @@ def evaluate(model, loader, device):
     return preds, labels
 
 
-def run_cv(images, labels, groups, n_folds, n_epochs, batch_size, seed, huber_delta=0.5):
+def run_cv(images, labels, groups, n_folds, n_epochs, batch_size, seed, huber_delta=0.5, img_size=128):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
 
@@ -149,7 +152,7 @@ def run_cv(images, labels, groups, n_folds, n_epochs, batch_size, seed, huber_de
         train_dl = DataLoader(train_ds, batch_size=batch_size, shuffle=True,  num_workers=2, pin_memory=True)
         val_dl   = DataLoader(val_ds,   batch_size=batch_size, shuffle=False, num_workers=2, pin_memory=True)
 
-        model     = ShallowCNN().to(device)
+        model     = ShallowCNN(img_size=img_size).to(device)
         optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4, weight_decay=1e-3)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=n_epochs)
         criterion = nn.HuberLoss(delta=huber_delta)
@@ -190,8 +193,8 @@ def run_cv(images, labels, groups, n_folds, n_epochs, batch_size, seed, huber_de
 
 
 def main(tau, n_folds, n_epochs, batch_size, seed, pseudo_tsc=False,
-         merger_tsc=False, huber_delta=0.5, tsc_max=None):
-    dataset_path = "dataset.h5"
+         merger_tsc=False, huber_delta=0.5, tsc_max=None, dataset_path="dataset.h5"):
+
 
     print("Loading dataset...")
     with h5py.File(dataset_path, "r") as f:
@@ -236,8 +239,8 @@ def main(tau, n_folds, n_epochs, batch_size, seed, pseudo_tsc=False,
     print(f"Labels:  min={labels.min():.3f}  max={labels.max():.3f}  mean={labels.mean():.3f}")
     print()
 
-    print(f"Huber delta: {huber_delta}")
-    run_cv(images, labels, groups, n_folds, n_epochs, batch_size, seed, huber_delta)
+    print(f"Huber delta: {huber_delta}  Image size: {W}×{W}")
+    run_cv(images, labels, groups, n_folds, n_epochs, batch_size, seed, huber_delta, img_size=W)
 
 
 if __name__ == "__main__":
@@ -256,6 +259,9 @@ if __name__ == "__main__":
                         help="Delta for Huber loss (default: 0.5)")
     parser.add_argument("--tsc-max", type=float, default=None,
                         help="Keep only clusters with TSC <= this value (Gyr)")
+    parser.add_argument("--dataset", type=str, default="dataset.h5",
+                        help="Path to dataset HDF5 file (default: dataset.h5)")
     args = parser.parse_args()
     main(args.tau, args.folds, args.epochs, args.batch_size, args.seed,
-         args.pseudo_tsc, args.merger_tsc, args.huber_delta, args.tsc_max)
+         args.pseudo_tsc, args.merger_tsc, args.huber_delta, args.tsc_max,
+         args.dataset)
