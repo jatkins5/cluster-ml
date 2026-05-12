@@ -667,6 +667,8 @@ A proxy TSC derived from the pkl label_score curve: the τ value at which `label
 
 ### Building the Training Dataset
 
+#### Radio dataset
+
 ```bash
 source venv/bin/activate
 python build_dataset.py                          # defaults: 128×128 px, 4×R500c extent
@@ -697,6 +699,36 @@ with h5py.File("dataset.h5", "r") as f:
     images = f["images"][:]               # (352, 3, 128, 128)
     labels = f["labels/label_score_all"][:, 9]  # tau=1.0 Gyr (index 9)
     halo_ids = f["meta/halo_id"][:]
+```
+
+#### X-ray dataset
+
+Simulated Chandra ACIS-I observations from `TNGCluster_Xray_Snap99/`, generated via `pyxsim` + `soxs` (see `X-ray_chandra_Snap0_x.py` in each projection directory). Each cluster has mock 2 Ms Chandra observations in 3 viewing axes, with exposure-corrected count-rate images in the 0.1–2.0 keV band.
+
+**Raw data:** 4880×4880 FITS images at ~0.492 arcsec/pixel (Chandra ACIS-I native scale), FoV = 2×R500c per cluster, one `_img.fits` per halo per projection.
+
+**Projection alignment with radio:**
+
+| Radio projection | Axes | X-ray directory |
+|---|---|---|
+| 0 (xy) | view along z | `snap99_z/` |
+| 1 (yz) | view along x | `snap99_x/` |
+| 2 (xz) | view along y | `snap99_y/` |
+
+```bash
+python build_xray_dataset.py                              # 128×128 (38× block-average)
+python build_xray_dataset.py --img-size 256               # 256×256 (19× block-average)
+python build_xray_dataset.py --output dataset_xray.h5     # custom output path
+```
+
+The script center-crops the 4880×4880 raw images to 4864×4864 (drops 8 px per side, <0.2% of FoV) so the target size divides evenly, then block-averages (exact area-mean) to the target resolution. Arcsinh normalization is applied after downsampling.
+
+Output HDF5 (`dataset_xray_128.h5`) structure:
+```
+images/                  (352, 3, 128, 128) float32  — arcsinh(block-averaged counts/s/px)
+  [dim 1: xy, yz, xz — same order as radio dataset.h5]
+meta/
+  halo_id                (352,) int64  — same ordering as dataset.h5
 ```
 
 ## Model Results
@@ -767,6 +799,8 @@ All results use 5-fold CV grouped by cluster. Label definitions:
 | Pooled CNN | merger-TSC (δ=0.5) | 0.494 | 0.779 | 1.103 | 0.150 |
 | Pooled CNN | merger-TSC (δ=2.0) | 0.528 | 0.782 | 1.067 | 0.188 |
 | Pooled CNN | merger-TSC (δ=2.0, 120ep) | **0.544** | 0.778 | 1.047 | 0.196 |
+| X-ray-only CNN | merger-TSC (δ=2.0, 120ep) | 0.321 | 0.938 | 1.265 | 0.104 |
+| Dual-encoder (radio+X-ray) | merger-TSC (δ=2.0, 120ep) | 0.511 | 0.777 | 1.073 | 0.078 |
 
 Key observations:
 - CNN consistently outperforms XGBoost, confirming spatial structure in radio images carries signal beyond tabular morphology features
@@ -778,6 +812,8 @@ Key observations:
 - High fold variance persists across pooled CNN merger-TSC runs (R² std ~0.15–0.20), driven by Fold 1 consistently underperforming (R²~0.12), likely due to cluster composition in that split
 - **Filtering to recent mergers (TSC ≤ 2 Gyr, 258 clusters) collapsed R² to 0.149** — the CNN's performance on the full set is largely driven by separating "recently merged" vs "long ago merged" (a coarse distinction), not precisely timing recent mergers. Within the recent-merger subset, radio morphologies are too similar for the model to distinguish 0.3 vs 1.5 Gyr
 - **Higher resolution images did not help**: 256×256 at 4×R500c (R²=0.507) matched the 128px baseline, and 256×256 at 2×R500c (R²=0.480) was slightly worse — the tighter crop likely cuts off outer relic structure. The bottleneck is not pixel resolution but the difficulty of learning geometric features (like relic separation) implicitly from raw images with only ~350 training samples
+- **X-ray alone is substantially weaker than radio** (OOF R² 0.321 vs 0.511). X-ray surface brightness traces thermal gas (density² × temperature½), which correlates with mass and relaxation state but is a weaker TSC indicator than radio relics/halos. Training was also less stable — some folds showed wildly negative R² mid-training before recovering at the best-epoch checkpoint
+- **Adding X-ray to radio via dual-encoder fusion did not improve over radio-only** (R² 0.511 vs 0.511). The dual encoder uses separate CNN backbones for each modality with concatenated features before the MLP head, but the X-ray channel contributes no complementary information — the model overfits harder (train R² ~0.9 vs val R² ~0.3–0.5) with twice the parameters. The bottleneck remains what the CNN can extract from images at this sample size, not missing modalities
 
 ## Future Work
 
@@ -796,10 +832,11 @@ The idea: freeze a pretrained vision backbone, extract embeddings, train a linea
 
 ### Explicit Geometric Features
 
-Higher resolution images (256×256) and narrower crops (2×R500c) did not improve merger-TSC prediction, suggesting the CNN cannot implicitly learn the relic separation geometry that Lee et al. (2024) showed correlates with TSC (Pearson r=0.83). With only ~350 clusters, the model lacks the data to discover this relationship from raw pixels. Possible approaches:
+Higher resolution images (256×256), narrower crops (2×R500c), and multi-modal fusion (radio + X-ray) all failed to improve merger-TSC prediction, confirming the CNN cannot implicitly learn the relic separation geometry that Lee et al. (2024) showed correlates with TSC (Pearson r=0.83). With only ~350 clusters, the model lacks the data to discover this relationship from raw pixels. Possible approaches:
 
 - **Extract relic separation as a feature** — identify relics in the radio images (e.g. via thresholding + connected components) and measure their separation normalized by R_500c. Feed this alongside the CNN embedding or use it directly.
 - **Hybrid model** — CNN image features concatenated with hand-crafted geometric features (relic separation, relic luminosity, morphology asymmetry) before the regression head.
+- **X-ray morphological features** — established X-ray merger diagnostics (centroid shift, concentration parameter, power ratios, asymmetry) could be extracted from the simulated Chandra images and used as explicit features. The CNN at 128px resolution with 346 training samples cannot learn these implicitly, but they are straightforward to compute from the images directly.
 - **More training data** — TNG300-1 adds ~120 relic systems (Lee et al. 2024); combining with TNG-Cluster's 352 may help the CNN learn finer structure.
 
 ### VLASS

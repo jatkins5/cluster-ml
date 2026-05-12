@@ -84,7 +84,10 @@ class ShallowCNN(nn.Module):
             ConvBlock(64, 128),  # /8
             ConvBlock(128, 256), # /16
         ]
-        if img_size >= 256:
+        if img_size >= 512:
+            blocks.append(ConvBlock(256, 256))  # /32
+            blocks.append(ConvBlock(256, 256))  # /64
+        elif img_size >= 256:
             blocks.append(ConvBlock(256, 256))  # /32
         self.encoder = nn.Sequential(*blocks)
         self.pool = nn.AdaptiveAvgPool2d(1)
