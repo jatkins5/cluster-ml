@@ -55,6 +55,8 @@ Radio_Data
 # ML data and outputs
 dataset.h5
 feats_labels_dict_tngcluster.pkl
+diffusion_radio_*.h5
+diffusion_out/*.pt
 logs/
 vlass_images/
 overlay_images/
