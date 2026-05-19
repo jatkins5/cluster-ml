@@ -48,7 +48,7 @@ The script queries the VLASS Epoch 1 Quick Look Catalog (Gordon+, 2021; catalog 
 
 ### eROSITA X-ray Matches
 
-**LoVoCCS targets matched with eROSITA All-Sky Survey (eRASS1)**
+**59 out of 106 LoVoCCS targets matched with eROSITA All-Sky Survey (eRASS1)**
 
 The matching script queries the eROSITA eRASS1 main catalog (Merloni+, 2024; catalog ID: J/A+A/685/A106) via Vizier, using a 5 arcminute search radius around each cluster center. For each match, we record:
 - Number of X-ray sources within the search radius
@@ -62,16 +62,16 @@ The script generates two output files:
 
 ### LoTSS Radio Matches
 
-**2 out of 106 LoVoCCS targets matched with LOFAR Two-metre Sky Survey (LoTSS) DR2**
+**26 out of 106 LoVoCCS targets matched with LOFAR Two-metre Sky Survey (LoTSS) DR3**
 
-The matching script queries the LoTSS DR2 value-added catalog (Shimwell+, 2022; catalog ID: J/A+A/678/A151) via Vizier, using a 10 arcminute search radius around each cluster center. LoTSS provides low-frequency (144 MHz) radio observations with excellent sensitivity to diffuse emission. For each match, we record:
+The matching script bulk cross-matches the LoVoCCS target list against the LoTSS DR3 PyBDSF source catalog (Shimwell et al. 2026; `LoTSS_DR3_v1.0.srl.fits`, ~13.7M sources), which is downloaded locally and matched using `astropy.coordinates.search_around_sky` with a 10 arcminute search radius. LoTSS provides low-frequency (144 MHz) radio observations with excellent sensitivity to diffuse emission. For each match, we record:
 - Number of radio sources within the search radius
 - Separation of the closest source from the cluster center
 - Peak and total flux density (mJy)
 - Source morphology (major/minor axes)
 - **Resolved flag** - indicates extended emission (important for cluster radio halos/relics)
 
-**Sky coverage**: LoTSS DR2 covers ~27% of the sky (5720 deg²) in the northern hemisphere (0h < RA < 24h, +25° < Dec < +70°). The low match rate (2/106) reflects that most LoVoCCS targets fall outside the LoTSS coverage area or at declinations below +25°.
+**Sky coverage**: LoTSS DR3 covers ~88% of the northern sky at 6" angular resolution (9" below declination +10°), as described in Shimwell et al. 2026. The match rate of 26/106 reflects LoVoCCS targets that fall outside the LOFAR footprint, predominantly at southern declinations.
 
 The script generates two output files:
 - **Summary file** (`lovoccs_lotss_matches.csv`): One row per cluster with basic match statistics
@@ -222,10 +222,11 @@ python match_lovoccs_lotss.py
 
 The script will:
 1. Parse the LoVoCCS target list
-2. Query the LoTSS DR2 catalog via Vizier for each cluster
-3. Calculate separations and extract source properties
-4. Save summary results to `lovoccs_lotss_matches.csv`
-5. Save detailed source information to `lovoccs_lotss_matches_detailed.csv`
+2. Download the LoTSS DR3 PyBDSF source catalog (`LoTSS_DR3_v1.0.srl.fits`) if not already present
+3. Cross-match all clusters against the catalog in bulk via `search_around_sky` with a 10 arcmin radius
+4. Calculate separations and extract source properties
+5. Save summary results to `lovoccs_lotss_matches.csv`
+6. Save detailed source information to `lovoccs_lotss_matches_detailed.csv`
 
 **Summary output format:**
 - `id`, `name`, `ra`, `dec` - Cluster identification
