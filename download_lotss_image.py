@@ -117,7 +117,28 @@ def download_lotss_cutout(ra, dec, size_arcmin=20, name="target",
         return None
 
 
-def display_lotss_image(hdu, name="target", output_dir="lotss_images"):
+def load_bcg_positions():
+    """Load BCG positions from lovoccs_lotss_bcg_positions.csv."""
+    bcg_file = os.path.join(os.path.dirname(__file__), "lovoccs_lotss_bcg_positions.csv")
+    try:
+        df = pd.read_csv(bcg_file)
+        return {row['name']: (row['bcg_ra'], row['bcg_dec']) for _, row in df.iterrows()}
+    except FileNotFoundError:
+        return {}
+
+
+def load_xray_peaks():
+    """Load X-ray peak positions from lovoccs_lotss_xray_peaks.csv (MCXC)."""
+    xray_file = os.path.join(os.path.dirname(__file__), "lovoccs_lotss_xray_peaks.csv")
+    try:
+        df = pd.read_csv(xray_file)
+        return {row['name']: (row['xray_ra'], row['xray_dec']) for _, row in df.iterrows()}
+    except FileNotFoundError:
+        return {}
+
+
+def display_lotss_image(hdu, name="target", output_dir="lotss_images",
+                        bcg_positions=None, xray_peaks=None):
     """
     Create a PNG visualization of a LoTSS image.
 
@@ -129,6 +150,10 @@ def display_lotss_image(hdu, name="target", output_dir="lotss_images"):
         Target name for the title
     output_dir : str
         Output directory
+    bcg_positions : dict or None
+        Mapping of cluster name -> (bcg_ra, bcg_dec) in degrees
+    xray_peaks : dict or None
+        Mapping of cluster name -> (xray_ra, xray_dec) in degrees
     """
     data = np.squeeze(hdu[0].data)
     header = hdu[0].header
@@ -153,6 +178,25 @@ def display_lotss_image(hdu, name="target", output_dir="lotss_images"):
 
     cbar = plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
     cbar.set_label('Flux Density (Jy/beam)', fontsize=12)
+
+    # Mark BCG position
+    if bcg_positions and name in bcg_positions:
+        bcg_ra, bcg_dec = bcg_positions[name]
+        ax.plot(bcg_ra, bcg_dec, transform=ax.get_transform('world'),
+                marker='+', color='red', markersize=10, markeredgewidth=1.5,
+                label='BCG')
+
+    # Mark X-ray peak
+    if xray_peaks and name in xray_peaks:
+        xray_ra, xray_dec = xray_peaks[name]
+        ax.plot(xray_ra, xray_dec, transform=ax.get_transform('world'),
+                marker='x', color='cyan', markersize=10, markeredgewidth=1.5,
+                label='X-ray peak')
+
+    # Add legend if any markers were plotted
+    handles, labels = ax.get_legend_handles_labels()
+    if handles:
+        ax.legend(loc='upper right', fontsize=10)
 
     ax.set_xlabel('RA (J2000)', fontsize=12)
     ax.set_ylabel('Dec (J2000)', fontsize=12)
@@ -262,6 +306,13 @@ Examples:
 
     os.makedirs(args.output_dir, exist_ok=True)
 
+    # Load overlay positions
+    bcg_positions = load_bcg_positions()
+    xray_peaks = load_xray_peaks()
+    if bcg_positions or xray_peaks:
+        print(f"Overlays: {len(bcg_positions)} BCGs, {len(xray_peaks)} X-ray peaks")
+    print()
+
     success = 0
     failed = 0
 
@@ -281,7 +332,9 @@ Examples:
         if args.png_only:
             if os.path.exists(fits_path):
                 hdu = fits.open(fits_path)
-                display_lotss_image(hdu, name=name, output_dir=args.output_dir)
+                display_lotss_image(hdu, name=name, output_dir=args.output_dir,
+                                    bcg_positions=bcg_positions,
+                                    xray_peaks=xray_peaks)
                 success += 1
             else:
                 print(f"  No FITS file found: {fits_path}")
@@ -295,7 +348,9 @@ Examples:
             if not os.path.exists(png_path):
                 try:
                     hdu = fits.open(fits_path)
-                    display_lotss_image(hdu, name=name, output_dir=args.output_dir)
+                    display_lotss_image(hdu, name=name, output_dir=args.output_dir,
+                                    bcg_positions=bcg_positions,
+                                    xray_peaks=xray_peaks)
                 except Exception as e:
                     print(f"  Error generating PNG: {e}")
             success += 1
@@ -311,7 +366,9 @@ Examples:
         )
 
         if hdu is not None:
-            display_lotss_image(hdu, name=name, output_dir=args.output_dir)
+            display_lotss_image(hdu, name=name, output_dir=args.output_dir,
+                                bcg_positions=bcg_positions,
+                                xray_peaks=xray_peaks)
             success += 1
         else:
             failed += 1
