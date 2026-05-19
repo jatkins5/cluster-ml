@@ -815,6 +815,56 @@ Key observations:
 - **X-ray alone is substantially weaker than radio** (OOF R² 0.321 vs 0.511). X-ray surface brightness traces thermal gas (density² × temperature½), which correlates with mass and relaxation state but is a weaker TSC indicator than radio relics/halos. Training was also less stable — some folds showed wildly negative R² mid-training before recovering at the best-epoch checkpoint
 - **Adding X-ray to radio via dual-encoder fusion did not improve over radio-only** (R² 0.511 vs 0.511). The dual encoder uses separate CNN backbones for each modality with concatenated features before the MLP head, but the X-ray channel contributes no complementary information — the model overfits harder (train R² ~0.9 vs val R² ~0.3–0.5) with twice the parameters. The bottleneck remains what the CNN can extract from images at this sample size, not missing modalities
 
+## Generative Modeling (Diffusion)
+
+Exploratory work on generating synthetic radio cluster maps with a diffusion
+model, motivated by eventually conditioning on a mass map to produce realistic
+synthetic observations. The first question — whether a diffusion model can be
+trained on only ~350 independent clusters without simply memorizing them — has
+been answered for radio at 64px.
+
+**Pipeline:**
+- `build_diffusion_data.py` — projects raw radio NPZ to 64px maps with a
+  *tuned, invertible* `arcsinh(x / a)` stretch (robust scale `a` = median
+  positive pixel, high-percentile clip). Unlike `dataset.h5`'s parameter-free
+  `np.arcsinh`, the stretch + scaling parameters are stored so generated
+  samples can be mapped back to physical units for evaluation.
+- `train_diffusion.py` — 8.5M-param UNet DDPM (cosine schedule, EMA),
+  cluster-level train/val split (3 projections kept in the same fold, per the
+  no-leakage rule), 8× rotation/flip augmentation.
+- `submit_diffusion.sh` — SLURM `gpu`, ~400 epochs (~minutes on one GPU).
+
+**Result (decisive — no memorization):**
+
+| Metric | Generated | Real baseline | Interpretation |
+|---|---|---|---|
+| `gen→train` NN L2 (median) | 27.13 | `train→train` 26.92 | generated maps are no closer to training images than real clusters are to each other → **not copying** |
+| intra-generated NN L2 (median) | 28.42 | — | diverse samples, no mode collapse |
+
+Generated samples reproduce realistic, diverse cluster radio morphologies
+(diffuse halos, disturbed multi-clump mergers, elongated systems). Physical
+radial profiles track held-out clusters across ~3 decades, and the power
+spectrum matches well at small/intermediate scales.
+
+**Known defect:** ~10× excess power at the lowest *k* — the model
+over-produces large-scale / total-flux variance, visible as slightly
+over-smoothed and over-extended emission compared to the sharper knots in the
+simulations. Prime suspects: the high-percentile bright-pixel clip, the
+arcsinh scale, and undertrained EMA. This is the first thing to fix.
+
+See `diffusion_out/eval_final.png` (fidelity + memorization readout) and
+`diffusion_out/sim_vs_gen.png` (side-by-side simulated vs. generated maps).
+
+**Implication:** the core risk for the synthetic-observation idea is retired
+for radio@64px. Conditioning is now worth pursuing. Because the unconditional
+generator already works, the high-value conditioner is a **total / DM-dominated
+mass map** (what weak lensing reconstructs, physically independent of the
+radio/X-ray being generated) rather than a gas mass map (free from the existing
+gas-only cutouts but largely redundant with the X-ray channel). The DM-map
+path requires downloading dark-matter particles for the 352 halos from the
+public TNG-Cluster release. Next steps: fix the low-*k* excess → repeat the
+feasibility test for X-ray → scope the DM-particle download.
+
 ## Future Work
 
 ### Pretrained Vision Backbone (Linear Probing)
