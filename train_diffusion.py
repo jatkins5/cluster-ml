@@ -253,11 +253,25 @@ def evaluate(gen, train, val, attrs, tag):
 
     rp_g = np.mean([radial_profile(x) for x in gp], 0)
     rp_v = np.mean([radial_profile(x) for x in vp], 0)
+    # PSD in BOTH physical and normalized space. The a*sinh inverse is
+    # violently exponential, so physical-space low-k is dominated by a
+    # handful of bright pixels and exaggerates tiny errors ~10x. The
+    # normalized [-1,1] space is what the model trains in and is the
+    # meaningful fidelity readout; physical is kept for continuity.
     ps_g = np.mean([power_spectrum(x) for x in gp], 0)
     ps_v = np.mean([power_spectrum(x) for x in vp], 0)
+    psn_g = np.mean([power_spectrum(x) for x in gen[:, 0]], 0)
+    psn_v = np.mean([power_spectrum(x) for x in val[:, 0]], 0)
 
-    fig, ax = plt.subplots(2, 3, figsize=(15, 9))
-    for j in range(3):
+    # scalar trackers: low-k = mean of radial bins 1-4; DC = bin 0
+    def lowk(p):
+        return float(p[1:5].mean())
+    lk_phys = lowk(ps_g) / lowk(ps_v)
+    lk_norm = lowk(psn_g) / lowk(psn_v)
+    dc_norm = float(psn_g[0] / psn_v[0])
+
+    fig, ax = plt.subplots(2, 4, figsize=(20, 9))
+    for j in range(4):
         ax[0, j].imshow(gen[j, 0], cmap="inferno", vmin=-1, vmax=1)
         ax[0, j].set_title(f"generated #{j}")
         ax[0, j].axis("off")
@@ -266,10 +280,17 @@ def evaluate(gen, train, val, attrs, tag):
     ax[1, 0].legend()
     ax[1, 1].plot(ps_v, label="val"); ax[1, 1].plot(ps_g, label="gen")
     ax[1, 1].set_yscale("log"); ax[1, 1].set_xscale("log")
-    ax[1, 1].set_title("power spectrum (physical)"); ax[1, 1].legend()
-    ax[1, 2].hist(t_nn, bins=20, alpha=0.6, density=True, label="train-train NN")
-    ax[1, 2].hist(g_nn, bins=20, alpha=0.6, density=True, label="gen-train NN")
-    ax[1, 2].set_title("memorization check"); ax[1, 2].legend()
+    ax[1, 1].set_title(f"power spectrum (physical)\nlow-k gen/val={lk_phys:.2f}x "
+                       "(metric-inflated by sinh)")
+    ax[1, 1].legend()
+    ax[1, 2].plot(psn_v, label="val"); ax[1, 2].plot(psn_g, label="gen")
+    ax[1, 2].set_yscale("log"); ax[1, 2].set_xscale("log")
+    ax[1, 2].set_title(f"power spectrum (normalized)\nlow-k gen/val={lk_norm:.2f}x "
+                       f"DC={dc_norm:.2f}x  <- meaningful")
+    ax[1, 2].legend()
+    ax[1, 3].hist(t_nn, bins=20, alpha=0.6, density=True, label="train-train NN")
+    ax[1, 3].hist(g_nn, bins=20, alpha=0.6, density=True, label="gen-train NN")
+    ax[1, 3].set_title("memorization check"); ax[1, 3].legend()
     fig.tight_layout()
     fig.savefig(f"{OUT}/eval_{tag}.png", dpi=110)
     plt.close(fig)
@@ -277,7 +298,10 @@ def evaluate(gen, train, val, attrs, tag):
     print(f"[eval {tag}] gen->train NN  median={np.median(g_nn):.3f}  "
           f"(train-train baseline median={np.median(t_nn):.3f})")
     print(f"[eval {tag}] gen diversity (min pairwise) median={np.median(g_div):.3f}")
-    print(f"[eval {tag}]  -> memorization risk if gen->train << train-train baseline")
+    print(f"[eval {tag}] low-k power gen/val: normalized={lk_norm:.2f}x "
+          f"DC={dc_norm:.2f}x  | physical={lk_phys:.2f}x (sinh-inflated)")
+    print(f"[eval {tag}]  -> track NORMALIZED low-k (~1.0 = good); "
+          f"memorization risk if gen->train << train-train baseline")
 
 
 # ----------------------------- train --------------------------------------
