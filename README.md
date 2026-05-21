@@ -843,28 +843,42 @@ been answered for radio at 64px.
 | intra-generated NN L2 (median) | 28.42 | — | diverse samples, no mode collapse |
 
 Generated samples reproduce realistic, diverse cluster radio morphologies
-(diffuse halos, disturbed multi-clump mergers, elongated systems). Physical
-radial profiles track held-out clusters across ~3 decades, and the power
-spectrum matches well at small/intermediate scales.
+(diffuse halos, disturbed multi-clump mergers, elongated systems). Radial
+profiles in physical units track held-out clusters across ~3 decades.
 
-**Known defect:** ~10× excess power at the lowest *k* — the model
-over-produces large-scale / total-flux variance, visible as slightly
-over-smoothed and over-extended emission compared to the sharper knots in the
-simulations. Prime suspects: the high-percentile bright-pixel clip, the
-arcsinh scale, and undertrained EMA. This is the first thing to fix.
+**Fidelity (low-*k* power ratio, gen / val):**
 
-See `diffusion_out/eval_final.png` (fidelity + memorization readout) and
-`diffusion_out/sim_vs_gen.png` (side-by-side simulated vs. generated maps).
+| Space | low-*k* | DC | Note |
+|---|---|---|---|
+| physical (`a·sinh(...)`) | 9.08× | 14.87× | **metric artifact** — the inverse stretch is violently exponential (`sinh(20.8) ≈ 5e8`), so a tiny high-end discrepancy blows up here |
+| **normalized [-1, 1]** (training space) | **1.20×** | **0.91×** | meaningful readout: large-scale power and total flux essentially correct |
+| log10 physical | 0.10× | 4.24× | gen has *less* large-scale variance — mild over-smoothing of sharp bright knots |
+
+An earlier write-up called the 9× physical-space figure a "low-*k* excess
+defect"; the diagnostic in `diffusion_out/psd_diag.png` showed that's almost
+entirely the `a·sinh()` inverse exaggerating a small bright-end error. In the
+space the model actually trains in, large-scale structure is fit correctly.
+The only real residual is mild over-smoothing of compact bright knots — a
+sharpness fine-tune via relaxing the p99.9 clip or sweeping the arcsinh knee
+`a`, not a rescue. `evaluate()` now prints normalized low-*k* / DC every run
+and includes a normalized-PSD panel alongside the physical one (flagged as
+sinh-inflated for continuity).
+
+See `diffusion_out/eval_final.png` (fidelity + memorization readout),
+`diffusion_out/sim_vs_gen.png` (side-by-side simulated vs. generated maps),
+and `diffusion_out/psd_diag.png` (three-space PSD diagnostic).
 
 **Implication:** the core risk for the synthetic-observation idea is retired
-for radio@64px. Conditioning is now worth pursuing. Because the unconditional
-generator already works, the high-value conditioner is a **total / DM-dominated
-mass map** (what weak lensing reconstructs, physically independent of the
-radio/X-ray being generated) rather than a gas mass map (free from the existing
-gas-only cutouts but largely redundant with the X-ray channel). The DM-map
-path requires downloading dark-matter particles for the 352 halos from the
-public TNG-Cluster release. Next steps: fix the low-*k* excess → repeat the
-feasibility test for X-ray → scope the DM-particle download.
+for radio@64px — the generator produces diverse, non-memorizing samples whose
+large-scale structure already matches held-out clusters in the meaningful
+space. Conditioning is worth pursuing. Because the unconditional generator
+already works, the high-value conditioner is a **total / DM-dominated mass
+map** (what weak lensing reconstructs, physically independent of the
+radio/X-ray being generated) rather than a gas mass map (free from the
+existing gas-only cutouts but largely redundant with the X-ray channel). The
+DM-map path requires downloading dark-matter particles for the 352 halos from
+the public TNG-Cluster release. Next steps: optional clip/`a` sharpness tune →
+repeat the feasibility test for X-ray → scope the DM-particle download.
 
 ## Future Work
 
