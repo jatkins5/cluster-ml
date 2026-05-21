@@ -833,51 +833,87 @@ been answered for radio at 64px.
 - `train_diffusion.py` — 8.5M-param UNet DDPM (cosine schedule, EMA),
   cluster-level train/val split (3 projections kept in the same fold, per the
   no-leakage rule), 8× rotation/flip augmentation.
-- `submit_diffusion.sh` — SLURM `gpu`, ~400 epochs (~minutes on one GPU).
+- `submit_diffusion.sh` (baseline, p99.9 clip) and `submit_diffusion_v2.sh`
+  (sharpness tune, p99.99 clip) — SLURM `gpu`, ~400 epochs (~minutes on one
+  GPU).
 
-**Result (decisive — no memorization):**
-
-| Metric | Generated | Real baseline | Interpretation |
-|---|---|---|---|
-| `gen→train` NN L2 (median) | 27.13 | `train→train` 26.92 | generated maps are no closer to training images than real clusters are to each other → **not copying** |
-| intra-generated NN L2 (median) | 28.42 | — | diverse samples, no mode collapse |
-
-Generated samples reproduce realistic, diverse cluster radio morphologies
-(diffuse halos, disturbed multi-clump mergers, elongated systems). Radial
-profiles in physical units track held-out clusters across ~3 decades.
+Two runs of interest are checked in: a **baseline** (`diffusion_out/`,
+p99.9 bright-pixel clip) that established feasibility, and a **v2 sharpness
+tune** (`diffusion_out_v2/`, p99.99 clip) that preserves compact bright knots
+the original clip was wiping out. Single-knob change between the two; same
+UNet, schedule, seed, and arcsinh knee `a`.
 
 **Fidelity (low-*k* power ratio, gen / val):**
 
-| Space | low-*k* | DC | Note |
+| Space | baseline | v2 | Note |
 |---|---|---|---|
-| physical (`a·sinh(...)`) | 9.08× | 14.87× | **metric artifact** — the inverse stretch is violently exponential (`sinh(20.8) ≈ 5e8`), so a tiny high-end discrepancy blows up here |
-| **normalized [-1, 1]** (training space) | **1.20×** | **0.91×** | meaningful readout: large-scale power and total flux essentially correct |
-| log10 physical | 0.10× | 4.24× | gen has *less* large-scale variance — mild over-smoothing of sharp bright knots |
+| physical (`a·sinh(...)`) | 9.08× | **1.49×** | physical-space PSD is `sinh()`-inflated — the inverse stretch is violently exponential (`sinh(20.8) ≈ 5e8`), so tiny high-end errors blow up here. Less clipping → less high-end error → 6× drop in the inflated metric. |
+| **normalized [-1, 1]** (training space) | 1.20× | **1.00×** | the meaningful readout; both runs are essentially correct on large scales, v2 is perfect |
+| DC (total flux, normalized) | 0.91× | **0.99×** | total-flux scatter matched |
+| log10 physical | 0.10× | — | baseline-only diagnostic: gen had *less* large-scale variance, i.e. mildly over-smoothed bright knots → motivated v2 |
 
 An earlier write-up called the 9× physical-space figure a "low-*k* excess
-defect"; the diagnostic in `diffusion_out/psd_diag.png` showed that's almost
-entirely the `a·sinh()` inverse exaggerating a small bright-end error. In the
-space the model actually trains in, large-scale structure is fit correctly.
-The only real residual is mild over-smoothing of compact bright knots — a
-sharpness fine-tune via relaxing the p99.9 clip or sweeping the arcsinh knee
-`a`, not a rescue. `evaluate()` now prints normalized low-*k* / DC every run
-and includes a normalized-PSD panel alongside the physical one (flagged as
-sinh-inflated for continuity).
+defect"; the diagnostic in `diffusion_out/psd_diag.png` showed it was almost
+entirely the `a·sinh()` inverse exaggerating a small bright-end error. The
+v2 clip relaxation then directly addressed that residual — bright knots
+survive into training, the model learns them, and both physical and
+normalized PSDs come into line.
 
-See `diffusion_out/eval_final.png` (fidelity + memorization readout),
-`diffusion_out/sim_vs_gen.png` (side-by-side simulated vs. generated maps),
-and `diffusion_out/psd_diag.png` (three-space PSD diagnostic).
+**Memorization** is read with a brightness-corrected metric (see "Metric
+upgrade" below) — both runs are clean:
 
-**Implication:** the core risk for the synthetic-observation idea is retired
-for radio@64px — the generator produces diverse, non-memorizing samples whose
-large-scale structure already matches held-out clusters in the meaningful
-space. Conditioning is worth pursuing. Because the unconditional generator
-already works, the high-value conditioner is a **total / DM-dominated mass
-map** (what weak lensing reconstructs, physically independent of the
-radio/X-ray being generated) rather than a gas mass map (free from the
-existing gas-only cutouts but largely redundant with the X-ray channel). The
-DM-map path requires downloading dark-matter particles for the 352 halos from
-the public TNG-Cluster release. Next steps: optional clip/`a` sharpness tune →
+| Metric | baseline | v2 |
+|---|---|---|
+| `gen→train` NN, **mean-subtracted** / train-train baseline | 1.02 | 0.90 |
+| brightness-vs-NN correlation | +0.90 | +0.93 |
+| visual nearest-neighbour panel | n/a | `diffusion_out_v2/nn_check.png` — no copied morphologies |
+
+Baseline ratio 1.02 means generated samples sit at almost exactly the same
+structural distance from the training set as training images sit from each
+other (no copying). v2 ratio 0.90 is mildly inside that envelope but still
+above the 0.85 memorization-alert threshold, and the visual NN panel
+confirms zero copied cluster morphologies — the "close" samples are
+near-empty fields matching the dataset's faintest training image, which is
+generic faint-cluster behaviour, not memorization.
+
+**Metric upgrade.** Re-running the upgraded `evaluate()` on the existing
+samples surfaced that **both runs have brightness-vs-NN correlation ≈ 0.9**.
+On heavy-zero-content data like cluster maps, raw L2 NN is dominated by
+"how empty is this image" rather than by morphology, so a pair of near-empty
+fields trivially gets small L2. The baseline's earlier "no memorization,
+NN ratio 1.008" reading was lucky — we'd have been blind to a real signal
+in either direction. `evaluate()` now prints:
+
+1. **Mean-subtracted NN distance** (primary, structural, brightness-independent),
+   reported as a ratio against the same-statistic train-train baseline.
+2. **Brightness-vs-NN correlation** as an automatic guard; if `|corr| ≥ 0.5`
+   the printed summary and figure title flag raw L2 as unreliable.
+3. **Normalized-space PSD panel** alongside the physical one (flagged as
+   sinh-inflated for continuity), with the scalar low-*k* and DC ratios.
+
+Memorization-alert rule: MS ratio < 0.85 *and* brightness-corr < 0.5.
+
+**Figures (all in `diffusion_out/` and `diffusion_out_v2/`):**
+- `eval_final.png` — per-run fidelity + memorization readout (v2 figure
+  predates the metric upgrade; future runs use the new layout automatically)
+- `sim_vs_gen.png` — side-by-side simulated vs. generated radio maps
+  (baseline)
+- `psd_diag.png` — three-space PSD diagnostic (baseline) showing the
+  physical-space metric inflation
+- `nn_check.png` — v2 generated samples and their nearest training images,
+  confirming no morphology copying
+
+**Implication.** The core risk for the synthetic-observation idea is
+retired for radio@64px: v2 reproduces both large-scale power and total flux
+to ~1.00× of held-out clusters in the meaningful space, with no copied
+morphologies under a brightness-corrected memorization check. Conditioning
+is worth pursuing. Because the unconditional generator already works, the
+high-value conditioner is a **total / DM-dominated mass map** (what weak
+lensing reconstructs, physically independent of the radio/X-ray being
+generated) rather than a gas mass map (free from the existing gas-only
+cutouts but largely redundant with the X-ray channel). The DM-map path
+requires downloading dark-matter particles for the 352 halos from the
+public TNG-Cluster release. Next steps: adopt v2 as the new baseline →
 repeat the feasibility test for X-ray → scope the DM-particle download.
 
 ## Future Work
