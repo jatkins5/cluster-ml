@@ -251,6 +251,25 @@ def evaluate(gen, train, val, attrs, tag):
     np.fill_diagonal(d, np.inf)
     g_div = d.min(1)
 
+    # Mean-subtracted NN: removes the global-brightness coupling that breaks
+    # raw L2 on heavy-zero data (where pairs of empty fields trivially have
+    # small L2). Measures structural similarity rather than "how empty".
+    # This is the actual memorization signal — if gen samples look like
+    # specific training clusters, mean-subtracted NN drops below the
+    # train-train baseline regardless of brightness.
+    def _ms(x):
+        f = x.reshape(len(x), -1)
+        return f - f.mean(1, keepdims=True)
+    g_nn_ms = nn_dist(_ms(gen), _ms(train))
+    t_nn_ms = nn_dist(_ms(train[:64]), _ms(np.delete(train, np.arange(64), 0)))
+
+    # Brightness-correlation guard: if |corr(gen mean, gen->train NN)| is
+    # high, raw L2 is mostly measuring brightness and is NOT a reliable
+    # memorization metric. Trust mean-subtracted NN instead. (v2 saw 0.93.)
+    gen_mean = gen.reshape(len(gen), -1).mean(1)
+    bright_corr = float(np.corrcoef(gen_mean, g_nn)[0, 1])
+    raw_l2_reliable = abs(bright_corr) < 0.5
+
     rp_g = np.mean([radial_profile(x) for x in gp], 0)
     rp_v = np.mean([radial_profile(x) for x in vp], 0)
     # PSD in BOTH physical and normalized space. The a*sinh inverse is
@@ -288,20 +307,30 @@ def evaluate(gen, train, val, attrs, tag):
     ax[1, 2].set_title(f"power spectrum (normalized)\nlow-k gen/val={lk_norm:.2f}x "
                        f"DC={dc_norm:.2f}x  <- meaningful")
     ax[1, 2].legend()
-    ax[1, 3].hist(t_nn, bins=20, alpha=0.6, density=True, label="train-train NN")
-    ax[1, 3].hist(g_nn, bins=20, alpha=0.6, density=True, label="gen-train NN")
-    ax[1, 3].set_title("memorization check"); ax[1, 3].legend()
+    ax[1, 3].hist(t_nn_ms, bins=20, alpha=0.6, density=True,
+                  label="train-train (mean-sub)")
+    ax[1, 3].hist(g_nn_ms, bins=20, alpha=0.6, density=True,
+                  label="gen-train (mean-sub)")
+    ms_ratio = float(np.median(g_nn_ms) / np.median(t_nn_ms))
+    flag = "" if raw_l2_reliable else "  [raw L2 unreliable]"
+    ax[1, 3].set_title(f"memorization (mean-subtracted)\n"
+                       f"gen/train baseline={ms_ratio:.2f}  "
+                       f"brightness-corr={bright_corr:.2f}{flag}")
+    ax[1, 3].legend()
     fig.tight_layout()
     fig.savefig(f"{OUT}/eval_{tag}.png", dpi=110)
     plt.close(fig)
 
-    print(f"[eval {tag}] gen->train NN  median={np.median(g_nn):.3f}  "
-          f"(train-train baseline median={np.median(t_nn):.3f})")
-    print(f"[eval {tag}] gen diversity (min pairwise) median={np.median(g_div):.3f}")
+    print(f"[eval {tag}] gen->train NN (raw L2)        median={np.median(g_nn):.3f}  "
+          f"(train-train {np.median(t_nn):.3f})")
+    print(f"[eval {tag}] gen->train NN (mean-subtract) median={np.median(g_nn_ms):.3f}  "
+          f"(train-train {np.median(t_nn_ms):.3f})  ratio={ms_ratio:.2f}")
+    print(f"[eval {tag}] gen diversity (raw L2) median={np.median(g_div):.3f}")
     print(f"[eval {tag}] low-k power gen/val: normalized={lk_norm:.2f}x "
           f"DC={dc_norm:.2f}x  | physical={lk_phys:.2f}x (sinh-inflated)")
-    print(f"[eval {tag}]  -> track NORMALIZED low-k (~1.0 = good); "
-          f"memorization risk if gen->train << train-train baseline")
+    print(f"[eval {tag}] brightness-vs-NN corr={bright_corr:+.2f}  "
+          f"-> raw L2 NN {'reliable' if raw_l2_reliable else 'UNRELIABLE (use mean-sub)'}")
+    print(f"[eval {tag}]  -> MS ratio ~1.0 = good; <0.85 with bright_corr<0.5 = real memorization")
 
 
 # ----------------------------- train --------------------------------------
