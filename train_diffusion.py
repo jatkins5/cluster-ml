@@ -30,7 +30,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset
 
-OUT = "diffusion_out"
+OUT = "diffusion_out"  # overridden by --out-dir at runtime
 
 
 # ----------------------------- data ---------------------------------------
@@ -306,6 +306,8 @@ def evaluate(gen, train, val, attrs, tag):
 
 # ----------------------------- train --------------------------------------
 def main(args):
+    global OUT
+    OUT = args.out_dir
     os.makedirs(OUT, exist_ok=True)
     dev = "cuda" if torch.cuda.is_available() else "cpu"
     tr, val, attrs = load_split(args.data, seed=args.seed)
@@ -355,6 +357,7 @@ def main(args):
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--data", type=str, default="diffusion_radio_64.h5")
+    p.add_argument("--out-dir", type=str, default="diffusion_out")
     p.add_argument("--epochs", type=int, default=400)
     p.add_argument("--batch-size", type=int, default=64)
     p.add_argument("--lr", type=float, default=2e-4)
