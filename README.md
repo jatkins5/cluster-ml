@@ -916,6 +916,104 @@ requires downloading dark-matter particles for the 352 halos from the
 public TNG-Cluster release. Next steps: adopt v2 as the new baseline →
 repeat the feasibility test for X-ray → scope the DM-particle download.
 
+## Relic-Distance Labels (negative result)
+
+Phase 0 of a planned effort to teach the CNN about radio relics' merger
+geometry — specifically the Lee correlation `d_relic ∝ TSC`. The
+shallow-CNN result that motivated this is that restricting to recent
+mergers (TSC ≤ 2 Gyr) collapses R² to 0.149 (see Comparison table) — the
+CNN is doing coarse "recent merger vs not" classification rather than
+*timing* recent mergers, and observed double/single radio relics carry
+exactly that timing information through their distance from the BCG.
+
+Since we don't have observational relic catalogs (Lee's labelled sample
+isn't available), the plan was to derive relic positions programmatically
+from the simulation data, validate against Lee's published relation, then
+either feed (TSC, d_relic) into a multi-task CNN or condition the
+diffusion model on it for relic-geometry-aware synthetic data. The Lee
+validation is the prerequisite — without it the labels mean nothing.
+
+**Detectors built:**
+- `detect_relics.py` — Mach-derived: reads
+  `/oscar/data/idellant/Chuiyang/TNGCluster_Cutout/snap99/cutout_sub*_FOF*.hdf5`,
+  filters `PartType0` gas cells by Mach ≥ threshold, projects M² × ρ as
+  a shock surface-brightness proxy, finds local maxima per projection,
+  filters peaks to the annulus `r_min_frac < r < r_max_frac × R500c`.
+  Outputs `relic_catalog.h5` (or `_v2`) joined with `pseudo_tsc` /
+  `merger_tsc` (from `TSC_Cutimages/TSC_eachhalo_snap99.hdf5`) and
+  `mass_ratio`.
+- `detect_relics_radio.py` — independent radio-map peak detection on
+  `dataset_512.h5`. Threshold set from the annulus max (the central halo
+  outshines any peripheral relic, so a global-max threshold would silently
+  kill every outer peak). Same output schema for direct comparison.
+- `plot_relic_validation_v3.py` — per-projection treatment (each
+  `halo × proj` is one observational analog), restriction to the
+  bow-shock-active TSC regime, four-panel stratified scatter.
+
+**Four independent validations, all negative:**
+
+| Run | Detector | Label | Slicing | corr(TSC, d) on cleanest subset |
+|---|---|---|---|---|
+| v1 | Mach ≥ 2, peak ≥ 5%, sep ≥ 300 kpc | pseudo-TSC, 3-proj mean | clean (n ≤ 2), n=32 | +0.07 |
+| v2 | Mach ≥ 3, peak ≥ 25%, sep ≥ 600 kpc, r ≤ 2 R500c | merger-TSC, 3-proj mean | major + clean (mr ≥ 0.25), n=11 | −0.10 |
+| v3 | (v2 catalog re-sliced) | merger-TSC, per-projection | active + significant + single relic (n=1), n=46 | **−0.149** |
+| radio | independent peak detection on `dataset_512.h5` | merger-TSC, per-projection | active + significant (mr ≥ 0.1), n=132 | **−0.146** |
+
+Detector cleanliness was *not* the issue: v2 produced a median of 2
+relics per projection, matching the observed double-relic mode, with a
+small zero-shock tail for quiescent clusters. The clean-subset / `major +
+clean` / `single-relic` strata are progressively closer to Lee's
+observational sample, but the correlation gets *more* negative there,
+not less. The dominant pattern across all three runs is "high-TSC
+clusters have *smaller* d_max" — physically consistent with bow shocks
+dissipating or escaping the cluster, leaving only inner residual shocks
+in late-stage mergers.
+
+**Why this probably failed** (none disprovable without more work):
+
+1. **Bow-shock dissipation timescale.** Lee's positive relation assumes
+   the bow shock keeps propagating outward over Gyr. In TNG-Cluster the
+   high-Mach cells at old merger-TSC are likely *not* the original bow
+   shock (escaped or dissipated) but residual internal / sloshing /
+   accretion shocks, often at smaller radii. That alone gives an
+   aggregate negative trend.
+2. **Selection-effect mismatch.** Lee's ~28-cluster observational sample
+   is selected for *having visible relics*. The TNG-Cluster sample is
+   unbiased — most z=0 halos are not in the active relic-bearing state.
+   Even "major + clean" includes many quiescent systems where what we're
+   picking up isn't a Lee-type relic at all.
+3. **Possible label issue.** `TSC_eachhalo_snap99.hdf5` was pre-joined by
+   a previous pipeline; we haven't traced whether it's "since the most
+   recent merger of any mass" vs. "since the most recent significant
+   merger." A late minor merger could override the bow-shock-relevant
+   major merger.
+
+**Decision:** drop relic-distance labels as the route to teaching the
+CNN about merger geometry. Pivot to **TSC-scalar-conditional diffusion**
+— synthesise (image, TSC) augmentation samples using the labels we
+already have, mix into CNN training, evaluate whether synthetic data
+moves the needle on the recent-merger subset. This is the original
+"Idea B" (synthetic-data augmentation as general methodology) without
+the relic-geometry dependence.
+
+The radio-map detector independently confirms the result: with the
+threshold set from the *annulus* max (since the central halo outshines
+every peripheral relic) and the same radial filter / minimum separation
+as the Mach v2 detector, the active-regime correlation is −0.013 (i.e.
+zero) and gets *more* negative as we tighten to major mergers (−0.146).
+Two completely independent derivations of "where is the radio relic" —
+one from gas-cell shock physics, one from the synchrotron map itself —
+agree that the Lee signal isn't present in TNG-Cluster at this resolution.
+
+**Figures:**
+- `relic_v2_validation.png`, `relic_v2_count_hist.png` — Mach v2,
+  merger-TSC, mass-ratio stratification
+- `relic_v3_validation.png` — Mach v2 catalog re-sliced per-projection
+  in the active TSC regime; the four-panel "where does the signal live"
+  diagnostic
+- `relic_radio_validation.png` — independent radio-map peak detection;
+  same four-panel layout, same null result
+
 ## Future Work
 
 ### Pretrained Vision Backbone (Linear Probing)
