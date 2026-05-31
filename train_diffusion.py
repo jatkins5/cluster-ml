@@ -122,20 +122,52 @@ def timestep_emb(t, dim):
     return torch.cat([a.sin(), a.cos()], dim=-1)
 
 
-class ResBlock(nn.Module):
-    def __init__(self, cin, cout, temb):
+class CondGroupNorm(nn.Module):
+    """GroupNorm with per-channel scale/shift produced from an external
+    embedding. Zero-initialised → identity at start so training begins
+    from the same effective state as plain GroupNorm."""
+
+    def __init__(self, groups, channels, emb_dim):
         super().__init__()
-        self.n1 = nn.GroupNorm(8, cin)
+        self.norm = nn.GroupNorm(groups, channels, affine=False)
+        self.proj = nn.Linear(emb_dim, 2 * channels)
+        nn.init.zeros_(self.proj.weight)
+        nn.init.zeros_(self.proj.bias)
+
+    def forward(self, x, emb):
+        h = self.norm(x)
+        scale, shift = self.proj(emb).chunk(2, dim=-1)
+        return h * (1 + scale[:, :, None, None]) + shift[:, :, None, None]
+
+
+class ResBlock(nn.Module):
+    """If ada=True, the two GroupNorms become CondGroupNorms driven by the
+    (time + condition) embedding; the separate additive time projection is
+    dropped since AdaGN already carries that signal. Standard Imagen/EDM2
+    block layout for scalar conditioning."""
+
+    def __init__(self, cin, cout, temb, ada=False):
+        super().__init__()
+        self.ada = ada
+        if ada:
+            self.n1 = CondGroupNorm(8, cin, temb)
+            self.n2 = CondGroupNorm(8, cout, temb)
+        else:
+            self.n1 = nn.GroupNorm(8, cin)
+            self.n2 = nn.GroupNorm(8, cout)
+            self.temb = nn.Linear(temb, cout)
         self.c1 = nn.Conv2d(cin, cout, 3, padding=1)
-        self.temb = nn.Linear(temb, cout)
-        self.n2 = nn.GroupNorm(8, cout)
         self.c2 = nn.Conv2d(cout, cout, 3, padding=1)
         self.skip = nn.Conv2d(cin, cout, 1) if cin != cout else nn.Identity()
 
     def forward(self, x, t):
-        h = self.c1(F.silu(self.n1(x)))
-        h = h + self.temb(t)[:, :, None, None]
-        h = self.c2(F.silu(self.n2(h)))
+        if self.ada:
+            h = self.c1(F.silu(self.n1(x, t)))
+            h = self.c2(F.silu(self.n2(h, t)))
+        else:
+            h = self.c1(F.silu(self.n1(x)))
+            h = h + self.temb(t)[:, :, None, None]
+            h = self.c2(F.silu(self.n2(h)))
         return h + self.skip(x)
 
 
@@ -164,13 +196,14 @@ class UNet(nn.Module):
     timestep embedding; a learned null token replaces the embedding when
     the condition is NaN (for classifier-free guidance)."""
 
-    def __init__(self, ch=64, mults=(1, 2, 4), cond=False):
+    def __init__(self, ch=64, mults=(1, 2, 4), cond=False, ada=False):
         super().__init__()
         temb = ch * 4
         self.tproj = nn.Sequential(nn.Linear(ch, temb), nn.SiLU(),
                                    nn.Linear(temb, temb))
         self.tch = ch
         self.cond = cond
+        self.ada = ada
         if cond:
             self.cproj = nn.Sequential(nn.Linear(ch, temb), nn.SiLU(),
                                        nn.Linear(temb, temb))
@@ -183,21 +216,21 @@ class UNet(nn.Module):
         c = ch
         skip_ch = []
         for i, cout in enumerate(chs):
-            self.dblk.append(ResBlock(c, cout, temb))
+            self.dblk.append(ResBlock(c, cout, temb, ada=ada))
             skip_ch.append(cout)                     # skip taken before downsample
             c = cout
             self.dsamp.append(nn.Conv2d(c, c, 3, stride=2, padding=1)
                               if i < n - 1 else nn.Identity())
 
-        self.mid1 = ResBlock(c, c, temb)
+        self.mid1 = ResBlock(c, c, temb, ada=ada)
         self.matt = Attn(c)
-        self.mid2 = ResBlock(c, c, temb)
+        self.mid2 = ResBlock(c, c, temb, ada=ada)
 
         self.usamp, self.ublk = nn.ModuleList(), nn.ModuleList()
         for i, cout in enumerate(reversed(chs)):
             self.usamp.append(nn.ConvTranspose2d(c, c, 4, stride=2, padding=1)
                               if i > 0 else nn.Identity())
-            self.ublk.append(ResBlock(c + skip_ch.pop(), cout, temb))
+            self.ublk.append(ResBlock(c + skip_ch.pop(), cout, temb, ada=ada))
             c = cout
         self.out = nn.Sequential(nn.GroupNorm(8, c), nn.SiLU(),
                                  nn.Conv2d(c, 1, 3, padding=1))
@@ -502,10 +535,10 @@ def main(args):
         print(f"conditional on '{args.label_key}' / {args.cond_scale_norm}  "
               f"(train: {len(tr_l) - n_nan} valid, {n_nan} NaN -> null token)")
 
-    model = UNet(cond=args.condition).to(dev)
+    model = UNet(cond=args.condition, ada=args.ada).to(dev)
     nparam = sum(p.numel() for p in model.parameters()) / 1e6
     print(f"UNet params: {nparam:.1f}M  conditional={args.condition}  "
-          f"sample_only={args.sample_only}")
+          f"ada={args.ada}  sample_only={args.sample_only}")
 
     if args.sample_only:
         ema_path = args.load_ema or f"{OUT}/ema.pt"
@@ -595,6 +628,11 @@ if __name__ == "__main__":
     # conditioning (TSC-scalar)
     p.add_argument("--condition", action="store_true",
                    help="train conditional on a scalar label (e.g., TSC)")
+    p.add_argument("--ada", action="store_true",
+                   help="use AdaGN in each ResBlock (condition modulates "
+                        "per-channel scale/shift in every norm); strongly "
+                        "recommended at 128px+ where the additive-time-emb "
+                        "conditioning gets diluted")
     p.add_argument("--labels", type=str, default=None,
                    help="HDF5 with halo_id + label_key (e.g. TSC_eachhalo_snap99.hdf5)")
     p.add_argument("--label-key", type=str, default="tsc_gyr")
