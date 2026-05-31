@@ -1172,19 +1172,46 @@ signal lives. So the result is *consistent with* "synthetic augmentation
 helps" but does not validate it usefully — the methodology improved a
 catastrophic baseline to a less-catastrophic one.
 
-**Phase 2 v2 — 128px scale-up (in progress):**
+**Phase 2 v2 — 128px scale-up: conditioning fails at the same architecture.**
 
-The decisive test is at 128px where the unaugmented baseline is +0.149
-on the recent-merger subset. Same methodology, scaled up:
+Built `diffusion_radio_128_v2.h5` (tuned arcsinh, `--img-size 128`),
+trained the same conditional UNet at 128px (batch 32 to fit, 300 epochs).
+Training loss converged cleanly (plateau at ~0.06 by epoch 40, same as
+64px) but **the conditioning never developed at this resolution**:
 
-1. Build `diffusion_radio_128_v2.h5` (tuned arcsinh, just `--img-size 128`).
-2. Train conditional diffusion at 128px (same UNet config, more pixels).
-3. CNN baseline-vs-aug experiment at 128px (architecture scaled with
-   resolution; 3 seeds each).
-4. Compare. If Δ on recent-merger R² holds at this scale, we land near
-   ~0.47 — a meaningful improvement on the published 0.149. If Δ
-   collapses, the 64px improvement was an artifact of the catastrophic
-   baseline and the methodology isn't actually adding signal.
+| Metric | 64px CFG=5 | 128px CFG=5 |
+|---|---|---|
+| `corr(cond, gen brightness)` | −0.70 | **−0.033** (flat) |
+| Gen brightness curve | clear monotone with TSC | flat across TSC ∈ [0.3, 2.0] |
+| `cond_leakage.png` panels | bulk of orange shifts with red gen-cond line | bulk pinned to ~3 Gyr regardless |
+
+Diagnosis: same architecture (condition added only to the timestep
+embedding), but 4× more spatial computations per image. At 64px that
+pathway was already borderline-weak (CFG=5 needed to extract it); at 128px
+the condition's single scalar offset gets diluted to nothing through the
+much deeper effective spatial computation. Higher CFG can't fix this
+because there's no conditional signal in the weights to amplify. Loss
+plateaued by epoch 40, so it's not undertraining either.
+
+This is exactly the failure mode we deferred AdaGN against at 64px,
+because CFG=5 happened to be enough at that resolution. At 128px the
+condition needs deeper architectural support.
+
+**Phase 2 v3 — AdaGN conditional at 128px (in progress).**
+
+Replace each plain `nn.GroupNorm` in `ResBlock` with a `CondGroupNorm`:
+standard GroupNorm with `affine=False`, followed by a per-channel
+scale/shift produced from the (time + condition) embedding via a small
+linear projector (zero-init → identity at start). The condition's
+influence now spreads across every ResBlock per-channel, not just a
+single offset to the time embedding. Standard practice in Imagen, EDM2,
+and similar.
+
+If AdaGN-128 conditioning takes (NN-train-TSC tracks gen TSC in the
+`cond_leakage.png` diagnostic, like CFG=5 did at 64px), the rest of the
+Phase 2 pipeline is unchanged and we move to the CNN aug experiment at
+128px. If it still fails, the bottleneck isn't architecture but data
+density at this resolution, and we pivot.
 
 **Figures (sample suite per CFG):**
 - `diffusion_out_cond/cond_grid_final{,_cfg3,_cfg5}.png` — sample grid by TSC row

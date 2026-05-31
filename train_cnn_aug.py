@@ -50,8 +50,10 @@ class RadioMapsCNN(Dataset):
                 torch.tensor(self.labels[i], dtype=torch.float32))
 
 
-class CNN64(nn.Module):
-    """4-block CNN at 64x64 single-channel → scalar regression."""
+class CNN(nn.Module):
+    """4-stage CNN, single-channel → scalar regression. Size-agnostic via
+    AdaptiveAvgPool in the head: 3 downsamples then global pool, so works at
+    64 (8x8 → pool), 128 (16x16 → pool), etc."""
 
     def __init__(self, ch=32):
         super().__init__()
@@ -140,9 +142,9 @@ def main(args):
                     batch_size=args.batch_size, shuffle=True,
                     num_workers=4, drop_last=True)
 
-    model = CNN64(ch=args.ch).to(dev)
+    model = CNN(ch=args.ch).to(dev)
     nparam = sum(p.numel() for p in model.parameters()) / 1e6
-    print(f"CNN64 params: {nparam:.2f}M")
+    print(f"CNN params: {nparam:.2f}M  (input size {tr_i.shape[-1]})")
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=args.epochs)
 
