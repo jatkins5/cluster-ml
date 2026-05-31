@@ -1197,21 +1197,58 @@ This is exactly the failure mode we deferred AdaGN against at 64px,
 because CFG=5 happened to be enough at that resolution. At 128px the
 condition needs deeper architectural support.
 
-**Phase 2 v3 — AdaGN conditional at 128px (in progress).**
+**Phase 2 v3 — AdaGN conditional at 128px: conditioning takes.**
 
-Replace each plain `nn.GroupNorm` in `ResBlock` with a `CondGroupNorm`:
-standard GroupNorm with `affine=False`, followed by a per-channel
+Replaced each plain `nn.GroupNorm` in `ResBlock` with a `CondGroupNorm`
+(standard GroupNorm with `affine=False`, followed by a per-channel
 scale/shift produced from the (time + condition) embedding via a small
-linear projector (zero-init → identity at start). The condition's
-influence now spreads across every ResBlock per-channel, not just a
-single offset to the time embedding. Standard practice in Imagen, EDM2,
-and similar.
+zero-init Linear projector). The condition's influence now spreads
+across every ResBlock per-channel rather than nudging the time
+embedding once. +1.3M params (8.58M → 9.89M, +15%). Same training cost.
 
-If AdaGN-128 conditioning takes (NN-train-TSC tracks gen TSC in the
-`cond_leakage.png` diagnostic, like CFG=5 did at 64px), the rest of the
-Phase 2 pipeline is unchanged and we move to the CNN aug experiment at
-128px. If it still fails, the bottleneck isn't architecture but data
-density at this resolution, and we pivot.
+| | no-AdaGN 128px CFG=5 | **AdaGN 128px CFG=5** |
+|---|---|---|
+| gen=0.3 → ⟨NN train TSC⟩ | 2.30 ± 1.32 | **1.10 ± 1.13** |
+| gen=0.5 → ⟨NN train TSC⟩ | 2.62 ± 1.74 | **1.07 ± 1.25** |
+| gen=0.7 → ⟨NN train TSC⟩ | 2.59 ± 1.57 | **1.31 ± 1.22** |
+| gen=2.0 → ⟨NN train TSC⟩ | 2.70 ± 1.09 | 2.59 ± 1.36 |
+| `cond_leakage.png` panels | bulk-pinned at ~3 Gyr | tracks gen TSC, esp. at low end |
+
+The per-sample conditioning now works at 128px. Particularly clean in
+the TSC ≤ 1 regime — the *exact* range where the CNN at 128px currently
+collapses to R² 0.149.
+
+Two side effects of AdaGN we accept:
+1. `corr(cond, gen brightness)` collapsed to ~0. At 64px the additive
+   pathway could basically only modulate global brightness, so brightness
+   was the proxy axis the model used to "show" conditioning. AdaGN
+   unlocks per-channel feature modulation, so the model encodes the
+   condition into morphology directly — losing the brightness correlation
+   is a *feature*, not a bug.
+2. Normalised low-*k* gen/val rose to 3.30× (vs 1.00× at 64px v2 unc).
+   Samples have more large-scale variance than the real distribution.
+   MS NN ratio = 1.62 (further from train than train-train baseline) →
+   this is distribution shift, not memorisation.
+
+**CFG sweep on the AdaGN EMA** (sample-only, no retrain):
+
+| gen TSC | CFG=1.5 ⟨NN⟩ | CFG=2 ⟨NN⟩ | CFG=3 ⟨NN⟩ | **CFG=5 ⟨NN⟩** |
+|---|---|---|---|---|
+| 0.3 | 1.38 | 1.52 | 1.39 | **1.10** |
+| 0.5 | 1.55 | 1.55 | 1.57 | **1.07** |
+| 0.7 | 1.86 | 2.01 | 1.35 | **1.31** |
+| 2.0 | 2.51 | 2.42 | 2.19 | 2.59 |
+| normalized low-*k* | 2.82× | 2.81× | 2.98× | 3.30× |
+
+CFG=5 wins for the low-TSC regime that matters for CNN augmentation —
+gen=0.3 → ⟨NN⟩=1.10 vs 1.38+ at every other CFG. Fidelity penalty is
+modest (~17%) for a 25% improvement in low-end conditioning quality.
+**Operating point: CFG=5 for the 128px augmentation experiment.**
+
+If aug helps the recent-merger R² over the 0.149 baseline at 128px,
+the methodology is validated end-to-end. If not, the bottleneck wasn't
+data quantity at usable resolution, and we'd pivot to architectural
+changes for the CNN side.
 
 **Figures (sample suite per CFG):**
 - `diffusion_out_cond/cond_grid_final{,_cfg3,_cfg5}.png` — sample grid by TSC row
