@@ -502,45 +502,55 @@ def main(args):
         print(f"conditional on '{args.label_key}' / {args.cond_scale_norm}  "
               f"(train: {len(tr_l) - n_nan} valid, {n_nan} NaN -> null token)")
 
-    dl = DataLoader(RadioMaps(tr_i, tr_l, train=True, seed=args.seed),
-                    batch_size=args.batch_size, shuffle=True,
-                    num_workers=4, drop_last=True)
     model = UNet(cond=args.condition).to(dev)
-    ema = {k: v.detach().clone() for k, v in model.state_dict().items()}
-    opt = torch.optim.AdamW(model.parameters(), lr=args.lr)
-    ddpm = DDPM(device=dev)
     nparam = sum(p.numel() for p in model.parameters()) / 1e6
-    print(f"UNet params: {nparam:.1f}M  conditional={args.condition}")
+    print(f"UNet params: {nparam:.1f}M  conditional={args.condition}  "
+          f"sample_only={args.sample_only}")
 
-    for ep in range(args.epochs):
-        model.train()
-        tot = 0.0
-        for batch in dl:
-            if args.condition:
-                x, c = batch
-                x, c = x.to(dev), c.to(dev)
-                # CFG dropout: replace fraction of conditions with NaN (null)
-                drop = torch.rand(c.shape[0], device=dev) < args.cond_drop_prob
-                c = torch.where(drop, torch.full_like(c, float("nan")), c)
-            else:
-                x = batch.to(dev); c = None
-            t = torch.randint(0, ddpm.T, (x.size(0),), device=dev)
-            noise = torch.randn_like(x)
-            pred = model(ddpm.q(x, t, noise), t, c)
-            loss = F.mse_loss(pred, noise)
-            opt.zero_grad()
-            loss.backward()
-            opt.step()
-            with torch.no_grad():
-                for k, v in model.state_dict().items():
-                    ema[k].mul_(0.999).add_(v, alpha=0.001)
-            tot += loss.item() * x.size(0)
-        if ep % 20 == 0 or ep == args.epochs - 1:
-            print(f"epoch {ep:4d}  loss {tot/len(tr_i):.4f}")
+    if args.sample_only:
+        ema_path = args.load_ema or f"{OUT}/ema.pt"
+        print(f"loading EMA weights from {ema_path}")
+        ema = torch.load(ema_path, map_location=dev, weights_only=True)
+        model.load_state_dict(ema)
+        bak = ema                                    # not used in sample-only
+    else:
+        dl = DataLoader(RadioMaps(tr_i, tr_l, train=True, seed=args.seed),
+                        batch_size=args.batch_size, shuffle=True,
+                        num_workers=4, drop_last=True)
+        ema = {k: v.detach().clone() for k, v in model.state_dict().items()}
+        opt = torch.optim.AdamW(model.parameters(), lr=args.lr)
+        ddpm_train = DDPM(device=dev)
+        for ep in range(args.epochs):
+            model.train()
+            tot = 0.0
+            for batch in dl:
+                if args.condition:
+                    x, c = batch
+                    x, c = x.to(dev), c.to(dev)
+                    # CFG dropout: replace fraction of conditions with NaN
+                    drop = torch.rand(c.shape[0], device=dev) < args.cond_drop_prob
+                    c = torch.where(drop, torch.full_like(c, float("nan")), c)
+                else:
+                    x = batch.to(dev); c = None
+                t = torch.randint(0, ddpm_train.T, (x.size(0),), device=dev)
+                noise = torch.randn_like(x)
+                pred = model(ddpm_train.q(x, t, noise), t, c)
+                loss = F.mse_loss(pred, noise)
+                opt.zero_grad()
+                loss.backward()
+                opt.step()
+                with torch.no_grad():
+                    for k, v in model.state_dict().items():
+                        ema[k].mul_(0.999).add_(v, alpha=0.001)
+                tot += loss.item() * x.size(0)
+            if ep % 20 == 0 or ep == args.epochs - 1:
+                print(f"epoch {ep:4d}  loss {tot/len(tr_i):.4f}")
+        bak = {k: v.detach().clone() for k, v in model.state_dict().items()}
+        model.load_state_dict(ema)
 
-    bak = {k: v.detach().clone() for k, v in model.state_dict().items()}
-    model.load_state_dict(ema)
+    ddpm = DDPM(device=dev)
     model.eval()
+    suffix = f"_{args.out_tag}" if args.out_tag else ""
 
     if args.condition:
         gens, conds = [], []
@@ -554,17 +564,19 @@ def main(args):
             print(f"sampled {args.n_per_tsc} at TSC={tsc_gyr:.2f}  cfg={args.cfg_scale}")
         gen = np.concatenate(gens, axis=0)
         cond_arr = np.concatenate(conds)
-        np.savez(f"{OUT}/samples_cond.npz", samples=gen, tsc=cond_arr)
-        evaluate(gen, tr_i, val_i, attrs, tag="cond_final")
+        np.savez(f"{OUT}/samples_cond{suffix}.npz", samples=gen, tsc=cond_arr)
+        evaluate(gen, tr_i, val_i, attrs, tag=f"cond_final{suffix}")
         evaluate_conditional_response(gen, cond_arr, val_i, val_l,
-                                      args.cond_scale_norm, tag="final")
+                                      args.cond_scale_norm,
+                                      tag=f"final{suffix}")
     else:
         gen = ddpm.sample(model, args.n_sample, size).cpu().numpy()
-        np.save(f"{OUT}/samples.npy", gen)
-        evaluate(gen, tr_i, val_i, attrs, tag="final")
+        np.save(f"{OUT}/samples{suffix}.npy", gen)
+        evaluate(gen, tr_i, val_i, attrs, tag=f"final{suffix}")
 
-    model.load_state_dict(bak)
-    torch.save(ema, f"{OUT}/ema.pt")
+    if not args.sample_only:
+        model.load_state_dict(bak)
+        torch.save(ema, f"{OUT}/ema.pt")
     print(f"done -> {OUT}/")
 
 
@@ -596,4 +608,12 @@ if __name__ == "__main__":
                    default=[0.5, 1.5, 3.0, 5.0, 7.0],
                    help="TSC values (Gyr) to sample at after training")
     p.add_argument("--n-per-tsc", type=int, default=16)
+    # sample-only mode: load existing EMA, skip training, re-sample at new cfg
+    p.add_argument("--sample-only", action="store_true",
+                   help="skip training; load EMA from --load-ema and sample only")
+    p.add_argument("--load-ema", type=str, default=None,
+                   help="path to ema.pt; defaults to {out-dir}/ema.pt")
+    p.add_argument("--out-tag", type=str, default="",
+                   help="suffix appended to all output filenames "
+                        "(e.g. 'cfg3' -> samples_cond_cfg3.npz)")
     main(p.parse_args())

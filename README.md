@@ -1093,27 +1093,75 @@ embedding is the weakest form of conditioning. The timestep signal
 dominates and the small constant condition offset gets washed out,
 especially given ~12 effective training clusters per TSC bin.
 
-**Two-step plan to fix** (in progress):
+**CFG sanity-check (sample-only, no retrain):** the model's
+`--sample-only` mode was added to `train_diffusion.py` so we could
+re-load the trained EMA and resample at higher CFG without paying the
+training cost. Three CFG values compared on the same checkpoint:
 
-1. **CFG sanity check** — re-sample only (no retrain) with
-   `--cfg-scale` ∈ {3, 5}. If conditioning info is present in the
-   weights but underused at sample time, stronger guidance will sharpen
-   morphological selectivity. ~2-min job.
-2. **AdaGN if CFG doesn't rescue it** — replace each `nn.GroupNorm` in
-   `ResBlock` with a condition-modulated variant (per-channel scale +
-   shift produced by an MLP on the (time+condition) embedding). This
-   lets the condition deeply restructure features rather than just
-   nudging a global offset. Retrain, ~30 min on one GPU.
+| | CFG=1.5 | CFG=3.0 | CFG=5.0 |
+|---|---|---|---|
+| `corr(cond, gen brightness)` | −0.46 | −0.68 | **−0.70** |
+| ⟨NN train TSC⟩ @ gen=0.3 | 2.68 ± 1.35 | 2.35 ± 1.44 | **2.03 ± 1.29** |
+| ⟨NN train TSC⟩ @ gen=1.0 | 2.76 ± 1.07 | **1.91 ± 1.63** | 2.43 ± 2.11 |
+| ⟨NN train TSC⟩ @ gen=2.0 | 2.83 ± 1.15 | 2.85 ± 0.93 | 3.16 ± 1.48 |
+| ⟨NN train TSC⟩ @ gen=4.0 | 3.26 ± 0.40 | 3.15 ± **0.00** | 3.15 ± **0.00** |
+| ⟨NN train TSC⟩ @ gen=6.0 | 3.15 ± **0.00** | 3.15 ± **0.00** | 3.15 ± **0.00** |
+| `gen→train` NN @ gen=6.0 | 7.3 | 5.7 | **5.6** (memorised harder) |
 
-**Figures:**
-- `diffusion_out_cond/cond_grid_final.png` — sample grid by TSC row
-- `diffusion_out_cond/cond_trend_final.png` — gen brightness vs TSC
-  with real val overlay
-- `diffusion_out_cond/eval_cond_final.png` — fidelity + memorization
-- `diffusion_out_cond/nn_check_cond.png` — visual `(gen, NN train)`
-  pairs by TSC row
-- `diffusion_out_cond/cond_leakage.png` — the decisive diagnostic;
-  shows the NN-train-TSC histogram is independent of gen TSC
+**Two outcomes that change the plan:**
+
+1. **In the data-dense regime (TSC < 2 Gyr), CFG=5 fixes the
+   conditioning.** The cfg=5 `cond_leakage_cfg5.png` panels show the
+   gen=0.3 orange "NN-train-TSC" histogram concentrating near low TSC
+   (overlapping the dashed condition line), where at cfg=1.5 it was
+   stuck at ~3 Gyr. Per-bin mean NN-train-TSC at gen=0.3 moved
+   2.68 → 2.35 → **2.03** across the CFG sweep, and brightness
+   correlation strengthened from −0.46 to −0.70. The conditioning
+   *is* in the weights; cfg=1.5 was just under-amplifying it.
+2. **At the high-TSC tail (gen ≥ 4 Gyr), CFG amplifies memorisation
+   rather than fixing it.** All 16 generated samples at TSC=4 and TSC=6
+   map to the *same single training image* at TSC≈3 (std = 0.00 at all
+   CFG values), and the NN distance there shrinks from 7.3 → 5.6 as CFG
+   grows. The high-TSC tail of the training set has too few clusters
+   (probably <10 across all 3 projections × ~3 clusters), and CFG
+   sharpens whatever pattern the model has — which there is a copy of
+   the few examples that exist. **No architecture change (including
+   AdaGN) can manufacture data that isn't there**, so the tail is a
+   fundamental data-density limit, not a conditioning-architecture
+   limit.
+
+**AdaGN dropped from the plan.** It would have helped if the
+conditioning signal had been too weak in the weights, but cfg=5 shows
+the signal *is* there and just needs amplification at sample time. The
+remaining problem is data, not architecture.
+
+**Convenient alignment:** the regime where the conditioner works
+cleanly (TSC ∈ [0.3, 2.0] Gyr) is exactly the regime where the CNN
+currently collapses (the TSC ≤ 2 Gyr restriction reduced merger-TSC R²
+from 0.511 to 0.149 — see Comparison table). So the augmentation
+experiment can be restricted to the data-dense range without giving up
+any of the practical value.
+
+**Phase 2 plan:**
+1. Generate ~500 synthetic `(image, TSC)` pairs at CFG=5 with TSC drawn
+   from `[0.3, 2.0]` Gyr.
+2. Train two CNNs at 64px (the diffusion's native resolution) on
+   `diffusion_radio_64_v2.h5`:
+   - `baseline` — real data only
+   - `aug` — real + synthetic samples mixed in
+3. Evaluate both on real held-out clusters, especially the recent-merger
+   TSC ≤ 2 Gyr subset where baseline R² = 0.149.
+4. If `aug` improves on `baseline`: methodology validated, write up.
+5. If not: the bottleneck wasn't data quantity but inductive bias;
+   pivot to architectural changes.
+
+**Figures (sample suite per CFG):**
+- `diffusion_out_cond/cond_grid_final{,_cfg3,_cfg5}.png` — sample grid by TSC row
+- `diffusion_out_cond/cond_trend_final{,_cfg3,_cfg5}.png` — gen brightness vs TSC
+- `diffusion_out_cond/eval_cond_final{,_cfg3,_cfg5}.png` — fidelity + memorisation
+- `diffusion_out_cond/nn_check_cond{,_cfg3,_cfg5}.png` — visual `(gen, NN train)` pairs
+- `diffusion_out_cond/cond_leakage{,_cfg3,_cfg5}.png` — the decisive
+  per-bin NN-TSC histogram diagnostic
 
 ## Future Work
 
