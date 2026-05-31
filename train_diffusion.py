@@ -1,22 +1,35 @@
 #!/usr/bin/env python3
 """
-Unconditional DDPM on radio cluster maps — a decisive memorization test.
+DDPM on radio cluster maps — unconditional or scalar-conditional (TSC).
 
-With ~350 independent clusters the question is not "can it make plausible
-maps" but "plausible AND novel". This script trains a small UNet DDPM and
-reports the three readouts that actually decide feasibility:
+Unconditional mode (default) was used for the v1/v2 feasibility runs:
+  - decisive memorization test (mean-subtracted NN distance + brightness guard)
+  - normalized-space PSD as the meaningful fidelity readout
 
-  1. held-out fidelity   — physical radial profile + 1D power spectrum of
-                            generated vs. validation maps (stretch inverted)
-  2. memorization        — NN L2 distance generated->train, compared to the
-                            train->train NN baseline (collapse => failure)
-  3. diversity           — pairwise distance spread among generated samples
+Conditional mode (--condition) adds TSC-scalar conditioning for synthetic-
+data augmentation. Implementation:
+  - Fourier-embed the (normalized) TSC scalar, MLP to time-embedding dim,
+    add to the timestep embedding before the ResBlocks see it.
+  - Learned **null token** in place of the condition embedding when the
+    condition is NaN; classifier-free guidance dropout at training time
+    (--cond-drop-prob, default 0.1) and CFG scale at sampling time
+    (--cfg-scale).
+  - At the end of training, sample at a grid of TSC values
+    (--sample-tsc) and report whether morphology actually shifts with the
+    condition (the gate for augmentation being useful).
 
-Cluster-level split (3 projections per halo kept in the same fold) reuses the
-project's no-leakage rule. Outputs go to diffusion_out/.
+Cluster-level split (3 projections per halo kept in the same fold) reuses
+the project's no-leakage rule. Outputs go to --out-dir.
 
-Usage (via submit_diffusion.sh on the gpu partition):
-  python train_diffusion.py --data diffusion_radio_64.h5 --epochs 400
+Usage:
+  # unconditional (the v2 baseline)
+  python train_diffusion.py --data diffusion_radio_64_v2.h5 --epochs 400
+
+  # conditional on merger-TSC (Lee-style label, 0–7.7 Gyr)
+  python train_diffusion.py --data diffusion_radio_64_v2.h5 --epochs 400 \\
+      --condition --labels TSC_Cutimages/TSC_eachhalo_snap99.hdf5 \\
+      --label-key tsc_gyr --cond-scale-norm 8.0 \\
+      --sample-tsc 0.5 1.5 3.0 5.0 7.0 --n-per-tsc 16 --cfg-scale 1.5
 """
 
 import argparse
@@ -35,10 +48,12 @@ OUT = "diffusion_out"  # overridden by --out-dir at runtime
 
 # ----------------------------- data ---------------------------------------
 class RadioMaps(Dataset):
-    """Projection-level grayscale maps; 8x rot/flip aug (physically valid)."""
+    """Projection-level grayscale maps; 8x rot/flip aug (physically valid).
+    Optionally returns a per-sample scalar label for conditional training."""
 
-    def __init__(self, imgs, train=True, seed=0):
-        self.imgs = imgs  # (M, 1, S, S) float32 in [-1, 1]
+    def __init__(self, imgs, labels=None, train=True, seed=0):
+        self.imgs = imgs                              # (M, 1, S, S) in [-1, 1]
+        self.labels = labels                          # (M,) float or None
         self.train = train
         self.rng = np.random.default_rng(seed)
 
@@ -53,25 +68,50 @@ class RadioMaps(Dataset):
             if self.rng.random() < 0.5:
                 x = np.flip(x, axis=2)
             x = np.ascontiguousarray(x)
-        return torch.from_numpy(x)
+        x_t = torch.from_numpy(x)
+        if self.labels is None:
+            return x_t
+        return x_t, torch.tensor(self.labels[i], dtype=torch.float32)
 
 
-def load_split(path, val_frac=0.15, seed=0):
+def load_split(path, val_frac=0.15, seed=0,
+               labels_path=None, label_key="tsc_gyr", cond_scale_norm=1.0):
+    """Returns (tr_imgs, tr_labels, val_imgs, val_labels, attrs).
+    *_labels is None when labels_path is None (unconditional). Labels are
+    normalised by cond_scale_norm so the model sees a roughly [0, 1]-scaled
+    scalar (the same Fourier embedding spec as the timestep)."""
     with h5py.File(path, "r") as f:
         imgs = f["images"][:]                       # (N, 3, S, S)
         halo = f["meta/halo_id"][:]
         attrs = dict(f.attrs)
+
+    labels = None
+    if labels_path is not None:
+        with h5py.File(labels_path, "r") as f:
+            lhid = f["halo_id"][:]
+            lval = f[label_key][:]
+        lmap = {int(h): float(v) for h, v in zip(lhid, lval)}
+        labels = np.array([lmap.get(int(h), np.nan) for h in halo],
+                          dtype=np.float32) / cond_scale_norm
+
     rng = np.random.default_rng(seed)
     uniq = np.unique(halo)
     rng.shuffle(uniq)
     n_val = int(len(uniq) * val_frac)
     val_h = set(uniq[:n_val].tolist())
     tr_m = np.array([h not in val_h for h in halo])
-    # expand (N,3,S,S) -> (N*3,1,S,S) at projection level
+
     def expand(mask):
         sel = imgs[mask]                            # (n, 3, S, S)
-        return sel.reshape(-1, 1, *sel.shape[2:]).astype(np.float32)
-    return expand(tr_m), expand(~tr_m), attrs
+        out_imgs = sel.reshape(-1, 1, *sel.shape[2:]).astype(np.float32)
+        if labels is None:
+            return out_imgs, None
+        out_labels = np.repeat(labels[mask], 3)     # (n*3,)
+        return out_imgs, out_labels
+
+    tr_i, tr_l = expand(tr_m)
+    val_i, val_l = expand(~tr_m)
+    return tr_i, tr_l, val_i, val_l, attrs
 
 
 # --------------------------- model ----------------------------------------
@@ -119,14 +159,22 @@ class Attn(nn.Module):
 
 class UNet(nn.Module):
     """Symmetric UNet: per level a ResBlock (skip saved at that resolution),
-    then strided downsample; mirror on the way up with transpose-conv."""
+    then strided downsample; mirror on the way up with transpose-conv.
+    Optional scalar conditioning via Fourier-embed + MLP, summed into the
+    timestep embedding; a learned null token replaces the embedding when
+    the condition is NaN (for classifier-free guidance)."""
 
-    def __init__(self, ch=64, mults=(1, 2, 4)):
+    def __init__(self, ch=64, mults=(1, 2, 4), cond=False):
         super().__init__()
         temb = ch * 4
         self.tproj = nn.Sequential(nn.Linear(ch, temb), nn.SiLU(),
                                    nn.Linear(temb, temb))
         self.tch = ch
+        self.cond = cond
+        if cond:
+            self.cproj = nn.Sequential(nn.Linear(ch, temb), nn.SiLU(),
+                                       nn.Linear(temb, temb))
+            self.null_cond = nn.Parameter(torch.randn(temb) * 0.02)
         self.in_c = nn.Conv2d(1, ch, 3, padding=1)
         chs = [ch * m for m in mults]
         n = len(chs)
@@ -154,8 +202,17 @@ class UNet(nn.Module):
         self.out = nn.Sequential(nn.GroupNorm(8, c), nn.SiLU(),
                                  nn.Conv2d(c, 1, 3, padding=1))
 
-    def forward(self, x, t):
+    def _cond_emb(self, c):
+        """c: (B,) float tensor; NaN entries get the learned null token."""
+        null = torch.isnan(c)
+        c_safe = torch.where(null, torch.zeros_like(c), c)
+        emb = self.cproj(timestep_emb(c_safe, self.tch))
+        return torch.where(null[:, None], self.null_cond[None], emb)
+
+    def forward(self, x, t, c=None):
         temb = self.tproj(timestep_emb(t, self.tch))
+        if self.cond and c is not None:
+            temb = temb + self._cond_emb(c)
         h = self.in_c(x)
         skips = []
         for blk, ds in zip(self.dblk, self.dsamp):
@@ -187,11 +244,19 @@ class DDPM:
         return ab.sqrt() * x0 + (1 - ab).sqrt() * noise
 
     @torch.no_grad()
-    def sample(self, model, n, size):
+    def sample(self, model, n, size, cond=None, cfg_scale=0.0):
+        """Optionally condition on a scalar per sample; classifier-free
+        guidance pushes samples toward the condition when cfg_scale > 0."""
         x = torch.randn(n, 1, size, size, device=self.device)
         for i in reversed(range(self.T)):
             t = torch.full((n,), i, device=self.device, dtype=torch.long)
-            eps = model(x, t)
+            if cond is not None and cfg_scale > 0:
+                null = torch.full_like(cond, float("nan"))
+                eps_c = model(x, t, cond)
+                eps_n = model(x, t, null)
+                eps = (1 + cfg_scale) * eps_c - cfg_scale * eps_n
+            else:
+                eps = model(x, t, cond)
             ab = self.ab[i]
             ab_p = self.ab[i - 1] if i > 0 else torch.tensor(1.0, device=self.device)
             x0 = ((x - (1 - ab).sqrt() * eps) / ab.sqrt()).clamp(-1, 1)
@@ -333,34 +398,135 @@ def evaluate(gen, train, val, attrs, tag):
     print(f"[eval {tag}]  -> MS ratio ~1.0 = good; <0.85 with bright_corr<0.5 = real memorization")
 
 
+def evaluate_conditional_response(gen, cond_gen, val_imgs, val_labels,
+                                  cond_scale_norm, tag):
+    """Sample grid by TSC + scalar morphology trends gen vs val.
+
+    Answers the gate question: does the model use the condition? If the
+    generated mean-brightness (or radial structure) shifts with the TSC
+    condition AND matches the real-data trend on the same axis, the
+    conditioner takes; otherwise the generator is ignoring the condition
+    and the augmentation pipeline is dead in the water.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    unique_tsc = sorted(set(float(x) for x in cond_gen.tolist()))
+    n_tsc = len(unique_tsc)
+    n_per = sum(np.isclose(cond_gen, unique_tsc[0]))
+    n_show = min(8, n_per)
+
+    fig, ax = plt.subplots(n_tsc, n_show, figsize=(2 * n_show, 2 * n_tsc),
+                           squeeze=False)
+    for r, tsc in enumerate(unique_tsc):
+        idx = np.where(np.isclose(cond_gen, tsc))[0][:n_show]
+        for c, i in enumerate(idx):
+            ax[r, c].imshow(gen[i, 0], cmap="inferno", vmin=-1, vmax=1)
+            ax[r, c].set_xticks([]); ax[r, c].set_yticks([])
+        ax[r, 0].set_ylabel(f"TSC={tsc:.1f}", fontsize=10)
+    fig.suptitle("Conditional samples by TSC (rows)", fontsize=12)
+    fig.tight_layout()
+    fig.savefig(f"{OUT}/cond_grid_{tag}.png", dpi=110)
+    plt.close(fig)
+
+    # mean brightness vs TSC (gen) + real-data baseline if labels available
+    bright_gen = gen.reshape(len(gen), -1).mean(axis=1)
+    gen_means = np.array([bright_gen[np.isclose(cond_gen, t)].mean()
+                          for t in unique_tsc])
+    gen_stds = np.array([bright_gen[np.isclose(cond_gen, t)].std()
+                          for t in unique_tsc])
+
+    val_means = val_stds = val_centers = None
+    if val_labels is not None:
+        valid = ~np.isnan(val_labels)
+        if valid.any():
+            v_tsc_gyr = val_labels[valid] * cond_scale_norm   # back to Gyr
+            v_bright = val_imgs[valid].reshape(valid.sum(), -1).mean(1)
+            # bin to the same TSC grid with simple +/- half-step windows
+            half = (unique_tsc[1] - unique_tsc[0]) / 2 if n_tsc > 1 else 0.5
+            val_centers, val_means, val_stds = [], [], []
+            for t in unique_tsc:
+                m = (v_tsc_gyr >= t - half) & (v_tsc_gyr < t + half)
+                if m.sum() >= 3:
+                    val_centers.append(t)
+                    val_means.append(float(v_bright[m].mean()))
+                    val_stds.append(float(v_bright[m].std()))
+            val_centers = np.asarray(val_centers)
+            val_means = np.asarray(val_means)
+            val_stds = np.asarray(val_stds)
+
+    fig2, ax2 = plt.subplots(figsize=(7, 5))
+    tsc_arr = np.asarray(unique_tsc)
+    ax2.errorbar(tsc_arr, gen_means, yerr=gen_stds, marker="o", capsize=3,
+                 label="generated", color="C1")
+    if val_means is not None and len(val_means) >= 2:
+        ax2.errorbar(val_centers, val_means, yerr=val_stds, marker="s",
+                     capsize=3, label="real val", color="C0")
+    ax2.set_xlabel("TSC (Gyr)")
+    ax2.set_ylabel("mean normalized brightness")
+    # correlation of gen vs condition: the gate
+    corr_gen = float(np.corrcoef(cond_gen, bright_gen)[0, 1])
+    ax2.set_title("Does conditioning shift sample morphology?\n"
+                  f"corr(condition, gen brightness) = {corr_gen:+.3f}")
+    ax2.legend()
+    fig2.tight_layout()
+    fig2.savefig(f"{OUT}/cond_trend_{tag}.png", dpi=110)
+    plt.close(fig2)
+
+    print(f"[cond {tag}] gen brightness by TSC bin:")
+    for t, m, s in zip(unique_tsc, gen_means, gen_stds):
+        print(f"  TSC={t:5.2f}  mean={m:+.3f}  std={s:.3f}")
+    print(f"[cond {tag}] corr(condition, gen brightness) = {corr_gen:+.3f}")
+    print(f"[cond {tag}]  -> |corr| > ~0.3 = condition is taking; "
+          f"near 0 = generator ignoring it")
+
+
 # ----------------------------- train --------------------------------------
 def main(args):
     global OUT
     OUT = args.out_dir
     os.makedirs(OUT, exist_ok=True)
     dev = "cuda" if torch.cuda.is_available() else "cpu"
-    tr, val, attrs = load_split(args.data, seed=args.seed)
-    size = tr.shape[-1]
-    print(f"device={dev}  train={len(tr)} val={len(val)} proj-maps  size={size}")
 
-    dl = DataLoader(RadioMaps(tr, train=True, seed=args.seed),
+    tr_i, tr_l, val_i, val_l, attrs = load_split(
+        args.data, seed=args.seed,
+        labels_path=args.labels if args.condition else None,
+        label_key=args.label_key,
+        cond_scale_norm=args.cond_scale_norm,
+    )
+    size = tr_i.shape[-1]
+    print(f"device={dev}  train={len(tr_i)} val={len(val_i)} proj-maps  size={size}")
+    if args.condition:
+        n_nan = int(np.isnan(tr_l).sum())
+        print(f"conditional on '{args.label_key}' / {args.cond_scale_norm}  "
+              f"(train: {len(tr_l) - n_nan} valid, {n_nan} NaN -> null token)")
+
+    dl = DataLoader(RadioMaps(tr_i, tr_l, train=True, seed=args.seed),
                     batch_size=args.batch_size, shuffle=True,
                     num_workers=4, drop_last=True)
-    model = UNet().to(dev)
+    model = UNet(cond=args.condition).to(dev)
     ema = {k: v.detach().clone() for k, v in model.state_dict().items()}
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr)
     ddpm = DDPM(device=dev)
     nparam = sum(p.numel() for p in model.parameters()) / 1e6
-    print(f"UNet params: {nparam:.1f}M")
+    print(f"UNet params: {nparam:.1f}M  conditional={args.condition}")
 
     for ep in range(args.epochs):
         model.train()
         tot = 0.0
-        for x in dl:
-            x = x.to(dev)
+        for batch in dl:
+            if args.condition:
+                x, c = batch
+                x, c = x.to(dev), c.to(dev)
+                # CFG dropout: replace fraction of conditions with NaN (null)
+                drop = torch.rand(c.shape[0], device=dev) < args.cond_drop_prob
+                c = torch.where(drop, torch.full_like(c, float("nan")), c)
+            else:
+                x = batch.to(dev); c = None
             t = torch.randint(0, ddpm.T, (x.size(0),), device=dev)
             noise = torch.randn_like(x)
-            pred = model(ddpm.q(x, t, noise), t)
+            pred = model(ddpm.q(x, t, noise), t, c)
             loss = F.mse_loss(pred, noise)
             opt.zero_grad()
             loss.backward()
@@ -370,26 +536,64 @@ def main(args):
                     ema[k].mul_(0.999).add_(v, alpha=0.001)
             tot += loss.item() * x.size(0)
         if ep % 20 == 0 or ep == args.epochs - 1:
-            print(f"epoch {ep:4d}  loss {tot/len(tr):.4f}")
+            print(f"epoch {ep:4d}  loss {tot/len(tr_i):.4f}")
 
     bak = {k: v.detach().clone() for k, v in model.state_dict().items()}
     model.load_state_dict(ema)
     model.eval()
-    gen = ddpm.sample(model, args.n_sample, size).cpu().numpy()
-    np.save(f"{OUT}/samples.npy", gen)
-    evaluate(gen, tr, val, attrs, tag="final")
+
+    if args.condition:
+        gens, conds = [], []
+        for tsc_gyr in args.sample_tsc:
+            cond = torch.full((args.n_per_tsc,),
+                              tsc_gyr / args.cond_scale_norm, device=dev)
+            g = ddpm.sample(model, args.n_per_tsc, size,
+                            cond=cond, cfg_scale=args.cfg_scale).cpu().numpy()
+            gens.append(g)
+            conds.append(np.full(args.n_per_tsc, tsc_gyr, dtype=np.float32))
+            print(f"sampled {args.n_per_tsc} at TSC={tsc_gyr:.2f}  cfg={args.cfg_scale}")
+        gen = np.concatenate(gens, axis=0)
+        cond_arr = np.concatenate(conds)
+        np.savez(f"{OUT}/samples_cond.npz", samples=gen, tsc=cond_arr)
+        evaluate(gen, tr_i, val_i, attrs, tag="cond_final")
+        evaluate_conditional_response(gen, cond_arr, val_i, val_l,
+                                      args.cond_scale_norm, tag="final")
+    else:
+        gen = ddpm.sample(model, args.n_sample, size).cpu().numpy()
+        np.save(f"{OUT}/samples.npy", gen)
+        evaluate(gen, tr_i, val_i, attrs, tag="final")
+
     model.load_state_dict(bak)
     torch.save(ema, f"{OUT}/ema.pt")
-    print(f"done -> {OUT}/ (samples.npy, ema.pt, eval_final.png)")
+    print(f"done -> {OUT}/")
 
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
+    # data + output
     p.add_argument("--data", type=str, default="diffusion_radio_64.h5")
     p.add_argument("--out-dir", type=str, default="diffusion_out")
+    # training
     p.add_argument("--epochs", type=int, default=400)
     p.add_argument("--batch-size", type=int, default=64)
     p.add_argument("--lr", type=float, default=2e-4)
-    p.add_argument("--n-sample", type=int, default=64)
     p.add_argument("--seed", type=int, default=0)
+    # unconditional sampling (used when --condition is OFF)
+    p.add_argument("--n-sample", type=int, default=64)
+    # conditioning (TSC-scalar)
+    p.add_argument("--condition", action="store_true",
+                   help="train conditional on a scalar label (e.g., TSC)")
+    p.add_argument("--labels", type=str, default=None,
+                   help="HDF5 with halo_id + label_key (e.g. TSC_eachhalo_snap99.hdf5)")
+    p.add_argument("--label-key", type=str, default="tsc_gyr")
+    p.add_argument("--cond-scale-norm", type=float, default=8.0,
+                   help="divide labels by this so model sees ~[0,1]")
+    p.add_argument("--cond-drop-prob", type=float, default=0.1,
+                   help="CFG dropout: prob of replacing condition with null at train time")
+    p.add_argument("--cfg-scale", type=float, default=1.5,
+                   help="classifier-free guidance scale at sampling")
+    p.add_argument("--sample-tsc", type=float, nargs="+",
+                   default=[0.5, 1.5, 3.0, 5.0, 7.0],
+                   help="TSC values (Gyr) to sample at after training")
+    p.add_argument("--n-per-tsc", type=int, default=16)
     main(p.parse_args())

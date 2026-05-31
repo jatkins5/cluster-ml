@@ -1014,6 +1014,107 @@ agree that the Lee signal isn't present in TNG-Cluster at this resolution.
 - `relic_radio_validation.png` — independent radio-map peak detection;
   same four-panel layout, same null result
 
+## TSC-Conditional Diffusion (in progress)
+
+After the relic-detection negative result, the planned synthetic-data
+augmentation pipeline pivoted to its simplest form: condition the
+diffusion model directly on the TSC scalar we already have (no relic
+geometry required), generate `(image, TSC)` augmentation pairs, mix them
+into CNN training, and see whether the recent-merger subset where the
+CNN currently collapses to R² 0.149 improves. The gate question before
+that augmentation experiment: does conditioning actually *take* —
+i.e., do generated samples vary morphologically with the TSC condition
+in a way that matches real clusters at that TSC?
+
+**Implementation** (`train_diffusion.py` upgraded in place; unconditional
+mode preserved as the default):
+- `--condition` flag enables a Fourier-embed of the scalar label, MLP-
+  projected to the time-embedding dimension and **summed into the
+  timestep embedding** before any ResBlocks see it. A learned **null
+  token** replaces the condition embedding when the label is NaN; this
+  enables classifier-free guidance.
+- Training uses CFG dropout (`--cond-drop-prob 0.1`, standard) so the
+  model sees the null occasionally and learns both `p(x|c)` and `p(x)`.
+- Sampling uses CFG (`--cfg-scale`), with `--sample-tsc` to choose the
+  grid of condition values. End-of-run produces:
+  - `cond_grid_final.png` — sample grid, rows by TSC value
+  - `cond_trend_final.png` — gen brightness vs TSC overlaid with real
+    val brightness vs TSC (the aggregate-stat trend)
+  - `eval_cond_final.png` — the standard fidelity + memorization readout
+- `plot_cond_nn_check.py` (separate diagnostic): for each gen sample,
+  find its nearest training neighbour by mean-subtracted L2, and
+  produce two figures stratified by gen TSC bin:
+  - `nn_check_cond.png` — visual `(gen, NN train)` pairs
+  - `cond_leakage.png` — histogram of "what TSC does the nearest
+    training neighbour live at?" overlaid with the overall training TSC
+    distribution
+
+**v1 (cfg=1.5) result — gate failure, attribution clear.**
+
+Training and aggregate-stat trend look encouraging:
+
+| Signal | Value |
+|---|---|
+| `corr(condition, gen brightness)` | **−0.458** (well past the 0.3 "condition is taking" threshold) |
+| Gen brightness curve vs real-val curve | Same direction; gen has stronger monotone shift, real val noisier at the tail |
+| Visual `cond_grid_final.png` | Clear morphological progression down the rows: low TSC → bright, extended, complex; high TSC → sparse, dim, point-like |
+
+But the NN check is decisive in the wrong direction. The
+`cond_leakage.png` panels show that the orange "NN-train TSC" histogram
+**peaks at ~3 Gyr regardless of the gen TSC condition** — the dashed
+red gen-condition line sits well away from the orange peak in every
+panel. The per-bin table:
+
+| gen TSC | n | gen→train NN | ⟨NN train TSC⟩ | train-train NN @ same TSC |
+|---|---|---|---|---|
+| 0.30 | 16 | 22.5 | 2.68 ± 1.35 | 23.2 |
+| 1.00 | 16 | 17.6 | 2.76 ± 1.07 | 22.7 |
+| 2.00 | 16 | 20.6 | 2.83 ± 1.15 | 18.7 |
+| 4.00 | 16 | 16.9 | 3.26 ± 0.40 | 11.8 |
+| 6.00 | 16 |  7.3 | **3.15 ± 0.00** |  8.2 |
+
+The std=0.00 at TSC=6 is a smoking gun: **all 16 generated samples at
+the highest condition find their nearest neighbour at the same single
+training image** (one at TSC≈3, nowhere near 6). Mean-subtracted gen NN
+distance there (7.3) is also *below* the train-train baseline (8.2) —
+classic memorization at the tail.
+
+**Interpretation.** The model has learned the condition as a **global
+brightness knob** but not as a morphological selector. The trend in
+aggregate stats (`corr=−0.46`) and the visible row progression in
+`cond_grid` are real, but the per-sample morphology comes from a small
+set of "average cluster template" memories. Synthetic samples at, say,
+TSC=4 don't actually look like real TSC=4 clusters — they look like
+average mid-TSC (~3 Gyr) clusters dimmed down. **Mixing these into CNN
+training would not teach the geometric signal we want.**
+
+Likely cause: adding the condition embedding only to the timestep
+embedding is the weakest form of conditioning. The timestep signal
+dominates and the small constant condition offset gets washed out,
+especially given ~12 effective training clusters per TSC bin.
+
+**Two-step plan to fix** (in progress):
+
+1. **CFG sanity check** — re-sample only (no retrain) with
+   `--cfg-scale` ∈ {3, 5}. If conditioning info is present in the
+   weights but underused at sample time, stronger guidance will sharpen
+   morphological selectivity. ~2-min job.
+2. **AdaGN if CFG doesn't rescue it** — replace each `nn.GroupNorm` in
+   `ResBlock` with a condition-modulated variant (per-channel scale +
+   shift produced by an MLP on the (time+condition) embedding). This
+   lets the condition deeply restructure features rather than just
+   nudging a global offset. Retrain, ~30 min on one GPU.
+
+**Figures:**
+- `diffusion_out_cond/cond_grid_final.png` — sample grid by TSC row
+- `diffusion_out_cond/cond_trend_final.png` — gen brightness vs TSC
+  with real val overlay
+- `diffusion_out_cond/eval_cond_final.png` — fidelity + memorization
+- `diffusion_out_cond/nn_check_cond.png` — visual `(gen, NN train)`
+  pairs by TSC row
+- `diffusion_out_cond/cond_leakage.png` — the decisive diagnostic;
+  shows the NN-train-TSC histogram is independent of gen TSC
+
 ## Future Work
 
 ### Pretrained Vision Backbone (Linear Probing)
