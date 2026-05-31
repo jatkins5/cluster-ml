@@ -1142,18 +1142,49 @@ from 0.511 to 0.149 — see Comparison table). So the augmentation
 experiment can be restricted to the data-dense range without giving up
 any of the practical value.
 
-**Phase 2 plan:**
-1. Generate ~500 synthetic `(image, TSC)` pairs at CFG=5 with TSC drawn
-   from `[0.3, 2.0]` Gyr.
-2. Train two CNNs at 64px (the diffusion's native resolution) on
-   `diffusion_radio_64_v2.h5`:
-   - `baseline` — real data only
-   - `aug` — real + synthetic samples mixed in
-3. Evaluate both on real held-out clusters, especially the recent-merger
-   TSC ≤ 2 Gyr subset where baseline R² = 0.149.
-4. If `aug` improves on `baseline`: methodology validated, write up.
-5. If not: the bottleneck wasn't data quantity but inductive bias;
-   pivot to architectural changes.
+**Phase 2 — augmentation experiment at 64px (inconclusive):**
+
+Pipeline (`submit_cnn_aug.sh`): sample 540 synthetic `(image, TSC)`
+pairs at CFG=5 in TSC ∈ [0.3, 2.0] Gyr → train two CNNs at 64px on
+`diffusion_radio_64_v2.h5` with everything else identical except whether
+those synthetic samples are mixed in. Three seeds per condition for noise
+floor; cluster-level split fixed at seed=0 across all runs.
+
+Results (3 seeds each):
+
+| Metric | baseline | aug | Δ | Δ / joint σ |
+|---|---|---|---|---|
+| R² all (TSC 0–7.7) | +0.097 ± 0.056 | +0.107 ± 0.042 | +0.010 | 0.14 (noise) |
+| **R² recent (TSC ≤ 2)** | **−0.894 ± 0.209** | **−0.573 ± 0.098** | **+0.321** | **1.39** |
+| R² very recent (TSC ≤ 1) | −7.455 ± 0.205 | −5.617 ± 0.617 | +1.838 | 2.83 |
+| R² late (TSC > 2) | −4.777 ± 0.691 | −5.029 ± 0.442 | −0.252 | 0.31 (noise) |
+
+**Honest read.** Augmentation moves the recent-merger R² in the right
+direction by Δ ≈ +0.32 (well past joint seed noise, ~1.4σ on recent and
+2.8σ on very-recent), with no measurable effect on the late-merger
+subset or overall R². But **both conditions are catastrophic in absolute
+terms on the recent subset** — both negative R², meaning the CNN at 64px
+just can't learn the recent-merger signal regardless of augmentation. The
+`comparison.png` scatter shows both flatlining at the dataset-mean ~1.0–
+1.3 Gyr for true TSC ∈ [0, 2]. The existing pooled CNN at 128px got R²
+0.149 on this subset; at 64px we're below the resolution floor where that
+signal lives. So the result is *consistent with* "synthetic augmentation
+helps" but does not validate it usefully — the methodology improved a
+catastrophic baseline to a less-catastrophic one.
+
+**Phase 2 v2 — 128px scale-up (in progress):**
+
+The decisive test is at 128px where the unaugmented baseline is +0.149
+on the recent-merger subset. Same methodology, scaled up:
+
+1. Build `diffusion_radio_128_v2.h5` (tuned arcsinh, just `--img-size 128`).
+2. Train conditional diffusion at 128px (same UNet config, more pixels).
+3. CNN baseline-vs-aug experiment at 128px (architecture scaled with
+   resolution; 3 seeds each).
+4. Compare. If Δ on recent-merger R² holds at this scale, we land near
+   ~0.47 — a meaningful improvement on the published 0.149. If Δ
+   collapses, the 64px improvement was an artifact of the catastrophic
+   baseline and the methodology isn't actually adding signal.
 
 **Figures (sample suite per CFG):**
 - `diffusion_out_cond/cond_grid_final{,_cfg3,_cfg5}.png` — sample grid by TSC row
@@ -1162,6 +1193,8 @@ any of the practical value.
 - `diffusion_out_cond/nn_check_cond{,_cfg3,_cfg5}.png` — visual `(gen, NN train)` pairs
 - `diffusion_out_cond/cond_leakage{,_cfg3,_cfg5}.png` — the decisive
   per-bin NN-TSC histogram diagnostic
+- `cnn_aug_out/comparison.png` — 64px CNN baseline vs aug predictions
+  (three panels: all TSC, ≤ 2 Gyr, ≤ 1 Gyr)
 
 ## Future Work
 
