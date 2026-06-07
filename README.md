@@ -1279,20 +1279,89 @@ useful general structure (helping predictions globally and at the late
 end) but the targeted morphological cue for recent-merger discrimination
 was drowned by the distribution shift.
 
-**Phase 2 v3.1 — CFG sweep on the CNN side (in progress).**
+**Phase 2 v3.1 — CFG sweep on the CNN side: distribution-shift
+hypothesis falsified.**
 
-Cheap next test: rerun the CNN aug experiment with the existing
-`samples_cond_cfg3.npz` and `samples_cond_cfg15.npz` (lower-CFG samples
-already saved from the diffusion-side sweep). These have less
-distribution shift (low-*k* 2.98× and 2.82× respectively) at the cost
-of looser low-TSC conditioning. Hypothesis: less distribution shift
-might trade some of the generic-regulariser benefit for actual targeted
-signal in the recent subset. If CFG=3 or CFG=1.5 samples shift the
-significant Δ from late-merger to recent-merger R², the methodology
-*can* be tuned to address the original goal. If both still help only at
-the late end, the CNN at this resolution + arch can't extract a
-recent-merger signal from any synthetic augmentation strategy, and the
-bottleneck is architectural rather than data.
+Re-ran the CNN aug experiment with samples from the three lower-CFG
+points of the diffusion-side sweep, same baseline (cluster-level split
+seed=0) across all conditions:
+
+| Metric | baseline | aug CFG=1.5 | aug CFG=3 | aug CFG=5 |
+|---|---|---|---|---|
+| **R² all (0–7.7)** | +0.129 ± 0.020 | **+0.248 ± 0.016** | +0.221 ± 0.016 | **+0.251 ± 0.015** |
+| R² recent (≤2) | −0.825 ± 0.131 | −0.932 ± 0.120 | −0.959 ± 0.132 | −0.999 ± 0.119 |
+| R² very recent (≤1) | −6.079 ± 0.479 | −7.125 ± 0.838 | −7.457 ± 0.874 | −7.316 ± 0.785 |
+| **R² late (>2)** | −4.571 ± 0.289 | **−3.437 ± 0.242** | −3.641 ± 0.129 | **−3.347 ± 0.121** |
+
+If distribution shift had been hiding a targeted recent-merger signal,
+lower CFG (less shift, low-*k* 2.82× vs 3.30×) should have moved the
+significant Δ from late → recent. It didn't. All three CFG values
+produce essentially identical patterns: ~+0.1 R² on overall,
+~+1.0–1.2 R² on late (both real, multi-sigma), and noise-level worse
+on recent and very-recent. CFG=5 marginally wins on overall + late.
+
+**The aug benefit is generic regularisation, not anything specific to
+the conditioned TSC band.** Confirmed across CFG=1.5, 3, 5 — the
+synthetic samples don't carry recent-merger signal at *any* CFG; they
+help by providing more general-purpose training variety, which the CNN
+uses to improve global predictive performance (and to be less
+catastrophic on the late tail) but not to learn the discriminator the
+recent subset needs.
+
+## Cumulative Findings
+
+The Phase 0/1/2 work above eliminates synthetic augmentation as a lever
+for the original "improve TSC prediction on relic-bearing recent-merger
+clusters" goal. Specifically:
+
+1. **TNG-Cluster doesn't reproduce Lee's `d_relic vs TSC` relation** —
+   four independent slicings of two independent detectors (Mach +
+   radio peak) all returned flat-to-slightly-negative correlation in
+   the data-active regime. Lee's relic-distance label is not derivable
+   from this simulation at this resolution.
+2. **Conditional diffusion works at 128px with AdaGN** — per-sample
+   condition selectivity is clean at CFG=5 in the TSC ≤ 1 regime
+   (gen=0.3 → ⟨NN train TSC⟩=1.10 vs flat 2.3+ without AdaGN).
+3. **Synthetic augmentation helps CNN performance generally
+   (R² all +0.12, ~4.9σ) but does NOT fix the recent-merger collapse.**
+   Both baseline and all CFG aug variants stay strongly negative on
+   the recent and very-recent subsets, and the CFG sweep proves this
+   isn't a distribution-shift artefact.
+
+The recent-merger TSC discrimination bottleneck is architectural or
+representational, not data-quantity. Synthetic augmentation is
+validated as a general-purpose CNN improvement (~doubling overall R²)
+but is not the solution to the original goal.
+
+**Pivot directions to consider** (no commitment yet):
+- **Architectural changes for the CNN side**: bigger model, attention
+  (ViT-small), rotation-equivariant CNN (E2-CNN), or pretrained
+  backbone + linear probe (see Future Work below).
+- **Explicit geometric features**: peak detection, asymmetry,
+  concentration as extra input channels — forces the CNN to attend to
+  recent-merger-distinguishing morphology features that pure conv
+  isn't extracting.
+- **Multi-snapshot training**: the `feats_labels_dict_tngcluster.pkl`
+  has snapshots 72–99, not just z=0; treating earlier-snap projections
+  as additional training samples may add the discriminative variety
+  the CNN needs.
+- **Reframe the task**: maybe recent-merger isn't single-TSC
+  regression; could be classification (relaxed / pre-merger /
+  post-merger) or multi-label structure prediction.
+- **New simulations / surveys** (in flight):
+  - **CAMELS** — collaborator is downloading and processing CAMELS
+    data; once available, an independent simulation suite gives us a
+    second look at whether the Lee relation is reproducible at all
+    in current cosmological simulations, and a much wider range of
+    cluster realisations.
+  - **Optical + near-IR from LoVoCCS' DECam observations** — the
+    cluster sample has DECam coverage; adding optical/NIR bands
+    multi-modally may carry recent-merger signal that radio alone
+    doesn't.
+  - **Real observations** — eventually applying the trained models to
+    the actual LoVoCCS radio data (already cross-matched in
+    `lovoccs_lotss_matches*`, `lovoccs_first_matches*`, etc.) is the
+    end goal.
 
 **Figures (sample suite per CFG):**
 - `diffusion_out_cond/cond_grid_final{,_cfg3,_cfg5}.png` — sample grid by TSC row

@@ -23,7 +23,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset
 
-OUT = "cnn_aug_out"
+OUT = "cnn_aug_out"  # overridden by --out-dir at runtime
 
 
 class RadioMapsCNN(Dataset):
@@ -115,6 +115,8 @@ def r2(pred, true):
 
 
 def main(args):
+    global OUT
+    OUT = args.out_dir
     os.makedirs(OUT, exist_ok=True)
     dev = "cuda" if torch.cuda.is_available() else "cpu"
     torch.manual_seed(args.seed)
@@ -217,4 +219,5 @@ if __name__ == "__main__":
     p.add_argument("--split-seed", type=int, default=0,
                    help="cluster-level split seed; keep identical across runs")
     p.add_argument("--tag", type=str, default="baseline")
+    p.add_argument("--out-dir", type=str, default="cnn_aug_out")
     main(p.parse_args())
