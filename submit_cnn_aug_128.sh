@@ -15,9 +15,10 @@ mkdir -p logs cnn_aug_out_128
 cd /oscar/data/idellant/cluster-ml
 source venv/bin/activate
 
-# Phase 2 v2 step 2: CNN augmentation experiment at 128px.
-# Uses the conditional samples from diffusion_out_cond_128/samples_cond.npz
-# (540 samples in TSC [0.3, 2.0] at cfg=5, produced by the 128px diffusion).
+# Phase 2 v3 step 2: CNN augmentation experiment at 128px (AdaGN samples).
+# Uses the conditional samples from diffusion_out_cond_128_ada/samples_cond.npz
+# (540 samples in TSC [0.3, 2.0] at cfg=5, produced by the AdaGN 128px
+# diffusion model where conditioning genuinely works per-sample).
 # Same cluster-level val split (--split-seed 0) across all CNN runs as at
 # 64px, and identical to the diffusion model's split, so val clusters are
 # real held-out throughout.
@@ -39,7 +40,7 @@ for SEED in 0 1 2; do
     echo "=== augmented CNN @ 128px  seed=$SEED ==="
     python train_cnn_aug.py --seed $SEED --tag aug_s${SEED} \
         --data diffusion_radio_128_v2.h5 --ch 48 \
-        --aug-samples diffusion_out_cond_128/samples_cond.npz \
+        --aug-samples diffusion_out_cond_128_ada/samples_cond.npz \
         --epochs 80 --batch-size 64
     mv cnn_aug_out/preds_aug_s${SEED}.npz ${OUTDIR}/
 done

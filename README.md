@@ -1250,6 +1250,50 @@ the methodology is validated end-to-end. If not, the bottleneck wasn't
 data quantity at usable resolution, and we'd pivot to architectural
 changes for the CNN side.
 
+**Phase 2 v3 — CNN augmentation experiment at 128px (CFG=5 samples):**
+
+`train_cnn_aug.py` at 128px (`--ch 48`, 1.38M params), three seeds for
+each of baseline (real data only) and aug (real + 540 synthetic AdaGN
+CFG=5 samples spanning TSC ∈ [0.3, 2.0]). Cluster-level split seed=0
+matches the diffusion model's split.
+
+| Metric | baseline (3 seeds) | aug (3 seeds) | Δ | Δ / joint σ | Significant? |
+|---|---|---|---|---|---|
+| **R² all (TSC 0–7.7)** | **+0.129 ± 0.020** | **+0.251 ± 0.015** | **+0.122** | **≈ 4.9σ** | **yes, real** |
+| R² recent (≤2) | −0.825 ± 0.131 | −0.999 ± 0.119 | −0.174 | 0.98σ | noise |
+| R² very recent (≤1) | −6.079 ± 0.479 | −7.316 ± 0.785 | −1.237 | 1.34σ | borderline |
+| **R² late (>2)** | **−4.571 ± 0.289** | **−3.347 ± 0.121** | **+1.224** | **≈ 3.95σ** | **yes, real** |
+
+Two strong, two noise-level. The strong effects are *opposite of what
+we targeted*: aug nearly doubles overall R² (mostly via late-merger
+predictions getting less catastrophic), but doesn't fix the recent-
+merger collapse we set out to address. Both baseline and aug remain
+negative-R² on the recent subset.
+
+**Interpretation.** The synthetic samples at TSC ∈ [0.3, 2.0] didn't
+inject targeted recent-merger morphology signal — they acted as a
+generic regulariser. Consistent with the 3.30× normalised low-*k* excess
+in the AdaGN CFG=5 samples: synthetic "TSC=0.5" doesn't look like real
+TSC=0.5, it looks like a distribution-shifted version. The CNN learned
+useful general structure (helping predictions globally and at the late
+end) but the targeted morphological cue for recent-merger discrimination
+was drowned by the distribution shift.
+
+**Phase 2 v3.1 — CFG sweep on the CNN side (in progress).**
+
+Cheap next test: rerun the CNN aug experiment with the existing
+`samples_cond_cfg3.npz` and `samples_cond_cfg15.npz` (lower-CFG samples
+already saved from the diffusion-side sweep). These have less
+distribution shift (low-*k* 2.98× and 2.82× respectively) at the cost
+of looser low-TSC conditioning. Hypothesis: less distribution shift
+might trade some of the generic-regulariser benefit for actual targeted
+signal in the recent subset. If CFG=3 or CFG=1.5 samples shift the
+significant Δ from late-merger to recent-merger R², the methodology
+*can* be tuned to address the original goal. If both still help only at
+the late end, the CNN at this resolution + arch can't extract a
+recent-merger signal from any synthetic augmentation strategy, and the
+bottleneck is architectural rather than data.
+
 **Figures (sample suite per CFG):**
 - `diffusion_out_cond/cond_grid_final{,_cfg3,_cfg5}.png` — sample grid by TSC row
 - `diffusion_out_cond/cond_trend_final{,_cfg3,_cfg5}.png` — gen brightness vs TSC
