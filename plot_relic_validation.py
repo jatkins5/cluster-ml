@@ -25,11 +25,12 @@ KPC_PER_MPC = 1000.0
 KMS_TO_KPC_PER_GYR = 1.022
 
 
-def corr(x, y, mask):
+def corr(x: np.ndarray, y: np.ndarray, mask: np.ndarray) -> float:
+    """Pearson correlation of x vs y over masked rows; NaN if fewer than 5."""
     return float(np.corrcoef(x[mask], y[mask])[0, 1]) if mask.sum() >= 5 else np.nan
 
 
-def main(args):
+def main(args: argparse.Namespace) -> None:
     with h5py.File(args.catalog, "r") as f:
         attrs = dict(f.attrs)
         n_rel = f["n_relics"][:]
@@ -81,18 +82,19 @@ def main(args):
                                      (d_pri_mean, "d_primary (brightest)")]):
         a = ax[k]
         # background: minor + complex (gray)
-        bg = valid & ~major_clean
-        a.scatter(tsc[bg], d[bg] / KPC_PER_MPC, s=18, alpha=0.3, c="C7",
-                  label=f"other [{bg.sum()}]")
+        background = valid & ~major_clean
+        a.scatter(tsc[background], d[background] / KPC_PER_MPC, s=18, alpha=0.3,
+                  c="C7", label=f"other [{background.sum()}]")
         # foreground: major + clean (the relic-bearing analog)
         sc = a.scatter(tsc[major_clean], d[major_clean] / KPC_PER_MPC,
                        s=70, alpha=0.85, c=mr[major_clean], cmap="plasma",
                        edgecolor="k", linewidth=0.5,
                        label=f"major (mr≥0.25) + clean (n≤2) [{major_clean.sum()}]")
         # all-major in between
-        mid = major & ~clean
-        a.scatter(tsc[mid], d[mid] / KPC_PER_MPC, s=30, alpha=0.6, c="C0",
-                  marker="x", label=f"major + complex [{mid.sum()}]")
+        major_complex = major & ~clean
+        a.scatter(tsc[major_complex], d[major_complex] / KPC_PER_MPC, s=30,
+                  alpha=0.6, c="C0", marker="x",
+                  label=f"major + complex [{major_complex.sum()}]")
         a.plot(tau, d_ref / KPC_PER_MPC, "k--", lw=1.5,
                label=f"d = {v_sh:.0f} km/s × TSC")
         a.set_xlabel("merger-TSC (Gyr)")

@@ -31,28 +31,39 @@ import h5py
 import numpy as np
 
 
-def project_image(pos, w, center, half_width, img_size):
-    """Raw (un-stretched) weighted projections onto xy, yz, xz planes."""
-    rel = pos - center
-    projections = [(0, 1), (1, 2), (0, 2)]
+def project_image(
+    pos: np.ndarray,
+    weights: np.ndarray,
+    center: np.ndarray,
+    half_width: float,
+    img_size: int,
+) -> np.ndarray:
+    """Raw (un-stretched) weighted projections onto the xy, yz, xz planes.
+
+    Returns a (3, img_size, img_size) float64 stack — one weighted 2D
+    histogram per projection axis pair.
+    """
+    rel_pos = pos - center
+    axis_pairs = [(0, 1), (1, 2), (0, 2)]
     images = np.zeros((3, img_size, img_size), dtype=np.float64)
     edges = np.linspace(-half_width, half_width, img_size + 1)
-    for k, (ax0, ax1) in enumerate(projections):
-        img, _, _ = np.histogram2d(
-            rel[:, ax0], rel[:, ax1], bins=edges, weights=w
+    for proj, (ax0, ax1) in enumerate(axis_pairs):
+        hist, _, _ = np.histogram2d(
+            rel_pos[:, ax0], rel_pos[:, ax1], bins=edges, weights=weights
         )
-        images[k] = img
+        images[proj] = hist
     return images
 
 
-def load_r500c_map(catalog_path):
+def load_r500c_map(catalog_path: str) -> dict[int, float]:
+    """Map halo_id -> R500c in kpc (catalog stores Mpc)."""
     with h5py.File(catalog_path, "r") as f:
         halo_ids = f["haloID"][:]
-        r500c = f["r500c"][:]  # Mpc
-    return {int(h): float(r) * 1000.0 for h, r in zip(halo_ids, r500c)}
+        r500c_mpc = f["r500c"][:]
+    return {int(h): float(r) * 1000.0 for h, r in zip(halo_ids, r500c_mpc)}
 
 
-def main(img_size, extent_r500, hi_pct, output_path):
+def main(img_size: int, extent_r500: float, hi_pct: float, output_path: str) -> None:
     radio_dir = "Radio_Data"
     r500c_map = load_r500c_map(os.path.join(radio_dir, "TNG-Cluster_Catalog.hdf5"))
 
@@ -64,33 +75,34 @@ def main(img_size, extent_r500, hi_pct, output_path):
     N = len(npz_files)
     print(f"Found {N} clusters. Projecting at {img_size}px, FoV {extent_r500}xR500c...")
 
-    raw = np.zeros((N, 3, img_size, img_size), dtype=np.float64)
+    raw_maps = np.zeros((N, 3, img_size, img_size), dtype=np.float64)
     for i, (fname, hid) in enumerate(zip(npz_files, halo_ids)):
         if i % 50 == 0:
             print(f"  {i}/{N}")
-        d = np.load(os.path.join(radio_dir, fname))
-        pos, w = d["pos"], d["w"]
-        w_sum = w.sum()
-        center = (pos * w[:, None]).sum(0) / w_sum if w_sum > 0 else pos.mean(0)
+        npz = np.load(os.path.join(radio_dir, fname))
+        pos, weights = npz["pos"], npz["w"]
+        weight_sum = weights.sum()
+        center = ((pos * weights[:, None]).sum(0) / weight_sum
+                  if weight_sum > 0 else pos.mean(0))
         half_width = extent_r500 * r500c_map[hid]
-        raw[i] = project_image(pos, w, center, half_width, img_size)
+        raw_maps[i] = project_image(pos, weights, center, half_width, img_size)
 
     # robust arcsinh scale: median of strictly-positive pixel values.
     # Puts the linear->log knee at a typical signal pixel (not an arbitrary 1).
-    pos_pixels = raw[raw > 0]
-    a = float(np.median(pos_pixels))
-    y = np.arcsinh(raw / a)
+    positive_pixels = raw_maps[raw_maps > 0]
+    arcsinh_a = float(np.median(positive_pixels))
+    stretched = np.arcsinh(raw_maps / arcsinh_a)
 
     # map [0, y_hi] -> [-1, 1]; y_hi = high percentile so one saturated pixel
     # per cluster doesn't compress all real structure into a thin band.
-    y_hi = float(np.percentile(y, hi_pct))
-    images = np.clip(2.0 * y / y_hi - 1.0, -1.0, 1.0).astype(np.float32)
+    y_hi = float(np.percentile(stretched, hi_pct))
+    images = np.clip(2.0 * stretched / y_hi - 1.0, -1.0, 1.0).astype(np.float32)
 
-    print(f"arcsinh_a={a:.4e}  y_hi(p{hi_pct})={y_hi:.4f}  "
-          f"clipped={(y > y_hi).mean()*100:.3f}% of pixels")
+    print(f"arcsinh_a={arcsinh_a:.4e}  y_hi(p{hi_pct})={y_hi:.4f}  "
+          f"clipped={(stretched > y_hi).mean()*100:.3f}% of pixels")
 
     with h5py.File(output_path, "w") as f:
-        f.attrs["arcsinh_a"] = a
+        f.attrs["arcsinh_a"] = arcsinh_a
         f.attrs["y_hi"] = y_hi
         f.attrs["hi_pct"] = hi_pct
         f.attrs["img_size"] = img_size

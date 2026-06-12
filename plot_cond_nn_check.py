@@ -33,33 +33,35 @@ import numpy as np
 from train_diffusion import load_split
 
 
-def ms_flat(x):
-    f = x.reshape(len(x), -1)
-    return f - f.mean(1, keepdims=True)
+def mean_subtract_flat(imgs: np.ndarray) -> np.ndarray:
+    """Flatten each image and remove its mean (brightness-corrected L2 space)."""
+    flat = imgs.reshape(len(imgs), -1)
+    return flat - flat.mean(1, keepdims=True)
 
 
-def nn(A, B):
-    """For each row of A, distance + index of nearest row in B (flat L2)."""
-    out_d = np.empty(len(A))
-    out_i = np.empty(len(A), dtype=np.int64)
-    for i in range(len(A)):
-        d2 = ((B - A[i]) ** 2).sum(1)
-        out_i[i] = int(d2.argmin())
-        out_d[i] = float(np.sqrt(d2.min()))
-    return out_d, out_i
+def nn(query: np.ndarray, reference: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """For each row of `query`, distance + index of the nearest row in
+    `reference` (flat L2). Returns (distances, indices)."""
+    distances = np.empty(len(query))
+    indices = np.empty(len(query), dtype=np.int64)
+    for i in range(len(query)):
+        sq_dist = ((reference - query[i]) ** 2).sum(1)
+        indices[i] = int(sq_dist.argmin())
+        distances[i] = float(np.sqrt(sq_dist.min()))
+    return distances, indices
 
 
-def nn_self(A):
-    """For each row of A, distance to nearest OTHER row of A."""
-    out = np.empty(len(A))
-    for i in range(len(A)):
-        d2 = ((A - A[i]) ** 2).sum(1)
-        d2[i] = np.inf
-        out[i] = float(np.sqrt(d2.min()))
-    return out
+def nn_self(rows: np.ndarray) -> np.ndarray:
+    """For each row, distance to its nearest OTHER row (flat L2)."""
+    distances = np.empty(len(rows))
+    for i in range(len(rows)):
+        sq_dist = ((rows - rows[i]) ** 2).sum(1)
+        sq_dist[i] = np.inf
+        distances[i] = float(np.sqrt(sq_dist.min()))
+    return distances
 
 
-def main(args):
+def main(args: argparse.Namespace) -> None:
     d = np.load(args.samples)
     gen = d["samples"]                                 # (N_gen, 1, S, S)
     cond = d["tsc"]                                    # (N_gen,) in Gyr
@@ -74,13 +76,13 @@ def main(args):
     print(f"loaded {len(tr_i)} train projections "
           f"(valid TSC labels: {(~np.isnan(tr_l_gyr)).sum()})")
 
-    G = ms_flat(gen)
-    T = ms_flat(tr_i)
+    gen_ms = mean_subtract_flat(gen)
+    train_ms = mean_subtract_flat(tr_i)
 
     print("computing gen->train NN ...")
-    g_nn_d, g_nn_i = nn(G, T)
+    g_nn_d, g_nn_i = nn(gen_ms, train_ms)
     print("computing train-train baseline NN ...")
-    t_nn_d = nn_self(T)
+    t_nn_d = nn_self(train_ms)
 
     g_nn_tsc = tr_l_gyr[g_nn_i]                        # TSC of the NN training image
 

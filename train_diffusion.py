@@ -51,16 +51,17 @@ class RadioMaps(Dataset):
     """Projection-level grayscale maps; 8x rot/flip aug (physically valid).
     Optionally returns a per-sample scalar label for conditional training."""
 
-    def __init__(self, imgs, labels=None, train=True, seed=0):
+    def __init__(self, imgs: np.ndarray, labels: np.ndarray | None = None,
+                 train: bool = True, seed: int = 0):
         self.imgs = imgs                              # (M, 1, S, S) in [-1, 1]
         self.labels = labels                          # (M,) float or None
         self.train = train
         self.rng = np.random.default_rng(seed)
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.imgs)
 
-    def __getitem__(self, i):
+    def __getitem__(self, i: int):
         x = self.imgs[i]
         if self.train:
             k = self.rng.integers(4)
@@ -74,9 +75,10 @@ class RadioMaps(Dataset):
         return x_t, torch.tensor(self.labels[i], dtype=torch.float32)
 
 
-def load_split(path, val_frac=0.15, seed=0,
-               labels_path=None, label_key="tsc_gyr", cond_scale_norm=1.0):
-    """Returns (tr_imgs, tr_labels, val_imgs, val_labels, attrs).
+def load_split(path: str, val_frac: float = 0.15, seed: int = 0,
+               labels_path: str | None = None, label_key: str = "tsc_gyr",
+               cond_scale_norm: float = 1.0) -> tuple:
+    """Returns (train_imgs, train_labels, val_imgs, val_labels, attrs).
     *_labels is None when labels_path is None (unconditional). Labels are
     normalised by cond_scale_norm so the model sees a roughly [0, 1]-scaled
     scalar (the same Fourier embedding spec as the timestep)."""
@@ -88,38 +90,41 @@ def load_split(path, val_frac=0.15, seed=0,
     labels = None
     if labels_path is not None:
         with h5py.File(labels_path, "r") as f:
-            lhid = f["halo_id"][:]
-            lval = f[label_key][:]
-        lmap = {int(h): float(v) for h, v in zip(lhid, lval)}
-        labels = np.array([lmap.get(int(h), np.nan) for h in halo],
+            label_halo = f["halo_id"][:]
+            label_vals = f[label_key][:]
+        label_by_halo = {int(h): float(v) for h, v in zip(label_halo, label_vals)}
+        labels = np.array([label_by_halo.get(int(h), np.nan) for h in halo],
                           dtype=np.float32) / cond_scale_norm
 
+    # cluster-level split: all 3 projections of a halo land in the same fold
     rng = np.random.default_rng(seed)
-    uniq = np.unique(halo)
-    rng.shuffle(uniq)
-    n_val = int(len(uniq) * val_frac)
-    val_h = set(uniq[:n_val].tolist())
-    tr_m = np.array([h not in val_h for h in halo])
+    unique_halos = np.unique(halo)
+    rng.shuffle(unique_halos)
+    n_val = int(len(unique_halos) * val_frac)
+    val_halos = set(unique_halos[:n_val].tolist())
+    train_mask = np.array([h not in val_halos for h in halo])
 
-    def expand(mask):
-        sel = imgs[mask]                            # (n, 3, S, S)
-        out_imgs = sel.reshape(-1, 1, *sel.shape[2:]).astype(np.float32)
+    def expand(cluster_mask: np.ndarray) -> tuple[np.ndarray, np.ndarray | None]:
+        """Flatten the 3 projections per cluster into individual samples."""
+        selected = imgs[cluster_mask]               # (n, 3, S, S)
+        out_imgs = selected.reshape(-1, 1, *selected.shape[2:]).astype(np.float32)
         if labels is None:
             return out_imgs, None
-        out_labels = np.repeat(labels[mask], 3)     # (n*3,)
+        out_labels = np.repeat(labels[cluster_mask], 3)   # (n*3,)
         return out_imgs, out_labels
 
-    tr_i, tr_l = expand(tr_m)
-    val_i, val_l = expand(~tr_m)
-    return tr_i, tr_l, val_i, val_l, attrs
+    train_imgs, train_labels = expand(train_mask)
+    val_imgs, val_labels = expand(~train_mask)
+    return train_imgs, train_labels, val_imgs, val_labels, attrs
 
 
 # --------------------------- model ----------------------------------------
-def timestep_emb(t, dim):
+def timestep_emb(t: torch.Tensor, dim: int) -> torch.Tensor:
+    """Sinusoidal (Fourier) embedding of a scalar per sample -> (B, dim)."""
     half = dim // 2
     freqs = torch.exp(-math.log(10000) * torch.arange(half, device=t.device) / half)
-    a = t[:, None].float() * freqs[None]
-    return torch.cat([a.sin(), a.cos()], dim=-1)
+    angles = t[:, None].float() * freqs[None]
+    return torch.cat([angles.sin(), angles.cos()], dim=-1)
 
 
 class CondGroupNorm(nn.Module):
@@ -127,14 +132,14 @@ class CondGroupNorm(nn.Module):
     embedding. Zero-initialised → identity at start so training begins
     from the same effective state as plain GroupNorm."""
 
-    def __init__(self, groups, channels, emb_dim):
+    def __init__(self, groups: int, channels: int, emb_dim: int):
         super().__init__()
         self.norm = nn.GroupNorm(groups, channels, affine=False)
         self.proj = nn.Linear(emb_dim, 2 * channels)
         nn.init.zeros_(self.proj.weight)
         nn.init.zeros_(self.proj.bias)
 
-    def forward(self, x, emb):
+    def forward(self, x: torch.Tensor, emb: torch.Tensor) -> torch.Tensor:
         h = self.norm(x)
         scale, shift = self.proj(emb).chunk(2, dim=-1)
         return h * (1 + scale[:, :, None, None]) + shift[:, :, None, None]
@@ -146,7 +151,7 @@ class ResBlock(nn.Module):
     dropped since AdaGN already carries that signal. Standard Imagen/EDM2
     block layout for scalar conditioning."""
 
-    def __init__(self, cin, cout, temb, ada=False):
+    def __init__(self, cin: int, cout: int, temb: int, ada: bool = False):
         super().__init__()
         self.ada = ada
         if ada:
@@ -160,7 +165,7 @@ class ResBlock(nn.Module):
         self.c2 = nn.Conv2d(cout, cout, 3, padding=1)
         self.skip = nn.Conv2d(cin, cout, 1) if cin != cout else nn.Identity()
 
-    def forward(self, x, t):
+    def forward(self, x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
         if self.ada:
             h = self.c1(F.silu(self.n1(x, t)))
             h = self.c2(F.silu(self.n2(h, t)))
@@ -172,13 +177,15 @@ class ResBlock(nn.Module):
 
 
 class Attn(nn.Module):
-    def __init__(self, c):
+    """Single-head self-attention over the spatial grid at the bottleneck."""
+
+    def __init__(self, c: int):
         super().__init__()
         self.n = nn.GroupNorm(8, c)
         self.qkv = nn.Conv2d(c, c * 3, 1)
         self.proj = nn.Conv2d(c, c, 1)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         B, C, H, W = x.shape
         q, k, v = self.qkv(self.n(x)).chunk(3, dim=1)
         q = q.reshape(B, C, H * W).permute(0, 2, 1)
@@ -196,7 +203,8 @@ class UNet(nn.Module):
     timestep embedding; a learned null token replaces the embedding when
     the condition is NaN (for classifier-free guidance)."""
 
-    def __init__(self, ch=64, mults=(1, 2, 4), cond=False, ada=False):
+    def __init__(self, ch: int = 64, mults: tuple[int, ...] = (1, 2, 4),
+                 cond: bool = False, ada: bool = False):
         super().__init__()
         temb = ch * 4
         self.tproj = nn.Sequential(nn.Linear(ch, temb), nn.SiLU(),
@@ -235,14 +243,15 @@ class UNet(nn.Module):
         self.out = nn.Sequential(nn.GroupNorm(8, c), nn.SiLU(),
                                  nn.Conv2d(c, 1, 3, padding=1))
 
-    def _cond_emb(self, c):
+    def _cond_emb(self, c: torch.Tensor) -> torch.Tensor:
         """c: (B,) float tensor; NaN entries get the learned null token."""
         null = torch.isnan(c)
         c_safe = torch.where(null, torch.zeros_like(c), c)
         emb = self.cproj(timestep_emb(c_safe, self.tch))
         return torch.where(null[:, None], self.null_cond[None], emb)
 
-    def forward(self, x, t, c=None):
+    def forward(self, x: torch.Tensor, t: torch.Tensor,
+                c: torch.Tensor | None = None) -> torch.Tensor:
         temb = self.tproj(timestep_emb(t, self.tch))
         if self.cond and c is not None:
             temb = temb + self._cond_emb(c)
@@ -261,7 +270,9 @@ class UNet(nn.Module):
 
 # --------------------------- diffusion ------------------------------------
 class DDPM:
-    def __init__(self, T=1000, device="cuda"):
+    """Cosine-schedule DDPM: forward noising `q` and reverse sampling loop."""
+
+    def __init__(self, T: int = 1000, device: str = "cuda"):
         s = 0.008
         x = torch.linspace(0, T, T + 1)
         ac = torch.cos(((x / T + s) / (1 + s)) * math.pi / 2) ** 2
@@ -272,12 +283,16 @@ class DDPM:
         self.ab = torch.cumprod(1 - betas, 0)
         self.device = device
 
-    def q(self, x0, t, noise):
+    def q(self, x0: torch.Tensor, t: torch.Tensor,
+          noise: torch.Tensor) -> torch.Tensor:
+        """Forward process: noise x0 to timestep t (closed form)."""
         ab = self.ab[t][:, None, None, None]
         return ab.sqrt() * x0 + (1 - ab).sqrt() * noise
 
     @torch.no_grad()
-    def sample(self, model, n, size, cond=None, cfg_scale=0.0):
+    def sample(self, model: nn.Module, n: int, size: int,
+               cond: torch.Tensor | None = None,
+               cfg_scale: float = 0.0) -> torch.Tensor:
         """Optionally condition on a scalar per sample; classifier-free
         guidance pushes samples toward the condition when cfg_scale > 0."""
         x = torch.randn(n, 1, size, size, device=self.device)
@@ -303,43 +318,47 @@ class DDPM:
 
 
 # --------------------------- evaluation -----------------------------------
-def to_physical(img, a, y_hi):
+def to_physical(img: np.ndarray, arcsinh_a: float, y_hi: float) -> np.ndarray:
+    """Invert the build-time arcsinh stretch: [-1, 1] image -> physical units."""
     y = (img + 1.0) / 2.0 * y_hi
-    return np.sinh(np.clip(y, 0, None)) * a
+    return np.sinh(np.clip(y, 0, None)) * arcsinh_a
 
 
-def radial_profile(im):
+def radial_profile(im: np.ndarray) -> np.ndarray:
+    """Azimuthally-averaged profile as a function of integer radius."""
     s = im.shape[-1]
     yy, xx = np.indices((s, s)) - s / 2
     r = np.hypot(xx, yy).astype(int)
-    tbin = np.bincount(r.ravel(), im.ravel())
-    nr = np.bincount(r.ravel())
-    return tbin / np.maximum(nr, 1)
+    sum_per_radius = np.bincount(r.ravel(), im.ravel())
+    count_per_radius = np.bincount(r.ravel())
+    return sum_per_radius / np.maximum(count_per_radius, 1)
 
 
-def power_spectrum(im):
-    f = np.fft.fftshift(np.abs(np.fft.fft2(im)) ** 2)
-    return radial_profile(f)
+def power_spectrum(im: np.ndarray) -> np.ndarray:
+    """Radially-averaged 2D power spectrum."""
+    power = np.fft.fftshift(np.abs(np.fft.fft2(im)) ** 2)
+    return radial_profile(power)
 
 
-def nn_dist(A, B):
-    """min L2 from each row of A to any row of B (flattened images)."""
-    A = A.reshape(len(A), -1)
-    B = B.reshape(len(B), -1)
-    out = np.empty(len(A))
-    for i in range(len(A)):
-        out[i] = np.sqrt(((B - A[i]) ** 2).sum(1).min())
+def nn_dist(query: np.ndarray, reference: np.ndarray) -> np.ndarray:
+    """min L2 from each row of `query` to any row of `reference` (flattened)."""
+    query = query.reshape(len(query), -1)
+    reference = reference.reshape(len(reference), -1)
+    out = np.empty(len(query))
+    for i in range(len(query)):
+        out[i] = np.sqrt(((reference - query[i]) ** 2).sum(1).min())
     return out
 
 
-def evaluate(gen, train, val, attrs, tag):
+def evaluate(gen: np.ndarray, train: np.ndarray, val: np.ndarray,
+             attrs: dict, tag: str) -> None:
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    a, y_hi = attrs["arcsinh_a"], attrs["y_hi"]
-    gp = to_physical(gen[:, 0], a, y_hi)
-    vp = to_physical(val[:, 0], a, y_hi)
+    arcsinh_a, y_hi = attrs["arcsinh_a"], attrs["y_hi"]
+    gen_phys = to_physical(gen[:, 0], arcsinh_a, y_hi)
+    val_phys = to_physical(val[:, 0], arcsinh_a, y_hi)
 
     g_nn = nn_dist(gen, train)                       # generated -> train
     t_nn = nn_dist(train[:64], np.delete(train, np.arange(64), 0))  # baseline
@@ -368,15 +387,15 @@ def evaluate(gen, train, val, attrs, tag):
     bright_corr = float(np.corrcoef(gen_mean, g_nn)[0, 1])
     raw_l2_reliable = abs(bright_corr) < 0.5
 
-    rp_g = np.mean([radial_profile(x) for x in gp], 0)
-    rp_v = np.mean([radial_profile(x) for x in vp], 0)
+    rp_g = np.mean([radial_profile(x) for x in gen_phys], 0)
+    rp_v = np.mean([radial_profile(x) for x in val_phys], 0)
     # PSD in BOTH physical and normalized space. The a*sinh inverse is
     # violently exponential, so physical-space low-k is dominated by a
     # handful of bright pixels and exaggerates tiny errors ~10x. The
     # normalized [-1,1] space is what the model trains in and is the
     # meaningful fidelity readout; physical is kept for continuity.
-    ps_g = np.mean([power_spectrum(x) for x in gp], 0)
-    ps_v = np.mean([power_spectrum(x) for x in vp], 0)
+    ps_g = np.mean([power_spectrum(x) for x in gen_phys], 0)
+    ps_v = np.mean([power_spectrum(x) for x in val_phys], 0)
     psn_g = np.mean([power_spectrum(x) for x in gen[:, 0]], 0)
     psn_v = np.mean([power_spectrum(x) for x in val[:, 0]], 0)
 
@@ -431,8 +450,10 @@ def evaluate(gen, train, val, attrs, tag):
     print(f"[eval {tag}]  -> MS ratio ~1.0 = good; <0.85 with bright_corr<0.5 = real memorization")
 
 
-def evaluate_conditional_response(gen, cond_gen, val_imgs, val_labels,
-                                  cond_scale_norm, tag):
+def evaluate_conditional_response(gen: np.ndarray, cond_gen: np.ndarray,
+                                  val_imgs: np.ndarray,
+                                  val_labels: np.ndarray | None,
+                                  cond_scale_norm: float, tag: str) -> None:
     """Sample grid by TSC + scalar morphology trends gen vs val.
 
     Answers the gate question: does the model use the condition? If the
@@ -516,24 +537,25 @@ def evaluate_conditional_response(gen, cond_gen, val_imgs, val_labels,
 
 
 # ----------------------------- train --------------------------------------
-def main(args):
+def main(args: argparse.Namespace) -> None:
     global OUT
     OUT = args.out_dir
     os.makedirs(OUT, exist_ok=True)
     dev = "cuda" if torch.cuda.is_available() else "cpu"
 
-    tr_i, tr_l, val_i, val_l, attrs = load_split(
+    train_imgs, train_labels, val_imgs, val_labels, attrs = load_split(
         args.data, seed=args.seed,
         labels_path=args.labels if args.condition else None,
         label_key=args.label_key,
         cond_scale_norm=args.cond_scale_norm,
     )
-    size = tr_i.shape[-1]
-    print(f"device={dev}  train={len(tr_i)} val={len(val_i)} proj-maps  size={size}")
+    size = train_imgs.shape[-1]
+    print(f"device={dev}  train={len(train_imgs)} val={len(val_imgs)} "
+          f"proj-maps  size={size}")
     if args.condition:
-        n_nan = int(np.isnan(tr_l).sum())
+        n_nan = int(np.isnan(train_labels).sum())
         print(f"conditional on '{args.label_key}' / {args.cond_scale_norm}  "
-              f"(train: {len(tr_l) - n_nan} valid, {n_nan} NaN -> null token)")
+              f"(train: {len(train_labels) - n_nan} valid, {n_nan} NaN -> null token)")
 
     model = UNet(cond=args.condition, ada=args.ada).to(dev)
     nparam = sum(p.numel() for p in model.parameters()) / 1e6
@@ -547,7 +569,7 @@ def main(args):
         model.load_state_dict(ema)
         bak = ema                                    # not used in sample-only
     else:
-        dl = DataLoader(RadioMaps(tr_i, tr_l, train=True, seed=args.seed),
+        dl = DataLoader(RadioMaps(train_imgs, train_labels, train=True, seed=args.seed),
                         batch_size=args.batch_size, shuffle=True,
                         num_workers=4, drop_last=True)
         ema = {k: v.detach().clone() for k, v in model.state_dict().items()}
@@ -577,7 +599,7 @@ def main(args):
                         ema[k].mul_(0.999).add_(v, alpha=0.001)
                 tot += loss.item() * x.size(0)
             if ep % 20 == 0 or ep == args.epochs - 1:
-                print(f"epoch {ep:4d}  loss {tot/len(tr_i):.4f}")
+                print(f"epoch {ep:4d}  loss {tot/len(train_imgs):.4f}")
         bak = {k: v.detach().clone() for k, v in model.state_dict().items()}
         model.load_state_dict(ema)
 
@@ -598,14 +620,14 @@ def main(args):
         gen = np.concatenate(gens, axis=0)
         cond_arr = np.concatenate(conds)
         np.savez(f"{OUT}/samples_cond{suffix}.npz", samples=gen, tsc=cond_arr)
-        evaluate(gen, tr_i, val_i, attrs, tag=f"cond_final{suffix}")
-        evaluate_conditional_response(gen, cond_arr, val_i, val_l,
+        evaluate(gen, train_imgs, val_imgs, attrs, tag=f"cond_final{suffix}")
+        evaluate_conditional_response(gen, cond_arr, val_imgs, val_labels,
                                       args.cond_scale_norm,
                                       tag=f"final{suffix}")
     else:
         gen = ddpm.sample(model, args.n_sample, size).cpu().numpy()
         np.save(f"{OUT}/samples{suffix}.npy", gen)
-        evaluate(gen, tr_i, val_i, attrs, tag=f"final{suffix}")
+        evaluate(gen, train_imgs, val_imgs, attrs, tag=f"final{suffix}")
 
     if not args.sample_only:
         model.load_state_dict(bak)

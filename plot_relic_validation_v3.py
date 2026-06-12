@@ -26,11 +26,15 @@ KPC_PER_MPC = 1000.0
 KMS_TO_KPC_PER_GYR = 1.022
 
 
-def corr(x, y, mask):
+def corr(x: np.ndarray, y: np.ndarray, mask: np.ndarray) -> float:
+    """Pearson correlation of x vs y over masked rows; NaN if fewer than 5."""
     return float(np.corrcoef(x[mask], y[mask])[0, 1]) if mask.sum() >= 5 else np.nan
 
 
-def panel(ax, tsc, d, mask, mr, tag, ref):
+def panel(ax, tsc: np.ndarray, d: np.ndarray, mask: np.ndarray,
+          mr: np.ndarray, tag: str, ref: float):
+    """Draw one TSC-vs-distance scatter panel for the masked subset.
+    Returns the scatter handle (for a shared colorbar) or None if empty."""
     n = int(mask.sum())
     if n < 1:
         ax.text(0.5, 0.5, "no data", transform=ax.transAxes, ha="center")
@@ -49,7 +53,7 @@ def panel(ax, tsc, d, mask, mr, tag, ref):
     return sc
 
 
-def main(args):
+def main(args: argparse.Namespace) -> None:
     with h5py.File(args.catalog, "r") as f:
         attrs = dict(f.attrs)
         n_rel = f["n_relics"][:]

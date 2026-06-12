@@ -46,46 +46,52 @@ CUTOUT_DIR = "/oscar/data/idellant/Chuiyang/TNGCluster_Cutout/snap99"
 PROJECTIONS = [("xy", 0, 1), ("yz", 1, 2), ("xz", 0, 2)]
 
 
-def find_cutout(halo_id):
+def find_cutout(halo_id: int) -> str | None:
     matches = glob.glob(os.path.join(CUTOUT_DIR, f"cutout_sub*_FOF{halo_id}.hdf5"))
     return matches[0] if matches else None
 
 
-def robust_center(coord, mass, density, k_frac=0.001, k_min=200):
+def robust_center(coord: np.ndarray, mass: np.ndarray, density: np.ndarray,
+                  k_frac: float = 0.001, k_min: int = 200) -> np.ndarray:
     """Mass-weighted center of the top-k_frac densest gas cells (X-ray peak proxy)."""
     n_top = max(int(k_frac * len(density)), k_min)
-    top = np.argpartition(density, -n_top)[-n_top:]
-    c = coord[top]
-    m = mass[top]
-    return (c * m[:, None]).sum(0) / m.sum()
+    densest = np.argpartition(density, -n_top)[-n_top:]
+    coord_top = coord[densest]
+    mass_top = mass[densest]
+    return (coord_top * mass_top[:, None]).sum(0) / mass_top.sum()
 
 
-def find_peaks(img, threshold, min_sep_pix):
-    mx = maximum_filter(img, size=2 * min_sep_pix + 1)
-    return np.argwhere((img == mx) & (img > threshold))
+def find_peaks(img: np.ndarray, threshold: float, min_sep_pix: int) -> np.ndarray:
+    """Local maxima above `threshold`, separated by at least min_sep_pix.
+    Returns an (n_peaks, 2) array of (row, col) pixel indices."""
+    local_max = maximum_filter(img, size=2 * min_sep_pix + 1)
+    return np.argwhere((img == local_max) & (img > threshold))
 
 
-def detect_relics(hdf5_path, r500c_kpc, mach_thresh=2.0, grid_size=128,
-                  fov_r500c=2.5, r_min_frac=0.3, r_max_frac=2.0,
-                  peak_thresh_frac=0.05, min_sep_kpc=300, smooth_kpc=80):
+def detect_relics(hdf5_path: str, r500c_kpc: float, mach_thresh: float = 2.0,
+                  grid_size: int = 128, fov_r500c: float = 2.5,
+                  r_min_frac: float = 0.3, r_max_frac: float = 2.0,
+                  peak_thresh_frac: float = 0.05, min_sep_kpc: float = 300,
+                  smooth_kpc: float = 80) -> dict | None:
     """Returns dict with center, n_relics[3], d_primary[3], d_secondary[3],
     d_max[3], flux_primary[3]. Returns None if no shock cells exist."""
     with h5py.File(hdf5_path, "r") as f:
-        M_all = f["PartType0/Machnumber"][:]
-        sk = M_all >= mach_thresh
-        if not sk.any():
+        mach_all = f["PartType0/Machnumber"][:]
+        is_shock = mach_all >= mach_thresh
+        if not is_shock.any():
             return None
         coord_all = f["PartType0/Coordinates"][:]
         mass_all = f["PartType0/Masses"][:]
         density_all = f["PartType0/Density"][:]
 
     center = robust_center(coord_all, mass_all, density_all)
-    coord = coord_all[sk]
-    rho = density_all[sk]
-    M = M_all[sk]
+    shock_coord = coord_all[is_shock]
+    shock_density = density_all[is_shock]
+    shock_mach = mach_all[is_shock]
 
-    rel = coord - center
-    w_shock = (M ** 2) * rho                      # shock surface-brightness proxy
+    rel_coord = shock_coord - center
+    # shock surface-brightness proxy: M^2 * rho
+    shock_weight = (shock_mach ** 2) * shock_density
 
     half_width = fov_r500c * r500c_kpc
     pixel_kpc = (2 * half_width) / grid_size
@@ -104,35 +110,36 @@ def detect_relics(hdf5_path, r500c_kpc, mach_thresh=2.0, grid_size=128,
         "flux_primary": np.zeros(3, dtype=np.float32),
     }
 
-    for k, (_name, ax0, ax1) in enumerate(PROJECTIONS):
-        H, _, _ = np.histogram2d(rel[:, ax0], rel[:, ax1],
-                                 bins=edges, weights=w_shock)
-        H = gaussian_filter(H, sigma=smooth_pix)
-        if H.max() <= 0:
+    for proj, (_name, ax0, ax1) in enumerate(PROJECTIONS):
+        shock_map, _, _ = np.histogram2d(rel_coord[:, ax0], rel_coord[:, ax1],
+                                         bins=edges, weights=shock_weight)
+        shock_map = gaussian_filter(shock_map, sigma=smooth_pix)
+        if shock_map.max() <= 0:
             continue
-        thr = peak_thresh_frac * H.max()
-        peaks = find_peaks(H, thr, min_sep_pix)
-        recs = []
+        threshold = peak_thresh_frac * shock_map.max()
+        peaks = find_peaks(shock_map, threshold, min_sep_pix)
+        # (distance_kpc, flux) for peaks inside the relic annulus
+        annulus_peaks: list[tuple[float, float]] = []
         for (i, j) in peaks:
             x = (i + 0.5) * pixel_kpc - half_width
             y = (j + 0.5) * pixel_kpc - half_width
             r = float(np.hypot(x, y))
             if r < r_min_kpc or r > r_max_kpc:      # exclude core & far-field
                 continue
-            recs.append((r, float(H[i, j])))
-        if not recs:
+            annulus_peaks.append((r, float(shock_map[i, j])))
+        if not annulus_peaks:
             continue
-        recs.sort(key=lambda t: -t[1])              # brightest first
-        out["n_relics"][k] = len(recs)
-        out["d_primary"][k] = recs[0][0]
-        out["flux_primary"][k] = recs[0][1]
-        if len(recs) > 1:
-            out["d_secondary"][k] = recs[1][0]
-        out["d_max"][k] = max(r for r, _ in recs)
+        annulus_peaks.sort(key=lambda rec: -rec[1])  # brightest first
+        out["n_relics"][proj] = len(annulus_peaks)
+        out["d_primary"][proj] = annulus_peaks[0][0]
+        out["flux_primary"][proj] = annulus_peaks[0][1]
+        if len(annulus_peaks) > 1:
+            out["d_secondary"][proj] = annulus_peaks[1][0]
+        out["d_max"][proj] = max(r for r, _ in annulus_peaks)
     return out
 
 
-def main(args):
+def main(args: argparse.Namespace) -> None:
     with h5py.File("Radio_Data/TNG-Cluster_Catalog.hdf5", "r") as f:
         r500c_map = {int(h): float(r) * 1000.0
                      for h, r in zip(f["haloID"][:], f["r500c"][:])}

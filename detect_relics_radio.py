@@ -25,22 +25,23 @@ import numpy as np
 from scipy.ndimage import gaussian_filter, maximum_filter
 
 
-def detect_in_image(img, r500c_kpc, half_width_kpc,
-                    r_min_frac=0.3, r_max_frac=2.0,
-                    peak_thresh_frac=0.25,
-                    min_sep_kpc=600.0, smooth_kpc=50.0):
+def detect_in_image(img: np.ndarray, r500c_kpc: float, half_width_kpc: float,
+                    r_min_frac: float = 0.3, r_max_frac: float = 2.0,
+                    peak_thresh_frac: float = 0.25,
+                    min_sep_kpc: float = 600.0,
+                    smooth_kpc: float = 50.0) -> list[tuple[float, float]]:
     """Returns list of (r_kpc, flux) for accepted peaks in the annulus."""
-    H, W = img.shape
-    pixel_kpc = 2 * half_width_kpc / H
+    n_rows, n_cols = img.shape
+    pixel_kpc = 2 * half_width_kpc / n_rows
     min_sep_pix = max(1, int(np.ceil(min_sep_kpc / pixel_kpc)))
     smooth_pix = max(1.0, smooth_kpc / pixel_kpc)
 
     smoothed = gaussian_filter(img, sigma=smooth_pix)
 
-    # pixel-center kpc grid
-    yi, xi = np.indices((H, W))
-    x_kpc = (xi + 0.5) * pixel_kpc - half_width_kpc
-    y_kpc = (yi + 0.5) * pixel_kpc - half_width_kpc
+    # radius (kpc) at each pixel center
+    row_idx, col_idx = np.indices((n_rows, n_cols))
+    x_kpc = (col_idx + 0.5) * pixel_kpc - half_width_kpc
+    y_kpc = (row_idx + 0.5) * pixel_kpc - half_width_kpc
     r_kpc = np.hypot(x_kpc, y_kpc)
 
     r_min = r_min_frac * r500c_kpc
@@ -49,15 +50,16 @@ def detect_in_image(img, r500c_kpc, half_width_kpc,
     if not annulus.any() or smoothed[annulus].max() <= 0:
         return []
 
-    thr = peak_thresh_frac * smoothed[annulus].max()
-    mx = maximum_filter(smoothed, size=2 * min_sep_pix + 1)
-    is_peak = (smoothed == mx) & (smoothed > thr) & annulus
-    coords = np.argwhere(is_peak)
+    # threshold off the annulus max so the bright core can't suppress relics
+    threshold = peak_thresh_frac * smoothed[annulus].max()
+    local_max = maximum_filter(smoothed, size=2 * min_sep_pix + 1)
+    is_peak = (smoothed == local_max) & (smoothed > threshold) & annulus
+    peak_coords = np.argwhere(is_peak)
 
-    return [(float(r_kpc[i, j]), float(smoothed[i, j])) for i, j in coords]
+    return [(float(r_kpc[i, j]), float(smoothed[i, j])) for i, j in peak_coords]
 
 
-def main(args):
+def main(args: argparse.Namespace) -> None:
     with h5py.File(args.dataset, "r") as f:
         imgs = f["images"][:]                              # (N, 3, H, W)
         halo_ids = f["meta/halo_id"][:]
@@ -93,24 +95,24 @@ def main(args):
     flux_primary = np.zeros((N, 3), dtype=np.float32)
 
     for i in range(N):
-        half_w = extent_r500 * float(r500c[i])
-        for k in range(3):
-            recs = detect_in_image(
-                imgs[i, k], float(r500c[i]), half_w,
+        half_width = extent_r500 * float(r500c[i])
+        for proj in range(3):
+            peaks = detect_in_image(
+                imgs[i, proj], float(r500c[i]), half_width,
                 r_min_frac=args.r_min_frac,
                 r_max_frac=args.r_max_frac,
                 peak_thresh_frac=args.peak_thresh_frac,
                 min_sep_kpc=args.min_sep_kpc,
             )
-            if not recs:
+            if not peaks:
                 continue
-            recs.sort(key=lambda t: -t[1])
-            n_relics[i, k] = len(recs)
-            d_primary[i, k] = recs[0][0]
-            flux_primary[i, k] = recs[0][1]
-            if len(recs) > 1:
-                d_secondary[i, k] = recs[1][0]
-            d_max[i, k] = max(r for r, _ in recs)
+            peaks.sort(key=lambda rec: -rec[1])     # brightest first
+            n_relics[i, proj] = len(peaks)
+            d_primary[i, proj] = peaks[0][0]
+            flux_primary[i, proj] = peaks[0][1]
+            if len(peaks) > 1:
+                d_secondary[i, proj] = peaks[1][0]
+            d_max[i, proj] = max(r for r, _ in peaks)
         if i % 50 == 0:
             print(f"  [{i:3d}/{N}] halo {int(halo_ids[i]):>10d}  "
                   f"n={n_relics[i].tolist()}  "
