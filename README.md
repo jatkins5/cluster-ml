@@ -1318,6 +1318,40 @@ uses to improve global predictive performance (and to be less
 catastrophic on the late tail) but not to learn the discriminator the
 recent subset needs.
 
+**Phase 2 v4 — apples-to-apples 5-fold OOF: the overall aug benefit
+does NOT survive a rigorous protocol.**
+
+The Phase 2 v3 "R² all" numbers above come from a single 15% val split
+with the checkpoint selected by recent-merger R² — not comparable to the
+Comparison-table OOF R² (e.g. 0.511), and the baseline there is
+artificially *collapsed* (R² 0.13) by that weak protocol. To test
+whether augmentation actually improves overall performance on equal
+footing, `train_cnn_aug_oof.py` re-runs both conditions under **5-fold
+GroupKFold OOF with best-overall checkpoint selection** (every cluster
+predicted once while held out; synthetic samples mixed into each fold's
+*train* set only). Same data (`diffusion_radio_128_v2.h5`, `--ch 48`),
+same CFG=5 samples in TSC ∈ [0.3, 2.0] (SLURM job 3346387).
+
+| OOF R² subset | baseline | aug | Δ |
+|---|---|---|---|
+| **all (TSC 0–7.7, n=1038)** | **+0.459** | **+0.460** | **+0.001** |
+| recent ≤2 (n=774) | −1.02 | −1.21 | −0.19 |
+| very recent ≤1 (n=471) | −9.42 | −11.10 | worse |
+| late >2 (n=264) | −0.91 | −0.78 | +0.13 |
+
+Per-fold: baseline +0.453 ± 0.107, aug +0.454 ± 0.104.
+
+**This overturns the single-split "aug nearly doubles overall R²"
+result.** Under proper OOF the baseline is already healthy (+0.459, just
+below the 0.511 reference — confirming this footing is fair) and
+augmentation adds **nothing** overall (Δ = +0.001, deep inside the
+per-fold σ ≈ 0.10). The apparent doubling in Phase 2 v3 was a
+methodological artefact of the collapsed single-split baseline, not a
+real generalisation gain. Augmentation also leaves the recent regime
+strongly negative (and nudges it slightly worse). Net: **synthetic
+augmentation neither improves overall R² nor fixes the recent regime
+once measured on a comparable cross-validated protocol.**
+
 ## Cumulative Findings
 
 The Phase 0/1/2 work above eliminates synthetic augmentation as a lever
@@ -1332,16 +1366,19 @@ clusters" goal. Specifically:
 2. **Conditional diffusion works at 128px with AdaGN** — per-sample
    condition selectivity is clean at CFG=5 in the TSC ≤ 1 regime
    (gen=0.3 → ⟨NN train TSC⟩=1.10 vs flat 2.3+ without AdaGN).
-3. **Synthetic augmentation helps CNN performance generally
-   (R² all +0.12, ~4.9σ) but does NOT fix the recent-merger collapse.**
-   Both baseline and all CFG aug variants stay strongly negative on
-   the recent and very-recent subsets, and the CFG sweep proves this
-   isn't a distribution-shift artefact.
+3. **Synthetic augmentation does NOT fix the recent-merger collapse —
+   and, under a rigorous OOF protocol, does NOT improve overall R²
+   either.** The single-split experiment suggested a generic overall
+   boost (R² all +0.12, ~4.9σ), but the apples-to-apples 5-fold OOF test
+   (Phase 2 v4) shows that boost was an artefact of a collapsed
+   single-split baseline: Δ overall = +0.001 (zero within noise). Both
+   baseline and all aug variants stay strongly negative on the recent
+   and very-recent subsets at every CFG.
 
 The recent-merger TSC discrimination bottleneck is architectural or
-representational, not data-quantity. Synthetic augmentation is
-validated as a general-purpose CNN improvement (~doubling overall R²)
-but is not the solution to the original goal.
+representational, not data-quantity. Synthetic augmentation provides no
+overall improvement once measured on a comparable cross-validated
+protocol, and is not the solution to the original goal.
 
 **Pivot directions to consider** (no commitment yet):
 - **Architectural changes for the CNN side**: bigger model, attention
