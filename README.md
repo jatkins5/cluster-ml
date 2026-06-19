@@ -1264,6 +1264,16 @@ matches the diffusion model's split.
 | R² very recent (≤1) | −6.079 ± 0.479 | −7.316 ± 0.785 | −1.237 | 1.34σ | borderline |
 | **R² late (>2)** | **−4.571 ± 0.289** | **−3.347 ± 0.121** | **+1.224** | **≈ 3.95σ** | **yes, real** |
 
+> **Note — not comparable to the Comparison-table OOF R² (e.g. 0.511).**
+> These numbers come from `train_cnn_aug.py`, which (a) evaluates on a
+> single cluster-level 15% val split (seed 0), not 5-fold OOF over all
+> clusters, and (b) selects the checkpoint by **recent-merger R² (TSC ≤ 2)**,
+> not overall R² — so "R² all" here is whatever overall R² happens to be at
+> the recent-optimal epoch, not the model's best achievable overall R². It's
+> also a smaller CNN (`--ch 48`, single channel) on the diffusion-pipeline
+> data (`diffusion_radio_128_v2.h5`). The regime this experiment actually
+> targets is the **R² recent (≤2)** row.
+
 Two strong, two noise-level. The strong effects are *opposite of what
 we targeted*: aug nearly doubles overall R² (mostly via late-merger
 predictions getting less catastrophic), but doesn't fix the recent-
