@@ -1352,6 +1352,112 @@ strongly negative (and nudges it slightly worse). Net: **synthetic
 augmentation neither improves overall R² nor fixes the recent regime
 once measured on a comparable cross-validated protocol.**
 
+## Sim-vs-Obs Distributional Validation
+
+Before applying models trained on TNG-Cluster to real LoVoCCS data, we
+check whether the two samples are even distributionally compatible
+(domain-shift audit). Phase 1 compares scalar summaries; phase 2
+(Minkowski functionals, below) compares map topology.
+
+### Phase 1: X-ray luminosity CDFs (`compare_sim_obs_distributions.py`)
+
+**Data sides:**
+- Sim: `Radio_Data/TNG-Cluster_Catalog.hdf5` → `xray_0.5-2.0kev`
+  (log10 erg/s, 352 clusters, z=0), `mhalo_500c`/`mhalo_200c`.
+- Obs: `LoVoCCS_target_list - lovoccs.csv` → `lx` (0.1–2.4 keV ROSAT
+  band) + `redshift`; 107 targets with valid L_X, z = 0.03–0.12.
+
+**Method:** ECDF + QQ comparison of log L_X, two-sample KS and
+Anderson–Darling tests, LoVoCCS selection-cut (L_X > 10⁴⁴ erg/s) pass
+fraction on the sim sample, and histogram-ratio importance weights that
+tilt the sim log-L_X distribution onto the observed one. Band mismatch
+handled with a constant conversion factor ×1.65
+(L(0.1–2.4)/L(0.5–2.0) for a kT ≈ 5 keV, Z ≈ 0.3 Z☉ thermal spectrum);
+a constant factor shifts the ECDF horizontally but cannot change its
+shape, so the KS/AD conclusions are insensitive to its exact value.
+
+**Results (SLURM job 3740114, commit e41cac1):**
+
+| quantity | value |
+|---|---|
+| median L_X sim/obs (converted band) | **3.6×** |
+| KS D (all 352 sim vs 107 obs, log L_X) | 0.61, p ≈ 5e-29 |
+| AD test | p = 0.001 (floor) |
+| sim passing LoVoCCS cut L_X > 1e44 | 95.2 % (335/352) |
+| sim L_X range (converted) | 2.5e43 – 1.0e46 erg/s |
+| obs L_X range | 1.0e44 – 8.7e44 erg/s |
+
+**Interpretation:** the tilt the PI flagged ("observed sample sits at
+slightly lower masses") is confirmed in direction but is large, not
+slight: TNG-Cluster deliberately samples the most massive halos of a
+~1 Gpc box and extends ~1 dex brighter than any LoVoCCS target.
+Selection is *not* the cause (95 % of sim clusters pass the LoVoCCS
+cut).
+
+**Caveats before acting on the 3.6×:**
+1. **h-convention of the obs `lx` values is unconfirmed** — ROSAT-era
+   catalogs often quote h=1 or h=0.5; L ∝ h⁻² means up to ~2× could be
+   pure units convention. Ask the LoVoCCS side.
+2. TNG is documented as somewhat over-luminous in X-ray at fixed
+   cluster mass; aperture definitions (r500?) may also differ.
+3. The ×1.65 band factor is single-temperature (±15 % over kT 4–8 keV).
+
+**Outputs:** `sim_obs_dist.png` (ECDF/QQ/mass/reweight panels, not
+committed — *.png gitignored), `sim_obs_dist_weights.npz` (per-halo
+importance weights keyed by `halo_id`). **Do not reweight the training
+set yet**: 127/352 halos get zero weight (brighter than any LoVoCCS
+target), which would discard a third of the sample possibly over a
+units issue.
+
+**Pending:** LoVoCCS II weak-lensing masses (Fu et al. 2024, 58
+clusters) for the mass-side CDF — table not yet obtained.
+
+### Phase 2: Minkowski functionals (`minkowski_functionals.py`)
+
+Topology summary statistics of the radio maps. Each map is binarized at
+12 **area-fraction thresholds** f ∈ [0.005, 0.5] (top-f fraction of
+pixels) — this makes the excursion sets invariant to any monotonic
+intensity rescaling, essential because the sim radio normalization is
+arbitrary. Per threshold we record the 2D Minkowski functionals:
+V0 = area fraction, V1 = boundary length, V2 = Euler characteristic
+(connected components − holes), plus raw component/hole counts.
+Foreground components use 8-connectivity, background (holes)
+4-connectivity.
+
+**Result 1 — MF curves are strong physics-informed TSC features**
+(SLURM job 3742071; 5-fold GroupKFold OOF, cluster-level splits,
+pseudo-TSC target):
+
+| model on 48 MF features | per-projection R² | cluster-mean R² |
+|---|---|---|
+| Ridge | +0.301 | +0.364 |
+| XGBoost | +0.364 | **+0.454** |
+
+Beats the tabular-feature XGBoost baseline (0.333) and approaches the
+shallow CNN (0.529) from just 48 interpretable topology numbers per
+map. The gap ridge → XGBoost shows the signal is substantially
+nonlinear.
+
+**Result 2 — fragmentation correlates with dynamical age.** Strongest
+single feature: number of connected components at the f = 0.5
+threshold, Spearman ρ = +0.59 with pseudo-TSC. Relaxed (high-TSC)
+clusters show fragmented emission (many disconnected blobs); recent
+mergers show one large connected structure. Clean, interpretable
+physical result.
+
+**Sim-vs-LoTSS first look (not yet meaningful):** the 26 LoTSS 144 MHz
+cutouts of LoVoCCS clusters were resampled to the same 128px grid and
+threshold sweep (`minkowski_lotss_curves.npz`), but the comparison
+still lacks beam/noise forward-modeling (6″ beam convolution,
+per-cluster physical extent via redshift, noise injection) and LoTSS
+fields contain point sources the sims lack. Do not interpret that
+panel until forward-modeling is in place.
+
+**Outputs:** `minkowski_sim_curves.npz` (352×3×12×5 curves + labels),
+`minkowski_lotss_curves.npz`, `minkowski.png` (terciles, OOF scatter,
+overlay; gitignored). Follow-up idea: feed MF curves into the CNN as
+auxiliary inputs (see "Explicit Geometric Features" in Future Work).
+
 ## Cumulative Findings
 
 The Phase 0/1/2 work above eliminates synthetic augmentation as a lever
