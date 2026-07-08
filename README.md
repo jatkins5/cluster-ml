@@ -1458,6 +1458,60 @@ panel until forward-modeling is in place.
 overlay; gitignored). Follow-up idea: feed MF curves into the CNN as
 auxiliary inputs (see "Explicit Geometric Features" in Future Work).
 
+### Phase 2b: LoTSS forward modeling (`forward_model_lotss.py`)
+
+Turns sim radio maps into mock LoTSS observations so the Minkowski
+comparison is apples-to-apples. Per sim cluster (paired with a random
+LoTSS-covered LoVoCCS target for redshift + noise):
+
+1. **Flux anchor** — total 150 MHz power from the Cuciti et al. 2023
+   (A&A 680, A30) P150–M500 relation:
+   log₁₀(P₁₅₀/10²⁴·⁵ W/Hz) = 1.1 + 3.55·log₁₀(M₅₀₀/10¹⁴·⁹ M☉),
+   σ_raw ≈ 0.35 dex (sampled; `--no-scatter` to disable), k-corrected
+   with α = 1.2.
+2. **Geometry** — central 1 Mpc of the 512px (±4 r500) map
+   (`dataset_512.h5`) resampled to a common 128px grid (7.8 kpc/px);
+   box flux normalized to S₁₅₀(z).
+3. **Beam** — Gaussian convolution with the 9″ restoring beam of the
+   DR3 cutouts (FITS header BMAJ = BMIN = 0.0025 deg), scaled to kpc at
+   the assigned z; Jy/px → Jy/beam via the beam area.
+4. **Noise** — Gaussian at the paired target's sigma-clipped rms
+   (0.07–0.6 mJy/beam across the 17 usable cutouts).
+
+Obs side: same 1 Mpc crop/resample of each LoTSS cutout at its own
+redshift. MFs computed at k·σ thresholds (k = 2–55) on both sides.
+
+**Results (SLURM job 3745009, 350/352 mocks, 17 obs):**
+
+| MF summary | sim med | obs med | KS D | p |
+|---|---|---|---|---|
+| ncomp @ 3σ | 53.5 | 49 | 0.26 | **0.19 (consistent)** |
+| perimeter @ 3σ | 0.0413 | 0.0411 | 0.36 | 0.02 |
+| area @ 3σ | 0.014 | 0.040 | 0.41 | 0.005 |
+| area @ 8σ | 0 | 0.015 | 0.58 | 1e-5 |
+| ncomp @ 8σ | 0 | 8 | 0.54 | 6e-5 |
+
+**Interpretation:** low-threshold (3σ) topology already agrees
+surprisingly well — fragmentation is statistically indistinguishable.
+The strong divergence above 8σ is the expected signature of the
+**point-source (AGN) population absent from the mocks**: obs maps keep
+~8 compact high-S/N components each where mocks have none. The area@3σ
+excess in obs likely shares that origin plus flux-anchor uncertainty.
+
+**MF→TSC survives observational degradation at ~57 % strength:**
+cluster-mean OOF R² = **+0.258** on mock-observed maps vs +0.454 on
+clean maps (XGBoost, 5-fold GroupKFold). A real-data application is
+plausible, but beam + noise costs roughly half the signal.
+
+**Not yet modeled:** point sources (inject into mocks or
+source-subtract obs — required before interpreting k ≥ 8σ), uv-plane
+large-scale flux loss, sim native-pixel floor (11–30 kpc can exceed
+the beam at low z).
+
+**Outputs:** `forward_lotss_mfs.npz` (mock + obs MF curves, pairing
+metadata), `forward_lotss.png`, `forward_examples.png` (obs-vs-mock
+gallery via `plot_forward_examples.py`; both gitignored).
+
 ## Cumulative Findings
 
 The Phase 0/1/2 work above eliminates synthetic augmentation as a lever
