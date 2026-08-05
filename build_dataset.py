@@ -68,21 +68,26 @@ def project_image(pos, w, center, half_width, img_size):
     return images
 
 
-def load_catalog(catalog_path):
-    """Return dicts halo_id -> r500c_kpc and halo_id -> origID."""
+def load_catalog(catalog_path, radius_field="r500c"):
+    """Return dict halo_id -> radius_kpc for the requested radius field."""
     with h5py.File(catalog_path, "r") as f:
         halo_ids = f["haloID"][:]
-        r500c    = f["r500c"][:]   # Mpc
-    return {int(hid): float(r) * 1000.0 for hid, r in zip(halo_ids, r500c)}
+        radii    = f[radius_field][:]   # Mpc
+    return {int(hid): float(r) * 1000.0 for hid, r in zip(halo_ids, radii)}
 
 
-def main(img_size, extent_r500, output_path):
+def main(img_size, extent_r500, output_path, extent_r200=None):
     radio_dir    = "Radio_Data"
     catalog_path = os.path.join(radio_dir, "TNG-Cluster_Catalog.hdf5")
     pkl_path     = "feats_labels_dict_tngcluster.pkl"
 
     print("Loading catalog and labels...")
-    r500c_map = load_catalog(catalog_path)
+    if extent_r200 is not None:
+        r500c_map = load_catalog(catalog_path, "r200c")
+        extent_r500 = extent_r200
+        print(f"Using R200c-scaled FOV: +-{extent_r200} R200c")
+    else:
+        r500c_map = load_catalog(catalog_path)
 
     with open(pkl_path, "rb") as f:
         pkl = pickle.load(f)
@@ -222,8 +227,11 @@ if __name__ == "__main__":
                         help=f"Image resolution in pixels (default: {IMG_SIZE})")
     parser.add_argument("--extent-r500", type=float, default=EXTENT_R500,
                         help=f"Image half-width in units of R500c (default: {EXTENT_R500})")
+    parser.add_argument("--extent-r200", type=float, default=None,
+                        help="Image half-width in units of R200c; overrides "
+                             "--extent-r500 (use to match the CAMELS FOV)")
     parser.add_argument("--output",      type=str,   default="dataset.h5",
                         help="Output HDF5 file path (default: dataset.h5)")
     args = parser.parse_args()
 
-    main(args.img_size, args.extent_r500, args.output)
+    main(args.img_size, args.extent_r500, args.output, args.extent_r200)

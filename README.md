@@ -1512,6 +1512,86 @@ the beam at low z).
 metadata), `forward_lotss.png`, `forward_examples.png` (obs-vs-mock
 gallery via `plot_forward_examples.py`; both gitignored).
 
+## CAMELS Cross-Simulation Experiment (negative result)
+
+Chuiyang generated synthetic radio observations for the CAMELS GZ28
+zoom suite (768 zooms, `~/data/Chuiyang/Camels/`, snapshot 90 = z≈0):
+`Radio/Coordinates` (physical kpc, halo-centered) + `Radio/Power`, plus
+a per-zoom FoF mass history (91 snapshots, `M200_Msun`, `Redshift`,
+`passes_contamination_cut`). CAMELS has no merger trees, so TSC must be
+approximated from sudden M200 growth.
+
+### Label derivation (`camels_labels.py`)
+
+A jump is only counted between **truly consecutive** snapshots where
+both endpoints pass the contamination cut — gaps and the
+least-contaminated fallback entries otherwise manufacture spurious
+jumps. Each zoom uses its **own cosmology** (CAMELS varies Ω₀ =
+0.10–0.50, h = 0.47–0.87, read from its group catalog header) to
+convert redshifts to ages.
+
+Two problems appeared immediately:
+
+1. **Most zooms are not clusters.** log₁₀ M200 spans 9.7–15.7 (median
+   13.9). Only 341/768 exceed 10¹⁴; 140 exceed 10¹⁴·⁵.
+2. **A 10 % raw jump is not a major merger.** At that threshold the
+   detector fires a median of **32 times per history** (~90 snapshots)
+   — ordinary accretion, not mergers. Because fractional growth per
+   snapshot is much larger at high z, the resulting "TSC" skews old
+   (median 4.1 Gyr vs TNG's 1.0) and tracks formation time more than
+   last merger. Raising the threshold to the physically motivated
+   ~0.33 (a 1:3 merger adds ≈33 % mass) makes it worse: median 9.0 Gyr,
+   KS D = 0.78 vs TNG.
+
+Correcting for snapshot spacing (fractional growth **per Gyr**) fixes
+the distribution: threshold 0.10/Gyr with M200 > 10¹⁴ gives median TSC
+1.51 Gyr and **KS D = 0.169** against TNG's merger-catalog TSC (median
+1.01), the closest of all 28 combinations swept. That is the label used
+below. Note what it actually measures: **time since the halo last
+exceeded 0.1/Gyr fractional growth** — a dynamical-state proxy, not a
+major-merger TSC. The mass cut barely shifts the TSC distribution
+(KS 0.169 → 0.173 across cuts), so it selects the cluster regime rather
+than fixing the label.
+
+### Results (`train_cnn_camels.py`, jobs 4496225 / 4496975 / 4497114)
+
+Both datasets rebuilt on a common **±2 R200** field of view (CAMELS
+cutouts stop at 2 R200; `build_dataset.py --extent-r200` added for the
+TNG side) and per-image standardized, since the two sims normalize
+radio weights differently (raw pixel mean 6.8 vs 14.1). Evaluation is
+5-fold GroupKFold OOF over **held-out TNG clusters only** — TNG has the
+trustworthy labels and matches the real target — with CAMELS mixed into
+training folds only, mirroring the augmentation protocol.
+
+| condition | OOF R² all | per-fold |
+|---|---|---|
+| **TNG only (baseline)** | **+0.435** | +0.416 ± 0.104 |
+| TNG + CAMELS pooled | +0.416 | +0.399 ± 0.093 |
+| CAMELS pretrain → TNG fine-tune | +0.402 | +0.381 ± 0.118 |
+| **CAMELS only → TNG (transfer)** | **−0.437** | — |
+| CAMELS → held-out CAMELS (same-domain) | +0.151 | optimistic¹ |
+
+¹ checkpoint selected on that same split, so the true same-domain
+number is lower.
+
+**Adding CAMELS does not help** (Δ = −0.019 pooled, −0.033 fine-tuned;
+both inside the per-fold σ ≈ 0.10). The transfer test explains why: a
+CAMELS-trained model scores **−0.44 on TNG, worse than predicting the
+mean**, reproduced independently in the fine-tune run's pre-tuning
+check (−0.4373). With no transferable signal, pooling and fine-tuning
+are necessarily flat — fine-tuning lands lowest because it must undo
+the pretrained weights.
+
+The same-domain score disambiguates the cause: the proxy label is
+**weakly learnable within CAMELS** (+0.151, vs +0.435 for TNG's real
+labels) but does not survive the domain gap. So the bottleneck is the
+label, not the data volume — 332 extra cluster-scale halos changed
+nothing.
+
+**What would make CAMELS usable:** a label built from mass ratios of
+distinct FoF halos (a real merger definition) rather than mass jumps of
+a single halo. Relayed to Chuiyang. The images themselves are fine.
+
 ## Cumulative Findings
 
 The Phase 0/1/2 work above eliminates synthetic augmentation as a lever
