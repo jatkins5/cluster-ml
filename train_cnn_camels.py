@@ -51,17 +51,33 @@ def load_tng(data_path, labels_path, label_key):
     return samples, np.repeat(lab[ok], 3), np.repeat(halo[ok], 3)
 
 
-def load_camels(path, tsc_max, require_detected):
+def load_camels(path, tsc_max, require_detected, label_path=None,
+                m200_min=None, tsc_clip=None):
     with h5py.File(path, "r") as f:
         imgs = f["images"][:]
         tsc = f["labels/merger_tsc"][:]
         detected = f["labels/detected"][:]
         zoom = f["meta/zoom_id"][:]
+        m200 = f["meta/m200_msun"][:]
+    if label_path is not None:
+        with h5py.File(label_path, "r") as f:
+            sub = dict(zip(f["zoom_id"][:], f["tsc_proxy"][:]))
+        tsc = np.array([sub.get(int(z), np.nan) for z in zoom])
+        detected = np.isfinite(tsc)
+        print(f"CAMELS labels from {label_path}: "
+              f"{detected.sum()}/{len(tsc)} zooms matched")
     keep = np.isfinite(tsc) & (imgs.sum(axis=(1, 2, 3)) > 0)
     if require_detected:
         keep &= detected
     if tsc_max is not None:
         keep &= tsc <= tsc_max
+    if m200_min is not None:
+        keep &= m200 >= m200_min
+        print(f"CAMELS mass cut M200 >= {m200_min:.2e}: {keep.sum()} kept")
+    if tsc_clip is not None:
+        # relic emission fades long before the tail values, so they are not
+        # distinguishable from one another but would dominate a squared loss
+        tsc = np.minimum(tsc, tsc_clip)
     imgs = imgs[keep]
     samples = imgs.reshape(-1, 1, *imgs.shape[2:]).astype(np.float32)
     return samples, np.repeat(tsc[keep], 3).astype(np.float32), \
@@ -145,7 +161,8 @@ def main(args):
     cam_imgs = cam_labels = cam_zoom = None
     if args.camels:
         cam_imgs, cam_labels, cam_zoom = load_camels(
-            args.camels, args.camels_tsc_max, args.require_detected)
+            args.camels, args.camels_tsc_max, args.require_detected,
+            args.camels_labels, args.camels_m200_min, args.camels_tsc_clip)
         print(f"CAMELS: {len(cam_imgs)} projections from "
               f"{len(np.unique(cam_zoom))} zooms, "
               f"TSC [{cam_labels.min():.2f}, {cam_labels.max():.2f}]")
@@ -245,6 +262,12 @@ if __name__ == "__main__":
                    help="drop CAMELS zooms above this TSC (match TNG range)")
     p.add_argument("--require-detected", action="store_true",
                    help="use only CAMELS zooms with a detected mass jump")
+    p.add_argument("--camels-labels", default=None,
+                   help="HDF5 of zoom_id/tsc_proxy replacing merger_tsc")
+    p.add_argument("--camels-m200-min", type=float, default=None,
+                   help="drop CAMELS zooms below this M200 in Msun")
+    p.add_argument("--camels-tsc-clip", type=float, default=None,
+                   help="clip (not drop) CAMELS TSC at this many Gyr")
     p.add_argument("--no-standardize", action="store_true")
     p.add_argument("--mode", default="pooled",
                    choices=["pooled", "transfer", "finetune"],

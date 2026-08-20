@@ -143,6 +143,13 @@ def _wrap(d, box):
 
 NTOP = 3
 
+# Ranking companions by mass and keeping the top NTOP loses the case that
+# matters: with a threshold as low as 0.02 the mass bar is easy and the
+# radius is the binding constraint, so a lighter companion inside R200 is
+# the one that counts even when heavier ones sit outside. `min_sep` records
+# the closest companion above each threshold over *all* subhaloes.
+THRESHOLDS = (0.02, 0.05, 0.10, 0.20, 1.0 / 3.0)
+
 
 def read_catalog(snap):
     """Load the group/subhalo tables for one snapshot.
@@ -204,6 +211,9 @@ def snapshot_features(snap, targets_pos, box, match_kpc):
     out = dict(
         mu=np.full((n, NTOP), np.nan),      # companion/primary subhalo mass
         sep=np.full((n, NTOP), np.nan),     # separation / R200
+        # closest companion above each THRESHOLDS entry, in R200; inf when
+        # none qualifies, which compares False against any radius cut
+        min_sep=np.full((n, len(THRESHOLDS)), np.inf),
         m200=np.full(n, np.nan),
         r200=np.full(n, np.nan),
         nsub=np.full(n, np.nan),            # companions with mu>0.01 in R200
@@ -250,6 +260,11 @@ def snapshot_features(snap, targets_pos, box, match_kpc):
             for k in range(min(NTOP, len(comp))):
                 out["mu"][i, k] = ratios[k]
                 out["sep"][i, k] = dc[k] / r200
+            sep_r200 = dc / r200
+            for t, thr in enumerate(THRESHOLDS):
+                q = ratios > thr
+                if q.any():
+                    out["min_sep"][i, t] = sep_r200[q].min()
 
         # most massive *other* FoF group within match_kpc (pre-infall pair)
         other = near[near != g]
@@ -340,6 +355,7 @@ def stage_combine(args):
     n, ns = len(halo_id), len(snaps)
     hist = dict(mu=np.full((n, ns, NTOP), np.nan),
                 sep=np.full((n, ns, NTOP), np.nan),
+                min_sep=np.full((n, ns, len(THRESHOLDS)), np.inf),
                 m200=np.full((n, ns), np.nan),
                 r200=np.full((n, ns), np.nan),
                 nsub=np.full((n, ns), np.nan),
@@ -360,7 +376,7 @@ def stage_combine(args):
 
     np.savez("merger_proxy_validation.npz", halo_id=halo_id, tsc_truth=tsc,
              snaps=np.array(snaps), t_of_snap=t_of_snap, t0=t0, span=span,
-             m200_99=m200_99, **hist)
+             m200_99=m200_99, thresholds=np.array(THRESHOLDS), **hist)
     print("saved -> merger_proxy_validation.npz")
     search_definitions(hist, tsc, t_of_snap, t0, span)
 
@@ -372,17 +388,15 @@ def search_definitions(hist, tsc, t_of_snap, t0, span):
     candidate rule is "a companion above mass ratio `thr` was inside
     `rad` x R200" -- the last snapshot satisfying it sets the proxy TSC.
     """
-    mu = hist["mu"]
-    sep = hist["sep"]
-    n, ns, _ = mu.shape
+    min_sep = hist["min_sep"]
+    n, ns, _ = min_sep.shape
     recent = tsc <= 2.0
     print(f"\n{'thr':>7} {'rad':>6} {'n uncens':>9} {'med proxy':>10} "
           f"{'rho':>7} {'rho(unc)':>9} {'AUC<2Gyr':>9}")
     best = None
-    for thr in (0.02, 0.05, 0.10, 0.20, 1.0 / 3.0):
+    for t, thr in enumerate(THRESHOLDS):
         for rad in (0.5, 1.0, 2.0, np.inf):
-            hit = (mu > thr) & (sep < rad)          # (n, ns, NTOP)
-            any_hit = hit.any(axis=2)               # (n, ns)
+            any_hit = min_sep[:, :, t] < rad        # (n, ns)
             proxy = np.full(n, np.nan)
             for i in range(n):
                 w = np.where(any_hit[i])[0]

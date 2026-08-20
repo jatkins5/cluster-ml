@@ -11,4 +11,4 @@
 
 cd /oscar/data/idellant/cluster-ml
 ./venv/bin/python -u validate_merger_proxy.py --stage snapshot \
-    --snap ${SLURM_ARRAY_TASK_ID}
+    --snap ${SLURM_ARRAY_TASK_ID} ${FORCE:-}

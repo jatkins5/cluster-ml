@@ -23,7 +23,9 @@ def main():
     halo_id, tsc_truth = d["halo_id"], d["tsc_truth"]
     t_of_snap, t0, span = d["t_of_snap"], float(d["t0"]), float(d["span"])
 
-    hit = ((d["mu"] > THR) & (d["sep"] < RAD)).any(axis=2)   # (n, nsnap)
+    thresholds = list(d["thresholds"])
+    t = thresholds.index(THR)
+    hit = d["min_sep"][:, :, t] < RAD                        # (n, nsnap)
     n = len(halo_id)
     proxy = np.full(n, np.nan)
     for i in range(n):
