@@ -38,11 +38,13 @@ def augment(img):
 # ---------- dataset ----------
 
 class RadioDataset(Dataset):
-    def __init__(self, images, labels, train=False):
+    def __init__(self, images, labels, train=False, weights=None):
         # images: (N, H, W) float32
         self.images = images
         self.labels = labels
         self.train  = train
+        self.weights = (np.ones(len(images), dtype=np.float32)
+                        if weights is None else weights.astype(np.float32))
 
     def __len__(self):
         return len(self.images)
@@ -53,7 +55,8 @@ class RadioDataset(Dataset):
             img = augment(img)
         img = torch.tensor(img[None], dtype=torch.float32)  # (1, H, W)
         label = torch.tensor(self.labels[idx], dtype=torch.float32)
-        return img, label
+        weight = torch.tensor(self.weights[idx], dtype=torch.float32)
+        return img, label, weight
 
 
 # ---------- model ----------
@@ -108,11 +111,12 @@ class ShallowCNN(nn.Module):
 def train_epoch(model, loader, optimizer, criterion, device):
     model.train()
     total_loss = 0.0
-    for imgs, labels in loader:
+    for imgs, labels, weights in loader:
         imgs, labels = imgs.to(device), labels.to(device)
+        weights = weights.to(device)
         optimizer.zero_grad()
         preds = model(imgs)
-        loss  = criterion(preds, labels)
+        loss  = (criterion(preds, labels) * weights).sum() / weights.sum()
         loss.backward()
         optimizer.step()
         total_loss += loss.item() * len(imgs)
@@ -123,7 +127,7 @@ def train_epoch(model, loader, optimizer, criterion, device):
 def evaluate(model, loader, device):
     model.eval()
     all_preds, all_labels = [], []
-    for imgs, labels in loader:
+    for imgs, labels, _ in loader:
         preds = model(imgs.to(device)).cpu().numpy()
         all_preds.append(preds)
         all_labels.append(labels.numpy())
@@ -132,9 +136,18 @@ def evaluate(model, loader, device):
     return preds, labels
 
 
-def run_cv(images, labels, groups, n_folds, n_epochs, batch_size, seed, huber_delta=0.5, img_size=128):
+def run_cv(images, labels, groups, n_folds, n_epochs, batch_size, seed, huber_delta=0.5, img_size=128,
+           weights=None, weight_loss=True):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
+
+    weighted = weights is not None
+    if not weighted:
+        weights = np.ones(len(labels), dtype=np.float32)
+    # Reporting the weighted score for an unweighted model is the ablation
+    # that decides whether the weights earn their keep: without it, a weighted
+    # model scoring well on the weighted metric proves nothing.
+    train_w = weights if weight_loss else np.ones_like(weights)
 
     gkf = GroupKFold(n_splits=n_folds)
     fold_r2, fold_mae, fold_rmse = [], [], []
@@ -150,7 +163,8 @@ def run_cv(images, labels, groups, n_folds, n_epochs, batch_size, seed, huber_de
         imgs_tr = (images[train_idx] - tr_mean) / tr_std
         imgs_val = (images[val_idx]  - tr_mean) / tr_std
 
-        train_ds = RadioDataset(imgs_tr, labels[train_idx], train=True)
+        train_ds = RadioDataset(imgs_tr, labels[train_idx], train=True,
+                                weights=train_w[train_idx])
         val_ds   = RadioDataset(imgs_val, labels[val_idx],  train=False)
         train_dl = DataLoader(train_ds, batch_size=batch_size, shuffle=True,  num_workers=2, pin_memory=True)
         val_dl   = DataLoader(val_ds,   batch_size=batch_size, shuffle=False, num_workers=2, pin_memory=True)
@@ -158,14 +172,19 @@ def run_cv(images, labels, groups, n_folds, n_epochs, batch_size, seed, huber_de
         model     = ShallowCNN(img_size=img_size).to(device)
         optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4, weight_decay=1e-3)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=n_epochs)
-        criterion = nn.HuberLoss(delta=huber_delta)
+        criterion = nn.HuberLoss(delta=huber_delta, reduction="none")
+
+        # Selection follows the same distribution the loss targets: with
+        # importance weights on, an unweighted early-stopping criterion would
+        # pull the model back toward the sim distribution it is meant to leave.
+        w_val = train_w[val_idx]
 
         best_rmse, best_preds = np.inf, None
         for epoch in range(n_epochs):
             train_loss = train_epoch(model, train_dl, optimizer, criterion, device)
             scheduler.step()
             preds, true = evaluate(model, val_dl, device)
-            rmse = root_mean_squared_error(true, preds)
+            rmse = root_mean_squared_error(true, preds, sample_weight=w_val)
             if rmse < best_rmse:
                 best_rmse  = rmse
                 best_preds = preds.copy()
@@ -193,10 +212,15 @@ def run_cv(images, labels, groups, n_folds, n_epochs, batch_size, seed, huber_de
     print(f"  MAE : {np.mean(fold_mae):.3f} ± {np.std(fold_mae):.3f}")
     print(f"  RMSE: {np.mean(fold_rmse):.3f} ± {np.std(fold_rmse):.3f}")
     print(f"  OOF R²: {r2_score(labels, oof_preds):.3f}")
+    if weighted:
+        print(f"  OOF R² (weighted, obs-like sample): "
+              f"{r2_score(labels, oof_preds, sample_weight=weights):.3f}")
+    return oof_preds
 
 
 def main(tau, n_folds, n_epochs, batch_size, seed, pseudo_tsc=False,
-         merger_tsc=False, huber_delta=0.5, tsc_max=None, dataset_path="dataset.h5"):
+         merger_tsc=False, huber_delta=0.5, tsc_max=None, dataset_path="dataset.h5",
+         sample_weights=None, weights_eval_only=False):
 
 
     print("Loading dataset...")
@@ -214,12 +238,14 @@ def main(tau, n_folds, n_epochs, batch_size, seed, pseudo_tsc=False,
             valid = ~np.isnan(all_labels)
             raw_images = raw_images[valid]
             all_labels = all_labels[valid]
+            halo_ids = halo_ids[valid]
             print(f"Using merger-catalog TSC label ({valid.sum()}/{len(valid)} clusters, "
                   f"{(~valid).sum()} dropped — no recorded collision)")
             if tsc_max is not None:
                 keep = all_labels <= tsc_max
                 raw_images = raw_images[keep]
                 all_labels = all_labels[keep]
+                halo_ids = halo_ids[keep]
                 print(f"Filtered to TSC <= {tsc_max} Gyr: {keep.sum()} clusters")
         elif pseudo_tsc:
             all_labels = f["labels/pseudo_tsc"][:]
@@ -240,10 +266,26 @@ def main(tau, n_folds, n_epochs, batch_size, seed, pseudo_tsc=False,
 
     print(f"Samples: {len(images)}  (clusters={N}, projections={P})")
     print(f"Labels:  min={labels.min():.3f}  max={labels.max():.3f}  mean={labels.mean():.3f}")
+
+    sw = None
+    if sample_weights is not None:
+        wz = np.load(sample_weights)
+        wmap = dict(zip(wz["halo_id"], wz["weight"]))
+        missing = [h for h in halo_ids if h not in wmap]
+        if missing:
+            raise SystemExit(f"{len(missing)} halos have no weight in "
+                             f"{sample_weights}; refusing to guess")
+        w_cluster = np.array([wmap[h] for h in halo_ids], dtype=np.float32)
+        w_cluster *= len(w_cluster) / w_cluster.sum()
+        sw = np.repeat(w_cluster, P)
+        eff_n = w_cluster.sum() ** 2 / (w_cluster ** 2).sum()
+        print(f"Weights: {sample_weights}  min={w_cluster.min():.3f}  "
+              f"max={w_cluster.max():.3f}  effective N={eff_n:.1f}/{len(w_cluster)}")
     print()
 
     print(f"Huber delta: {huber_delta}  Image size: {W}×{W}")
-    run_cv(images, labels, groups, n_folds, n_epochs, batch_size, seed, huber_delta, img_size=W)
+    run_cv(images, labels, groups, n_folds, n_epochs, batch_size, seed, huber_delta,
+           img_size=W, weights=sw, weight_loss=not weights_eval_only)
 
 
 if __name__ == "__main__":
@@ -264,7 +306,15 @@ if __name__ == "__main__":
                         help="Keep only clusters with TSC <= this value (Gyr)")
     parser.add_argument("--dataset", type=str, default="dataset.h5",
                         help="Path to dataset HDF5 file (default: dataset.h5)")
+    parser.add_argument("--weights-eval-only", action="store_true",
+                        help="load weights but train unweighted, so the "
+                             "weighted score can be compared against a "
+                             "weighted-training run")
+    parser.add_argument("--sample-weights", type=str, default=None,
+                        help="npz with halo_id/weight arrays (from "
+                             "compare_sim_obs_distributions.py) to tilt the "
+                             "training loss toward the observed L_X distribution")
     args = parser.parse_args()
     main(args.tau, args.folds, args.epochs, args.batch_size, args.seed,
          args.pseudo_tsc, args.merger_tsc, args.huber_delta, args.tsc_max,
-         args.dataset)
+         args.dataset, args.sample_weights, args.weights_eval_only)

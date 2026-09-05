@@ -59,9 +59,25 @@ def qq(a, b, n=100):
     return np.quantile(a, q), np.quantile(b, q)
 
 
-def importance_weights(sim_vals, obs_vals, n_bins=15):
-    """Histogram-ratio weights so weighted sim log-L_X matches obs."""
+def importance_weights(sim_vals, obs_vals, n_bins=15, shape_only=False,
+                       w_max=5.0, w_floor=0.05):
+    """Histogram-ratio weights so weighted sim log-L_X matches obs.
+
+    With `shape_only`, the median sim/obs offset is removed first and only
+    the *shape* of the distribution is matched. The h-convention of the
+    observed lx column is unresolved and L propto h^-2 is a global factor,
+    so absolute matching risks discarding a third of the sample over a
+    possible units error; the shape comparison is invariant to it.
+
+    Weights are floored and capped rather than left as raw ratios: a zero
+    weight silently drops a cluster from training, and an unbounded ratio
+    lets a couple of rare-bin clusters dominate the gradient.
+    """
     log_sim, log_obs = np.log10(sim_vals), np.log10(obs_vals)
+    offset = 0.0
+    if shape_only:
+        offset = np.median(log_sim) - np.median(log_obs)
+        log_sim = log_sim - offset
     lo = min(log_sim.min(), log_obs.min()) - 1e-6
     hi = max(log_sim.max(), log_obs.max()) + 1e-6
     edges = np.linspace(lo, hi, n_bins + 1)
@@ -71,9 +87,11 @@ def importance_weights(sim_vals, obs_vals, n_bins=15):
     with np.errstate(divide="ignore", invalid="ignore"):
         ratio = np.where(p_sim > 0, p_obs / p_sim, 0.0)
     w = ratio[idx]
+    if shape_only:
+        w = np.clip(w, w_floor, w_max)
     if w.sum() > 0:
         w *= len(w) / w.sum()
-    return w
+    return w, offset
 
 
 def main():
@@ -81,6 +99,10 @@ def main():
     ap.add_argument("--catalog", default="Radio_Data/TNG-Cluster_Catalog.hdf5")
     ap.add_argument("--obs-csv", default="LoVoCCS_target_list - lovoccs.csv")
     ap.add_argument("--out-prefix", default="sim_obs_dist")
+    ap.add_argument("--shape-only", action="store_true",
+                    help="remove the median sim/obs offset before weighting, "
+                         "so the weights are immune to an h-convention error "
+                         "in the observed lx column")
     args = ap.parse_args()
 
     obs = load_obs(args.obs_csv)
@@ -119,13 +141,18 @@ def main():
         print(f"  AD stat={ad.statistic:.2f} p={ad.pvalue:.3f}")
 
     # importance weights: match cut sim sample to obs
-    weights = importance_weights(sim_lx_conv, obs_lx)
+    weights, offset = importance_weights(sim_lx_conv, obs_lx,
+                                         shape_only=args.shape_only)
     np.savez(f"{args.out_prefix}_weights.npz",
              halo_id=halo_id, weight=weights,
-             lx_converted=sim_lx_conv, band_factor=BAND_FACTOR)
+             lx_converted=sim_lx_conv, band_factor=BAND_FACTOR,
+             shape_only=args.shape_only, log_offset=offset)
     print(f"\nweights saved -> {args.out_prefix}_weights.npz  "
           f"(min {weights.min():.2f}, max {weights.max():.2f}, "
           f"zero-weight halos: {(weights == 0).sum()})")
+    if args.shape_only:
+        print(f"  shape-only: removed median log10 offset {offset:.3f} dex "
+              f"(x{10 ** offset:.2f}) before matching")
 
     # ---- figure ----
     fig, axes = plt.subplots(2, 2, figsize=(11, 9))
@@ -163,18 +190,22 @@ def main():
     ax.set_title("Sim halo mass ECDF (obs WL masses pending)")
 
     ax = axes[1, 1]
-    log_lx = np.log10(sim_lx_conv)
-    bins = np.linspace(log_lx.min(), log_lx.max(), 20)
+    log_lx = np.log10(sim_lx_conv) - offset
+    lo = min(log_lx.min(), np.log10(obs_lx).min())
+    hi = max(log_lx.max(), np.log10(obs_lx).max())
+    bins = np.linspace(lo, hi, 20)
     ax.hist(log_lx, bins=bins, alpha=0.5, density=True, label="sim unweighted")
     ax.hist(log_lx, bins=bins, weights=weights, alpha=0.5, density=True,
             label="sim reweighted")
-    xs, _ = ecdf(np.log10(obs_lx))
     ax.hist(np.log10(obs_lx), bins=bins, histtype="step", density=True,
             color="C1", lw=2, label="LoVoCCS")
-    ax.set_xlabel("log10 L_X [erg/s] (converted)")
+    ax.set_xlabel("log10 L_X [erg/s]"
+                  + (" (offset removed)" if args.shape_only else " (converted)"))
     ax.set_ylabel("density")
     ax.legend(fontsize=8)
-    ax.set_title("Importance reweighting check")
+    ax.set_title("Importance reweighting check"
+                 + (f"  (shape only, -{offset:.2f} dex)" if args.shape_only
+                    else ""))
 
     fig.tight_layout()
     fig.savefig(f"{args.out_prefix}.png", dpi=150)
