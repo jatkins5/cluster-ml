@@ -198,8 +198,9 @@ def run_cv(images, labels, n_folds, n_epochs, batch_size, seed, huber_delta=0.5)
 
 
 def main(tau, n_folds, n_epochs, batch_size, seed, pseudo_tsc=False,
-         merger_tsc=False, huber_delta=0.5, log_transform=False):
-    dataset_path = "dataset.h5"
+         merger_tsc=False, huber_delta=0.5, log_transform=False,
+         dataset="dataset.h5"):
+    dataset_path = dataset
 
     print("Loading dataset...")
     with h5py.File(dataset_path, "r") as f:
@@ -259,6 +260,9 @@ if __name__ == "__main__":
                         help="Delta for Huber loss (default: 0.5)")
     parser.add_argument("--log-transform", action="store_true",
                         help="Apply log1p transform to labels")
+    parser.add_argument("--dataset", type=str, default="dataset.h5",
+                        help="HDF5 dataset to train on (default: dataset.h5)")
     args = parser.parse_args()
     main(args.tau, args.folds, args.epochs, args.batch_size, args.seed,
-         args.pseudo_tsc, args.merger_tsc, args.huber_delta, args.log_transform)
+         args.pseudo_tsc, args.merger_tsc, args.huber_delta, args.log_transform,
+         args.dataset)

@@ -17,6 +17,8 @@ Usage:
 """
 
 import argparse
+import glob
+import re
 import os
 import pickle
 
@@ -68,6 +70,32 @@ def project_image(pos, w, center, half_width, img_size):
     return images
 
 
+def load_group_centers(gc_dir):
+    """halo_id -> (centre_kpc, box_kpc) from the snap99 FOF catalogue.
+
+    Group arrays are concatenated across chunks in order, so the global group
+    index is the FOF halo id. Verified exactly: groupcat Group_R_Crit500
+    divided by the catalogue's r500c is 1.000 across the 5-95th percentile.
+    Coordinates are ckpc/h, matching Radio_generation.py's pos = Coords * a/h0.
+    """
+    files = sorted(glob.glob(os.path.join(gc_dir, "fof_subhalo_tab_*.hdf5")),
+                   key=lambda p: int(re.search(r"\.(\d+)\.hdf5$", p).group(1)))
+    if not files:
+        raise SystemExit(f"no FOF catalogue chunks under {gc_dir}")
+    pos, box, hpar, a = [], None, None, None
+    for fn in files:
+        with h5py.File(fn, "r") as f:
+            if box is None:
+                box = float(f["Header"].attrs["BoxSize"])
+                hpar = float(f["Header"].attrs["HubbleParam"])
+                a = float(f["Header"].attrs["Time"])
+            if f["Header"].attrs["Ngroups_ThisFile"] == 0:
+                continue
+            pos.append(f["Group/GroupPos"][:])
+    conv = a / hpar
+    return np.concatenate(pos) * conv, box * conv
+
+
 def load_catalog(catalog_path, radius_field="r500c"):
     """Return dict halo_id -> radius_kpc for the requested radius field."""
     with h5py.File(catalog_path, "r") as f:
@@ -76,7 +104,8 @@ def load_catalog(catalog_path, radius_field="r500c"):
     return {int(hid): float(r) * 1000.0 for hid, r in zip(halo_ids, radii)}
 
 
-def main(img_size, extent_r500, output_path, extent_r200=None):
+def main(img_size, extent_r500, output_path, extent_r200=None,
+         center_mode="grouppos", groupcat=None):
     radio_dir    = "Radio_Data"
     catalog_path = os.path.join(radio_dir, "TNG-Cluster_Catalog.hdf5")
     pkl_path     = "feats_labels_dict_tngcluster.pkl"
@@ -88,6 +117,12 @@ def main(img_size, extent_r500, output_path, extent_r200=None):
         print(f"Using R200c-scaled FOV: +-{extent_r200} R200c")
     else:
         r500c_map = load_catalog(catalog_path)
+
+    group_pos = box_kpc = None
+    if center_mode == "grouppos":
+        print(f"Loading halo centres from {groupcat} ...")
+        group_pos, box_kpc = load_group_centers(groupcat)
+        print(f"  {len(group_pos)} groups, box {box_kpc:.4g} kpc")
 
     with open(pkl_path, "rb") as f:
         pkl = pickle.load(f)
@@ -135,9 +170,27 @@ def main(img_size, extent_r500, output_path, extent_r200=None):
         pos    = data["pos"]   # (N_p, 3) physical kpc
         w      = data["w"]     # (N_p,)
 
-        # cluster center: weight-averaged position
-        w_sum  = w.sum()
-        center = (pos * w[:, None]).sum(axis=0) / w_sum if w_sum > 0 else pos.mean(axis=0)
+        # Cluster centre. The weight-averaged position is NOT a halo centre:
+        # one gas cell carries a median 29.5% of the total linear weight, so
+        # the centroid tracks the brightest shock cell and lands a median
+        # 0.70 r500 (836 kpc) from the halo, with 33% of clusters beyond
+        # 1 r500 and 1.1% outside the image entirely. It also correlates with
+        # the label (Spearman +0.19 vs pseudo-TSC), so centring on it removes
+        # a real merger clock from every image. Default to GroupPos.
+        if center_mode == "grouppos":
+            if halo_id >= len(group_pos):
+                raise SystemExit(f"halo {halo_id} is beyond the {len(group_pos)} "
+                                 f"groups in the catalogue; refusing to guess")
+            center = group_pos[halo_id]
+            # Unwrap the periodic box, otherwise a halo straddling an edge
+            # gets shifted by a full box length.
+            pos = pos - center
+            pos -= box_kpc * np.round(pos / box_kpc)
+            center = np.zeros(3)
+        else:
+            w_sum  = w.sum()
+            center = ((pos * w[:, None]).sum(axis=0) / w_sum if w_sum > 0
+                      else pos.mean(axis=0))
 
         # image half-width in kpc
         r500c_kpc  = r500c_map[halo_id]
@@ -177,6 +230,7 @@ def main(img_size, extent_r500, output_path, extent_r200=None):
         f.attrs["img_size"]        = img_size
         f.attrs["extent_r500"]     = extent_r500
         f.attrs["snapshot"]        = SNAP
+        f.attrs["center_mode"]     = center_mode
         f.attrs["n_clusters"]      = N
         f.attrs["n_projections"]   = 3
         f.attrs["projections"]     = ["xy", "yz", "xz"]
@@ -230,8 +284,18 @@ if __name__ == "__main__":
     parser.add_argument("--extent-r200", type=float, default=None,
                         help="Image half-width in units of R200c; overrides "
                              "--extent-r500 (use to match the CAMELS FOV)")
+    parser.add_argument("--center", choices=["grouppos", "weight"],
+                        default="grouppos",
+                        help="image centre: the FOF halo position (default) "
+                             "or the legacy weight-averaged position, which "
+                             "sits a median 0.70 r500 off the halo")
+    parser.add_argument("--groupcat", type=str,
+                        default="/oscar/data/idellant/Chuiyang/"
+                                "groupcat_classification/groupcat_099",
+                        help="snap99 FOF catalogue directory, for --center grouppos")
     parser.add_argument("--output",      type=str,   default="dataset.h5",
                         help="Output HDF5 file path (default: dataset.h5)")
     args = parser.parse_args()
 
-    main(args.img_size, args.extent_r500, args.output, args.extent_r200)
+    main(args.img_size, args.extent_r500, args.output, args.extent_r200,
+         args.center, args.groupcat)
