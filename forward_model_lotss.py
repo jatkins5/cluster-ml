@@ -6,7 +6,9 @@ target for redshift + noise):
    P150-M500 relation (log10(P/10^24.5 W/Hz) = 1.1 + 3.55 log10(M500 /
    10^14.9 Msun), sigma_raw ~ 0.35 dex, optionally sampled).
 2. Crop the central BOX kpc of the 512px (+-4 r500) map, resample to
-   the common 128px grid, normalize the box flux to S150(z).
+   the common 128px grid, normalize the box flux to S150(z). The stored
+   maps are arcsinh(weight); undoing that stretch is available via
+   --invert-arcsinh but is off by default because it measures worse.
 3. Convolve with the 9" LoTSS restoring beam (FITS header BMAJ) scaled
    to kpc at the assigned z; convert Jy/px -> Jy/beam.
 4. Add Gaussian noise at the paired target's measured rms.
@@ -56,6 +58,8 @@ P150_LOGP0 = 24.5 + 1.1
 P150_SLOPE = 3.55
 P150_LOGM_PIVOT = 14.9
 P150_SCATTER_DEX = 0.35
+
+_UNSET = object()
 
 
 def kpc_per_arcsec(z):
@@ -151,13 +155,41 @@ def mask_compact(img, rms, fwhm_px, rng, det_sigma=5.0, max_beams=2.0,
 
 
 def make_mock(sim_map, sim_px_kpc, log_m500, z, rms_jyb, box_kpc, rng,
-              mask=False, max_beams=2.0, mask_rng=None):
+              mask=False, max_beams=2.0, mask_rng=None, scatter_rng=_UNSET,
+              invert_arcsinh=False, sim_smooth_px=0.0):
     half_px = box_kpc / 2.0 / sim_px_kpc
-    cut = crop_resample(sim_map.astype(np.float64), half_px)
+    # build_dataset.py stores arcsinh(weight), so this map is NOT linear
+    # surface brightness -- and undoing that is a regression, which is why
+    # invert_arcsinh defaults off. The DSA weights span ~55 decades and one
+    # gas cell carries a median 30% of a cluster's total linear weight, so
+    # sinh + "normalize the box flux to the Cuciti anchor" hands a third of
+    # the flux to a single pixel. Measured against LoTSS (obs masked at
+    # max_beams 10), inverting moves ncomp@3sigma KS 0.255 -> 0.48..0.65,
+    # a large loss, while area@8/13sigma improves only marginally
+    # (0.373/0.370 -> 0.325..0.374 / 0.338..0.377) and downstream
+    # mock-MF -> pseudo-TSC R2 is a wash (cluster-mean 0.258 -> 0.232..0.255).
+    # The high-k KS barely moves because the map goes from zero area above
+    # 8 sigma straight to overshooting the observations. Since arcsinh(w) ~ ln(2w) over
+    # this range, the stored map is effectively log emissivity, which
+    # accidentally stands in for the sub-resolution smoothing the sim never
+    # had. The real fix is upstream: deposit each cell over its own volume
+    # (PartType0 Masses/Density) rather than as a point.
+    m = sim_map.astype(np.float64)
+    if invert_arcsinh:
+        m = np.sinh(m)
+    # Gaussian smoothing does not rescue the inversion: it lowers the peak
+    # but spreads flux above 8 sigma, so area@8sigma degrades as ncomp@3sigma
+    # improves. Kept for calibrating the map's effective resolution.
+    if sim_smooth_px > 0:
+        m = ndimage.gaussian_filter(m, sim_smooth_px)
+    cut = crop_resample(m, half_px)
     if cut is None or cut.sum() <= 0:
         return None
     px_kpc = box_kpc / GRID
-    s_tot = total_flux_jy(log_m500, z, rng)
+    # Sentinel rather than None as the default: None is the meaningful value
+    # that turns the P150-M500 scatter off, so it cannot double as "unset".
+    s_tot = total_flux_jy(log_m500, z,
+                          rng if scatter_rng is _UNSET else scatter_rng)
     cut *= s_tot / cut.sum()                       # Jy per grid pixel
 
     kpas = kpc_per_arcsec(z)
@@ -224,6 +256,14 @@ def main():
     ap.add_argument("--no-scatter", action="store_true",
                     help="disable the 0.35 dex P150-M500 scatter")
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--sim-smooth-px", type=float, default=0.0,
+                    help="Gaussian sigma, in native sim pixels, applied to the "
+                         "linear map before resampling")
+    ap.add_argument("--invert-arcsinh", action="store_true",
+                    help="undo build_dataset.py's arcsinh stretch before "
+                         "resampling. Physically correct but a measured "
+                         "regression on every MF statistic and on downstream "
+                         "R2 -- see the comment in make_mock")
     ap.add_argument("--mask-max-beams", type=float, default=2.0,
                     help="islands whose half-power area exceeds this many "
                          "beams are kept as resolved (default 2)")
@@ -282,6 +322,9 @@ def main():
         for p in range(P):
             mock = make_mock(images[i, p], px_kpc, m500_map[halo_ids[i]],
                              mock_z[i], mock_rms[i], args.box_kpc, rng,
+                             scatter_rng=scatter_rng,
+                             invert_arcsinh=args.invert_arcsinh,
+                             sim_smooth_px=args.sim_smooth_px,
                              mask=args.mask_compact and args.mask_mocks,
                              max_beams=args.mask_max_beams,
                              mask_rng=mask_rng)
