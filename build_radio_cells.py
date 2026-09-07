@@ -40,6 +40,9 @@ H0 = Planck15.h
 UNIT_B_G = (np.sqrt(1e10 * u.Msun / u.kpc) * (u.km / u.s) / u.kpc).to(
     u.g ** 0.5 / (u.cm ** 0.5 * u.s)).value
 ECONV = ((1e10 * u.Msun / u.kpc) * (u.km / u.s) ** 3).to(u.erg / u.s).value
+# Density code unit (1e10 Msun/h)/(ckpc/h)^3 -> g/cm^3, then n_H = rho*XH/m_p.
+RHO_CGS = ((1e10 * u.Msun / u.kpc ** 3).to(u.g / u.cm ** 3).value
+           * H0 ** 2 / A ** 3)
 
 
 def r_of_M(M):
@@ -63,7 +66,8 @@ def make_psi(table):
         bounds_error=False, fill_value=None)
 
 
-def generate(cutout, interp_psi):
+def generate(cutout, interp_psi, min_T_keV=0.0, max_nH=np.inf,
+             exclude_sf=False):
     with h5py.File(cutout, "r") as f:
         p0 = f["PartType0"]
         mach = p0["Machnumber"][:]
@@ -77,12 +81,30 @@ def generate(cutout, interp_psi):
         elec = p0["ElectronAbundance"][shock]
         uint = p0["InternalEnergy"][shock]
         bfld = p0["MagneticField"][shock]
+        sfr = p0["StarFormationRate"][shock] if exclude_sf else None
         mach = mach[shock]
         edis = edis[shock]
 
     mu = 4.0 / (1.0 + 3.0 * XH + 4.0 * XH * elec) * c.m_p.cgs.value
     temperature = (GAMMA - 1.0) * uint / c.k_B.cgs.value * 1e10 * mu
     T_keV = (k_B * (temperature * u.K)).to(u.keV).value
+
+    # Gas-phase cuts. The upstream model selects on Mach number alone, which
+    # lets the weight be carried by cold, ~380x overdense, Mach-26 cells --
+    # ram-pressure stripped ISM of infalling galaxies, not the diffuse ICM in
+    # which radio relics form. Excluding cold and star-forming gas is standard
+    # in DSA relic modelling; these cuts are off by default so the unmodified
+    # model is reproduced exactly.
+    nH = dens.astype(np.float64) * RHO_CGS * XH / c.m_p.cgs.value
+    keep = (T_keV >= min_T_keV) & (nH <= max_nH)
+    if exclude_sf:
+        keep &= (sfr <= 0)
+    if not keep.all():
+        coords, dens, mass = coords[keep], dens[keep], mass[keep]
+        elec, uint, bfld = elec[keep], uint[keep], bfld[keep]
+        mach, edis, T_keV = mach[keep], edis[keep], T_keV[keep]
+        if mach.size == 0:
+            return None
 
     pos = coords * A / H0                                   # physical kpc
     M = mach.astype(np.float64)
@@ -110,6 +132,14 @@ def main():
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--validate", action="store_true",
                     help="compare recomputed w against the stored npz")
+    ap.add_argument("--min-temp-kev", type=float, default=0.0,
+                    help="drop shock cells colder than this (ICM is ~2 keV; "
+                         "the dominant cells today are ~0.006 keV)")
+    ap.add_argument("--max-nh", type=float, default=float("inf"),
+                    help="drop shock cells denser than this n_H [cm^-3] "
+                         "(typical shock cell is ~5e-5)")
+    ap.add_argument("--exclude-sf", action="store_true",
+                    help="drop star-forming cells")
     args = ap.parse_args()
 
     os.makedirs(args.out_dir, exist_ok=True)
@@ -129,13 +159,17 @@ def main():
         if not os.path.exists(cutout):
             print(f"  MISSING cutout for FOF{fof}")
             continue
-        out = generate(cutout, interp_psi)
+        out = generate(cutout, interp_psi,
+                       min_T_keV=args.min_temp_kev,
+                       max_nH=args.max_nh,
+                       exclude_sf=args.exclude_sf)
         if out is None:
             print(f"  FOF{fof}: no shock cells")
             continue
         pos, w, r_kpc = out
 
         if args.validate:
+            # Only meaningful with no cuts applied.
             ref = np.load(src)
             rw = ref["w"]
             if len(rw) != len(w):

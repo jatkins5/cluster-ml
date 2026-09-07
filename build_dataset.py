@@ -107,7 +107,8 @@ def load_catalog(catalog_path, radius_field="r500c"):
 
 
 def main(img_size, extent_r500, output_path, extent_r200=None,
-         center_mode="grouppos", groupcat=None, cells_dir=None):
+         center_mode="grouppos", groupcat=None, cells_dir=None,
+         spread_cells=False):
     radio_dir    = "Radio_Data"
     catalog_path = os.path.join(radio_dir, "TNG-Cluster_Catalog.hdf5")
     pkl_path     = "feats_labels_dict_tngcluster.pkl"
@@ -185,7 +186,7 @@ def main(img_size, extent_r500, output_path, extent_r200=None,
             if cf is None:
                 raise SystemExit(f"no cell file for halo {halo_id} in {cells_dir}")
             data = np.load(cf)
-            r_kpc = data["r_kpc"]
+            r_kpc = data["r_kpc"] if spread_cells else None
         else:
             data = np.load(npz_map[halo_id])
             r_kpc = None
@@ -257,7 +258,8 @@ def main(img_size, extent_r500, output_path, extent_r200=None,
         f.attrs["extent_r500"]     = extent_r500
         f.attrs["snapshot"]        = SNAP
         f.attrs["center_mode"]     = center_mode
-        f.attrs["cell_smoothing"]  = cells_dir or ""
+        f.attrs["cells_dir"]       = cells_dir or ""
+        f.attrs["spread_cells"]    = bool(spread_cells)
         f.attrs["n_clusters"]      = N
         f.attrs["n_projections"]   = 3
         f.attrs["projections"]     = ["xy", "yz", "xz"]
@@ -321,12 +323,18 @@ if __name__ == "__main__":
                                 "groupcat_classification/groupcat_099",
                         help="snap99 FOF catalogue directory, for --center grouppos")
     parser.add_argument("--cells-dir", type=str, default=None,
-                        help="directory of build_radio_cells.py output; "
-                             "spreads each gas cell over its own volume "
-                             "instead of depositing it into one pixel")
+                        help="directory of build_radio_cells.py output to use "
+                             "as the particle source instead of Radio_Data "
+                             "(e.g. a gas-phase-cut regeneration)")
+    parser.add_argument("--spread-cells", action="store_true",
+                        help="deposit each cell over its own volume rather "
+                             "than into one pixel. Measured to be a no-op on "
+                             "the linear map and mildly harmful on the "
+                             "compressed one, so off by default")
     parser.add_argument("--output",      type=str,   default="dataset.h5",
                         help="Output HDF5 file path (default: dataset.h5)")
     args = parser.parse_args()
 
     main(args.img_size, args.extent_r500, args.output, args.extent_r200,
-         args.center, args.groupcat, args.cells_dir)
+         args.center, args.groupcat, args.cells_dir,
+         args.spread_cells)
