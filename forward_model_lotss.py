@@ -156,7 +156,8 @@ def mask_compact(img, rms, fwhm_px, rng, det_sigma=5.0, max_beams=2.0,
 
 def make_mock(sim_map, sim_px_kpc, log_m500, z, rms_jyb, box_kpc, rng,
               mask=False, max_beams=2.0, mask_rng=None, scatter_rng=_UNSET,
-              invert_arcsinh=False, sim_smooth_px=0.0):
+              invert_arcsinh=False, sim_smooth_px=0.0,
+              correlated_noise=False):
     half_px = box_kpc / 2.0 / sim_px_kpc
     # build_dataset.py stores arcsinh(weight), so this map is NOT linear
     # surface brightness -- and undoing that is a regression, which is why
@@ -197,7 +198,19 @@ def make_mock(sim_map, sim_px_kpc, log_m500, z, rms_jyb, box_kpc, rng,
     cut = ndimage.gaussian_filter(cut, fwhm_px / 2.355, mode="constant")
     beam_area_px = 1.1331 * fwhm_px**2            # pi/(4 ln2) FWHM^2
     cut *= beam_area_px                            # Jy/px -> Jy/beam
-    cut += rng.normal(0.0, rms_jyb, cut.shape)
+    # Noise in a CLEANed interferometric map is beam-correlated, not white:
+    # every realization is smooth on the restoring-beam scale. Adding white
+    # noise gives the mocks roughly twice the relative small-scale power of
+    # real LoTSS cutouts, which is a channel a CNN can separate the domains
+    # on. Filter with the same beam, then renormalize so the map still has
+    # the target rms (mode='wrap' keeps the edges statistically stationary).
+    noise = rng.normal(0.0, 1.0, cut.shape)
+    if correlated_noise:
+        noise = ndimage.gaussian_filter(noise, fwhm_px / 2.355, mode="wrap")
+        sd = noise.std()
+        if sd > 0:
+            noise /= sd
+    cut += rms_jyb * noise
     if mask:
         cut, _ = mask_compact(cut, rms_jyb, fwhm_px,
                               mask_rng if mask_rng is not None else rng,
@@ -259,6 +272,11 @@ def main():
     ap.add_argument("--sim-smooth-px", type=float, default=0.0,
                     help="Gaussian sigma, in native sim pixels, applied to the "
                          "linear map before resampling")
+    ap.add_argument("--correlated-noise", action="store_true",
+                    help="give the mock noise the beam's correlation "
+                         "structure, as a CLEANed map has, instead of white "
+                         "noise. Off by default so results committed before "
+                         "this flag existed stay reproducible")
     ap.add_argument("--invert-arcsinh", action="store_true",
                     help="undo build_dataset.py's arcsinh stretch before "
                          "resampling. Physically correct but a measured "
@@ -324,6 +342,7 @@ def main():
                              mock_z[i], mock_rms[i], args.box_kpc, rng,
                              scatter_rng=scatter_rng,
                              invert_arcsinh=args.invert_arcsinh,
+                             correlated_noise=args.correlated_noise,
                              sim_smooth_px=args.sim_smooth_px,
                              mask=args.mask_compact and args.mask_mocks,
                              max_beams=args.mask_max_beams,
