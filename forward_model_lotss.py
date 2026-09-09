@@ -11,7 +11,9 @@ target for redshift + noise):
    --invert-arcsinh but is off by default because it measures worse.
 3. Convolve with the 9" LoTSS restoring beam (FITS header BMAJ) scaled
    to kpc at the assigned z; convert Jy/px -> Jy/beam.
-4. Add Gaussian noise at the paired target's measured rms.
+4. Add beam-correlated Gaussian noise at the paired target's
+   measured rms (a CLEANed map's noise is smooth on the beam
+   scale; white noise here broke sim-to-real transfer).
 
 Obs side: same BOX kpc crop of each LoTSS cutout at the target's own
 redshift, resampled to the same grid; rms via sigma-clipped std.
@@ -157,7 +159,7 @@ def mask_compact(img, rms, fwhm_px, rng, det_sigma=5.0, max_beams=2.0,
 def make_mock(sim_map, sim_px_kpc, log_m500, z, rms_jyb, box_kpc, rng,
               mask=False, max_beams=2.0, mask_rng=None, scatter_rng=_UNSET,
               invert_arcsinh=False, sim_smooth_px=0.0,
-              correlated_noise=False):
+              correlated_noise=True):
     half_px = box_kpc / 2.0 / sim_px_kpc
     # build_dataset.py stores arcsinh(weight), so this map is NOT linear
     # surface brightness -- and undoing that is a regression, which is why
@@ -272,11 +274,12 @@ def main():
     ap.add_argument("--sim-smooth-px", type=float, default=0.0,
                     help="Gaussian sigma, in native sim pixels, applied to the "
                          "linear map before resampling")
-    ap.add_argument("--correlated-noise", action="store_true",
-                    help="give the mock noise the beam's correlation "
-                         "structure, as a CLEANed map has, instead of white "
-                         "noise. Off by default so results committed before "
-                         "this flag existed stay reproducible")
+    ap.add_argument("--white-noise", action="store_true",
+                    help="add uncorrelated noise instead of the beam-"
+                         "correlated noise a CLEANed map has. Wrong, and kept "
+                         "only to reproduce results predating the fix: white "
+                         "noise put the mocks +3.5 sd from real cutouts in "
+                         "mid-scale power and broke transfer entirely")
     ap.add_argument("--invert-arcsinh", action="store_true",
                     help="undo build_dataset.py's arcsinh stretch before "
                          "resampling. Physically correct but a measured "
@@ -342,7 +345,7 @@ def main():
                              mock_z[i], mock_rms[i], args.box_kpc, rng,
                              scatter_rng=scatter_rng,
                              invert_arcsinh=args.invert_arcsinh,
-                             correlated_noise=args.correlated_noise,
+                             correlated_noise=not args.white_noise,
                              sim_smooth_px=args.sim_smooth_px,
                              mask=args.mask_compact and args.mask_mocks,
                              max_beams=args.mask_max_beams,

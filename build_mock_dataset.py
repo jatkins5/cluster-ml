@@ -43,8 +43,9 @@ def main():
                     help="noise/pairing realizations per cluster")
     ap.add_argument("--mask-max-beams", type=float, default=10.0)
     ap.add_argument("--invert-arcsinh", action="store_true")
-    ap.add_argument("--correlated-noise", action="store_true",
-                    help="beam-correlated mock noise instead of white")
+    ap.add_argument("--white-noise", action="store_true",
+                    help="uncorrelated noise instead of beam-correlated; "
+                         "wrong, kept only to reproduce older results")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--output", default="mock_dataset_nh4.h5")
     args = ap.parse_args()
@@ -87,7 +88,7 @@ def main():
                 mock = make_mock(images[i, p], px_kpc, m500_map[halo_ids[i]],
                                  z, rms, args.box_kpc, rng,
                                  invert_arcsinh=args.invert_arcsinh,
-                                 correlated_noise=args.correlated_noise)
+                                 correlated_noise=not args.white_noise)
                 if mock is None:
                     keep[i] = False
                     continue
@@ -103,7 +104,7 @@ def main():
         f.attrs["preprocessing"] = "arcsinh(map / rms)"
         f.attrs["invert_arcsinh"] = bool(args.invert_arcsinh)
         f.attrs["mask_max_beams"] = args.mask_max_beams
-        f.attrs["correlated_noise"] = bool(args.correlated_noise)
+        f.attrs["correlated_noise"] = not args.white_noise
         g = f.create_group("mock")
         g.create_dataset("images", data=out[keep], compression="gzip",
                          compression_opts=4)
