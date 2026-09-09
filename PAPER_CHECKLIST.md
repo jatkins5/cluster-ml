@@ -70,9 +70,48 @@ all four transfer runs. B1/B2 are now the binding items.
 
 ## B. Analysis the paper is missing
 
-- [ ] **B1. Mass / brightness control.** The headline result is only ~0.1
-  above a one-number baseline, and the transfer model is mostly a mass
-  regressor. Evidence:
+- [x] **B1. Mass / brightness control.** DONE 2026-09-09
+  (`analyze_mass_control.py`, job 6125088). **The clean-sim CNN survives the
+  control; the answer differs from the transfer model's.**
+
+  | predictor of pseudo-TSC (5-fold OOF, same splits) | R² |
+  |---|---|
+  | log M500 alone | 0.314 |
+  | log total linear weight alone | 0.432 |
+  | all 5 scalars (ridge) | 0.455 |
+  | pooled CNN, per seed | 0.487 ± 0.033 |
+  | pooled CNN, 5-seed ensemble | **0.528** |
+  | scalars + CNN | 0.538 (**+0.083** over scalars) |
+  | mass + CNN | 0.529 (+0.215 over mass) |
+
+  Within mass terciles, where a pure mass model scores zero:
+
+  | tercile | n | CNN R² | scalars R² | mass R² | CNN ρ |
+  |---|---|---|---|---|---|
+  | low | 118 | 0.332 | 0.287 | 0.040 | 0.586 |
+  | mid | 117 | 0.322 | −0.021 | −0.021 | 0.507 |
+  | high | 117 | **0.222** | **−0.278** | −0.107 | 0.448 |
+
+  Partial Spearman(CNN, TSC | log M500) = **+0.475** (raw 0.675), and the
+  CNN residual still tracks the TSC residual at ρ = 0.468 after removing all
+  five scalars. The high-mass tercile is the cleanest evidence: the scalars
+  go *negative* there (−0.278) while the CNN holds 0.222.
+
+  The honest caveat, to state in the paper: the scalars explain **72%** of
+  the CNN's own output (R² 0.723; 0.62 from total flux alone). The CNN is
+  substantially a brightness model — it is just not *only* one.
+
+  Note this is the **clean-sim** model, where "total weight" is the
+  simulation's own predicted power, a physically meaningful quantity. The
+  ρ = −0.87 mass-reading result is the **transfer** model, where brightness
+  was replaced by the Cuciti mass relation — which is B2, and why the two
+  give different answers.
+
+  *Remaining:* repeat the within-mass and partial-correlation analysis on
+  the transfer model after B2 is decided; put the scalar-baseline table in
+  the paper's main results.
+
+  Original evidence that motivated this item:
 
   | baseline (clean sims, 5-fold OOF ridge) | OOF R² | Spearman vs TSC |
   |---|---|---|
@@ -88,14 +127,7 @@ all four transfer runs. B1/B2 are now the binding items.
   *Do:* report R² within mass bins and partial correlations; put the scalar
   baselines in the main results table.
 - [ ] **B2. Decide the mass treatment for the transfer model, then re-run.**
-  The forward model discards sim brightness and re-anchors flux to
-  P150 ∝ M500^3.55 (Cuciti+2023), so mock SNR *is* mass by construction.
-  Cleanest fix: feed M500 as an explicit scalar input so the image has to
-  supply the residual (LoVoCCS has WL masses for the real side). Alternative:
-  a disturbance-dependent anchor — Cuciti Fig. 3 shows halos above the P–M
-  relation are the X-ray-disturbed ones, and ~half of clusters at these
-  masses have only upper limits, so a real *relaxed* cluster reads to our
-  model as "faint → low mass → old" rather than "relaxed".
+  **Needs a decision before any code.** See the brief below.
 - [ ] **B3. Reconcile with Lee's relic-separation relation.** Their group now
   publishes TSC = 0.52 d_drr/R500c − 0.24, r = 0.83 in TNG-Cluster
   (arXiv:2510.21632); our README records four independent negative attempts
@@ -107,6 +139,57 @@ all four transfer runs. B1/B2 are now the binding items.
   gas-phase cut, so `--max-nh 1e-4` is a departure from the published
   TNG-Cluster relic model, not just our post-processing. Needs her sign-off
   and its own methods subsection.
+
+### B2 decision brief — what to do about the flux anchor
+
+**The mechanism.** `forward_model_lotss.make_mock` throws away the
+simulation's own predicted radio power and re-anchors every mock's total
+flux to the Cuciti+2023 relation, `total_flux_jy(log_m500, z, rng)`:
+
+    log10(P150 / 10^24.5) = 1.1 + 3.55 · log10(M500 / 10^14.9) + N(0, 0.35 dex)
+
+So mock brightness is, by construction, a steep function of halo mass plus
+random noise. In TNG-Cluster mass and TSC are correlated (ρ = −0.56: massive
+halos assemble late), so a model that reads brightness gets most of the way
+to the label without looking at morphology at all. That is exactly what we
+measure — ρ(OOF pred, M500) = −0.87, R² inside mass terciles 0.08–0.24 — and
+on real data the prediction ordering tracks total map SNR at ρ = −0.83.
+
+**The part that is a physics error, not just a statistical nuisance.** The
+0.35 dex scatter is applied as *random* noise. Observationally it is not
+random: Cuciti's Fig. 3 shows clusters above the P–M relation are the
+X-ray-disturbed ones, and roughly half the clusters in this mass range have
+no detected halo at all, only upper limits. The scatter about the relation
+*is* the merger signal. We are randomising the very quantity that carries
+the information we then ask the model to recover, and a genuinely relaxed
+real cluster reads to our model as "faint → low mass → old" rather than
+"relaxed".
+
+**Options.**
+
+| | what it does | buys | costs | effort |
+|---|---|---|---|---|
+| **1. Condition on mass** | feed log M500 to the head alongside the image embedding | the claim becomes "R² at fixed mass", which is what a referee asks for; mirrors how Cuciti works with P–M residuals | needs masses for the real clusters, and their 20–30% errors open a new sim/obs gap (train with matched noise on the mass input) | ~½ day + data |
+| **2. Disturbance-dependent scatter** | make the offset from the P–M relation depend on dynamical state; give relaxed clusters upper-limit flux | fixes the physics error directly | circular: if we impose "disturbed → brighter" from an observed relation, the model learns our assumption, not the simulation's physics | ~1 day + re-validation |
+| **3. Use the sim's own power** | drop the anchor, keep the DSA model's relative power, set only the overall normalisation | most defensible: total flux becomes a *prediction* carrying merger state, and the Cuciti relation becomes a validation test instead of an input | sim power is uncalibrated across ~55 decades and pathologically concentrated; sim L_X is 3.6× tilted, so the absolute scale is suspect; the brightness distribution may stop matching LoTSS, undoing part of the 8/10 KS agreement | several days, re-validates everything |
+| **4. Flux-normalised ablation** | divide each image by its own total flux so brightness carries nothing | a clean "morphology alone" number — an honest lower bound on the image claim | discards information that is physically real | ~hours |
+
+**Recommendation.** Do **4** immediately regardless of what else we pick —
+it is cheap and it bounds the morphology claim, which is the number the
+paper actually lives or dies on. Take **1** as the primary model for this
+paper. Treat **3** as the more interesting physics question and a candidate
+follow-up (or a section if time allows). Avoid **2** as the primary: the
+circularity is hard to write around.
+
+1 and 4 together give a clean decomposition — morphology-only, mass-only,
+and joint — which is a better results table than any single number.
+
+**Blocking dependency for option 1:** masses for the real clusters. LoVoCCS
+II weak-lensing masses (Fu et al. 2024, 58 clusters) are the right source
+and the table has still not been obtained — flagged as pending since the
+sim-vs-obs distributional work. Fallbacks: Planck PSZ2 M_SZ (most of these
+are Abell clusters), or an L_X–M scaling, since all 17 targets have L_X in
+the target list. Ask the PI.
 
 ## C. Data hygiene
 
