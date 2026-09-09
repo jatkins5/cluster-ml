@@ -20,7 +20,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
-from sklearn.model_selection import KFold
+from sklearn.model_selection import KFold, ShuffleSplit
 from sklearn.metrics import r2_score, mean_absolute_error, root_mean_squared_error
 
 
@@ -134,17 +134,41 @@ def evaluate(model, loader, device):
     return np.concatenate(all_preds), np.concatenate(all_labels)
 
 
-def run_cv(images, labels, n_folds, n_epochs, batch_size, seed, huber_delta=0.5):
+def run_cv(images, labels, n_folds, n_epochs, batch_size, seed, huber_delta=0.5,
+           select="inner", inner_frac=0.15, halo_ids=None, save_preds=None):
+    """5-fold CV. `select` decides where the reported checkpoint comes from.
+
+    "inner" holds out a further `inner_frac` of each fold's *training*
+    clusters and picks the epoch by that split, so the outer fold is only
+    ever predicted once, by a checkpoint chosen without seeing it. "final"
+    just takes the last epoch (the cosine schedule has annealed to ~0 lr by
+    then), which needs no held-out data at all.
+
+    The old behaviour -- keep the epoch with the best RMSE on the outer fold
+    and report that same number -- is a max over 60 epochs on the test set.
+    Measured over the 60 baseline folds it was worth +0.043 R2, and +0.32 on
+    the mock-transfer runs. It is gone; there is no flag to restore it.
+    """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Device: {device}")
+    print(f"Device: {device}   checkpoint selection: {select}")
 
     kf = KFold(n_splits=n_folds, shuffle=True, random_state=seed)
     fold_r2, fold_mae, fold_rmse = [], [], []
     oof_preds = np.zeros(len(labels))
 
-    for fold, (train_idx, val_idx) in enumerate(kf.split(images)):
+    for fold, (outer_train_idx, val_idx) in enumerate(kf.split(images)):
         torch.manual_seed(seed + fold)
         np.random.seed(seed + fold)
+
+        if select == "inner":
+            # Each row is one cluster, so a plain shuffle split cannot leak
+            # projections across the boundary.
+            ss = ShuffleSplit(n_splits=1, test_size=inner_frac,
+                              random_state=seed + fold)
+            rel_fit, rel_sel = next(ss.split(outer_train_idx))
+            train_idx, sel_idx = outer_train_idx[rel_fit], outer_train_idx[rel_sel]
+        else:
+            train_idx, sel_idx = outer_train_idx, None
 
         # normalise using training stats only
         tr_mean = images[train_idx].mean()
@@ -156,30 +180,48 @@ def run_cv(images, labels, n_folds, n_epochs, batch_size, seed, huber_delta=0.5)
         val_ds   = RadioClusterDataset(imgs_val, labels[val_idx],  train=False)
         train_dl = DataLoader(train_ds, batch_size=batch_size, shuffle=True,  num_workers=2, pin_memory=True)
         val_dl   = DataLoader(val_ds,   batch_size=batch_size, shuffle=False, num_workers=2, pin_memory=True)
+        sel_dl = None
+        if sel_idx is not None:
+            sel_ds = RadioClusterDataset((images[sel_idx] - tr_mean) / tr_std,
+                                         labels[sel_idx], train=False)
+            sel_dl = DataLoader(sel_ds, batch_size=batch_size, shuffle=False,
+                                num_workers=2, pin_memory=True)
 
         model     = PooledCNN().to(device)
         optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4, weight_decay=1e-3)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=n_epochs)
         criterion = nn.HuberLoss(delta=huber_delta)
 
-        best_rmse, best_preds = np.inf, None
+        best_sel, best_state, best_epoch = np.inf, None, n_epochs
         for epoch in range(n_epochs):
             train_loss = train_epoch(model, train_dl, optimizer, criterion, device)
             scheduler.step()
-            preds, true = evaluate(model, val_dl, device)
-            rmse = root_mean_squared_error(true, preds)
-            if rmse < best_rmse:
-                best_rmse  = rmse
-                best_preds = preds.copy()
+            if sel_dl is not None:
+                sp, st = evaluate(model, sel_dl, device)
+                sel_rmse = root_mean_squared_error(st, sp)
+                if sel_rmse < best_sel:
+                    best_sel, best_epoch = sel_rmse, epoch + 1
+                    best_state = {k: v.detach().clone()
+                                  for k, v in model.state_dict().items()}
             if (epoch + 1) % 30 == 0:
                 train_preds, train_true = evaluate(model, train_dl, device)
                 train_r2   = r2_score(train_true, train_preds)
                 train_rmse = root_mean_squared_error(train_true, train_preds)
-                val_r2     = r2_score(true, preds)
-                print(f"  Fold {fold+1}  Epoch {epoch+1:3d}/{n_epochs}  "
-                      f"loss={train_loss:.4f}  "
-                      f"train R²={train_r2:.3f}  RMSE={train_rmse:.3f}  |  "
-                      f"val R²={val_r2:.3f}  RMSE={rmse:.3f}")
+                preds, true = evaluate(model, val_dl, device)
+                msg = (f"  Fold {fold+1}  Epoch {epoch+1:3d}/{n_epochs}  "
+                       f"loss={train_loss:.4f}  "
+                       f"train R²={train_r2:.3f}  RMSE={train_rmse:.3f}  |  "
+                       f"val R²={r2_score(true, preds):.3f}  "
+                       f"RMSE={root_mean_squared_error(true, preds):.3f}")
+                if sel_dl is not None:
+                    msg += f"  |  sel RMSE={sel_rmse:.3f}"
+                print(msg)
+
+        if best_state is not None:
+            model.load_state_dict(best_state)
+            print(f"  Fold {fold+1} checkpoint from epoch {best_epoch}/{n_epochs} "
+                  f"(inner-val RMSE {best_sel:.3f})")
+        best_preds, _ = evaluate(model, val_dl, device)
 
         oof_preds[val_idx] = best_preds
         r2   = r2_score(labels[val_idx], best_preds)
@@ -196,10 +238,22 @@ def run_cv(images, labels, n_folds, n_epochs, batch_size, seed, huber_delta=0.5)
     print(f"  RMSE: {np.mean(fold_rmse):.3f} ± {np.std(fold_rmse):.3f}")
     print(f"  OOF R²: {r2_score(labels, oof_preds):.3f}")
 
+    # Keep the per-cluster predictions: the mass-control analysis and the
+    # true-vs-predicted figure both need them, and re-running to recover
+    # numbers we already computed is pure waste.
+    if save_preds:
+        np.savez(save_preds, oof_pred=oof_preds, label=labels,
+                 halo_id=(np.arange(len(labels)) if halo_ids is None
+                          else halo_ids),
+                 fold_r2=np.array(fold_r2), select=select, seed=seed)
+        print(f"  saved predictions -> {save_preds}")
+    return oof_preds
+
 
 def main(tau, n_folds, n_epochs, batch_size, seed, pseudo_tsc=False,
          merger_tsc=False, huber_delta=0.5, log_transform=False,
-         dataset="dataset.h5"):
+         dataset="dataset.h5", select="inner", inner_frac=0.15,
+         save_preds=None):
     dataset_path = dataset
 
     print("Loading dataset...")
@@ -219,6 +273,7 @@ def main(tau, n_folds, n_epochs, batch_size, seed, pseudo_tsc=False,
             valid = ~np.isnan(labels)
             images = images[valid]
             labels = labels[valid]
+            halo_ids = halo_ids[valid]     # keep the join key aligned
             print(f"Using merger-catalog TSC label ({valid.sum()}/{len(valid)} clusters, "
                   f"{(~valid).sum()} dropped — no recorded collision)")
         elif pseudo_tsc:
@@ -241,7 +296,9 @@ def main(tau, n_folds, n_epochs, batch_size, seed, pseudo_tsc=False,
     print()
 
     print(f"Huber delta: {huber_delta}")
-    run_cv(images, labels, n_folds, n_epochs, batch_size, seed, huber_delta)
+    run_cv(images, labels, n_folds, n_epochs, batch_size, seed, huber_delta,
+           select=select, inner_frac=inner_frac, halo_ids=halo_ids,
+           save_preds=save_preds)
 
 
 if __name__ == "__main__":
@@ -262,7 +319,16 @@ if __name__ == "__main__":
                         help="Apply log1p transform to labels")
     parser.add_argument("--dataset", type=str, default="dataset.h5",
                         help="HDF5 dataset to train on (default: dataset.h5)")
+    parser.add_argument("--select", choices=["inner", "final"], default="inner",
+                        help="pick the reported checkpoint on an inner split "
+                             "of the training folds (default) or just take "
+                             "the last epoch")
+    parser.add_argument("--inner-frac", type=float, default=0.15,
+                        help="fraction of each training fold held out for "
+                             "checkpoint selection (--select inner)")
+    parser.add_argument("--save-preds", type=str, default=None,
+                        help="npz path for the per-cluster OOF predictions")
     args = parser.parse_args()
     main(args.tau, args.folds, args.epochs, args.batch_size, args.seed,
          args.pseudo_tsc, args.merger_tsc, args.huber_delta, args.log_transform,
-         args.dataset)
+         args.dataset, args.select, args.inner_frac, args.save_preds)

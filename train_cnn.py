@@ -20,7 +20,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
-from sklearn.model_selection import GroupKFold
+from sklearn.model_selection import GroupKFold, GroupShuffleSplit
 from sklearn.metrics import r2_score, mean_absolute_error, root_mean_squared_error
 
 
@@ -137,9 +137,20 @@ def evaluate(model, loader, device):
 
 
 def run_cv(images, labels, groups, n_folds, n_epochs, batch_size, seed, huber_delta=0.5, img_size=128,
-           weights=None, weight_loss=True):
+           weights=None, weight_loss=True, select="inner", inner_frac=0.15):
+    """`select` decides where the reported checkpoint comes from.
+
+    "inner" holds out a further `inner_frac` of each fold's training
+    *clusters* (grouped, so the 3 projections of a cluster stay together)
+    and picks the epoch on that; the outer fold is predicted once, by a
+    checkpoint chosen without seeing it. "final" takes the last epoch.
+
+    Selecting the epoch on the outer fold and reporting that same number --
+    what this did until 2026-09-09 -- inflated fold R2 by a measured +0.043
+    across the 60 baseline folds. It is not available any more.
+    """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Device: {device}")
+    print(f"Device: {device}   checkpoint selection: {select}")
 
     weighted = weights is not None
     if not weighted:
@@ -153,9 +164,19 @@ def run_cv(images, labels, groups, n_folds, n_epochs, batch_size, seed, huber_de
     fold_r2, fold_mae, fold_rmse = [], [], []
     oof_preds = np.zeros_like(labels)
 
-    for fold, (train_idx, val_idx) in enumerate(gkf.split(images, labels, groups)):
+    for fold, (outer_train_idx, val_idx) in enumerate(gkf.split(images, labels, groups)):
         torch.manual_seed(seed + fold)
         np.random.seed(seed + fold)
+
+        if select == "inner":
+            gss = GroupShuffleSplit(n_splits=1, test_size=inner_frac,
+                                    random_state=seed + fold)
+            rel_fit, rel_sel = next(gss.split(outer_train_idx,
+                                              groups=groups[outer_train_idx]))
+            train_idx = outer_train_idx[rel_fit]
+            sel_idx = outer_train_idx[rel_sel]
+        else:
+            train_idx, sel_idx = outer_train_idx, None
 
         # per-fold normalisation using training set stats only
         tr_mean = images[train_idx].mean()
@@ -168,6 +189,12 @@ def run_cv(images, labels, groups, n_folds, n_epochs, batch_size, seed, huber_de
         val_ds   = RadioDataset(imgs_val, labels[val_idx],  train=False)
         train_dl = DataLoader(train_ds, batch_size=batch_size, shuffle=True,  num_workers=2, pin_memory=True)
         val_dl   = DataLoader(val_ds,   batch_size=batch_size, shuffle=False, num_workers=2, pin_memory=True)
+        sel_dl = None
+        if sel_idx is not None:
+            sel_ds = RadioDataset((images[sel_idx] - tr_mean) / tr_std,
+                                  labels[sel_idx], train=False)
+            sel_dl = DataLoader(sel_ds, batch_size=batch_size, shuffle=False,
+                                num_workers=2, pin_memory=True)
 
         model     = ShallowCNN(img_size=img_size).to(device)
         optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4, weight_decay=1e-3)
@@ -177,26 +204,38 @@ def run_cv(images, labels, groups, n_folds, n_epochs, batch_size, seed, huber_de
         # Selection follows the same distribution the loss targets: with
         # importance weights on, an unweighted early-stopping criterion would
         # pull the model back toward the sim distribution it is meant to leave.
-        w_val = train_w[val_idx]
+        w_sel = train_w[sel_idx] if sel_idx is not None else None
 
-        best_rmse, best_preds = np.inf, None
+        best_sel, best_state, best_epoch = np.inf, None, n_epochs
         for epoch in range(n_epochs):
             train_loss = train_epoch(model, train_dl, optimizer, criterion, device)
             scheduler.step()
-            preds, true = evaluate(model, val_dl, device)
-            rmse = root_mean_squared_error(true, preds, sample_weight=w_val)
-            if rmse < best_rmse:
-                best_rmse  = rmse
-                best_preds = preds.copy()
+            if sel_dl is not None:
+                sp, st = evaluate(model, sel_dl, device)
+                sel_rmse = root_mean_squared_error(st, sp, sample_weight=w_sel)
+                if sel_rmse < best_sel:
+                    best_sel, best_epoch = sel_rmse, epoch + 1
+                    best_state = {k: v.detach().clone()
+                                  for k, v in model.state_dict().items()}
             if (epoch + 1) % 30 == 0:
                 train_preds, train_true = evaluate(model, train_dl, device)
                 train_r2   = r2_score(train_true, train_preds)
                 train_rmse = root_mean_squared_error(train_true, train_preds)
-                val_r2     = r2_score(true, preds)
-                print(f"  Fold {fold+1}  Epoch {epoch+1:3d}/{n_epochs}  "
-                      f"loss={train_loss:.4f}  "
-                      f"train R²={train_r2:.3f}  RMSE={train_rmse:.3f}  |  "
-                      f"val R²={val_r2:.3f}  RMSE={rmse:.3f}")
+                preds, true = evaluate(model, val_dl, device)
+                msg = (f"  Fold {fold+1}  Epoch {epoch+1:3d}/{n_epochs}  "
+                       f"loss={train_loss:.4f}  "
+                       f"train R²={train_r2:.3f}  RMSE={train_rmse:.3f}  |  "
+                       f"val R²={r2_score(true, preds):.3f}  "
+                       f"RMSE={root_mean_squared_error(true, preds):.3f}")
+                if sel_dl is not None:
+                    msg += f"  |  sel RMSE={sel_rmse:.3f}"
+                print(msg)
+
+        if best_state is not None:
+            model.load_state_dict(best_state)
+            print(f"  Fold {fold+1} checkpoint from epoch {best_epoch}/{n_epochs} "
+                  f"(inner-val RMSE {best_sel:.3f})")
+        best_preds, _ = evaluate(model, val_dl, device)
 
         oof_preds[val_idx] = best_preds
         r2   = r2_score(labels[val_idx], best_preds)
@@ -220,7 +259,8 @@ def run_cv(images, labels, groups, n_folds, n_epochs, batch_size, seed, huber_de
 
 def main(tau, n_folds, n_epochs, batch_size, seed, pseudo_tsc=False,
          merger_tsc=False, huber_delta=0.5, tsc_max=None, dataset_path="dataset.h5",
-         sample_weights=None, weights_eval_only=False):
+         sample_weights=None, weights_eval_only=False, select="inner",
+         inner_frac=0.15):
 
 
     print("Loading dataset...")
@@ -285,7 +325,8 @@ def main(tau, n_folds, n_epochs, batch_size, seed, pseudo_tsc=False,
 
     print(f"Huber delta: {huber_delta}  Image size: {W}×{W}")
     run_cv(images, labels, groups, n_folds, n_epochs, batch_size, seed, huber_delta,
-           img_size=W, weights=sw, weight_loss=not weights_eval_only)
+           img_size=W, weights=sw, weight_loss=not weights_eval_only,
+           select=select, inner_frac=inner_frac)
 
 
 if __name__ == "__main__":
@@ -314,7 +355,15 @@ if __name__ == "__main__":
                         help="npz with halo_id/weight arrays (from "
                              "compare_sim_obs_distributions.py) to tilt the "
                              "training loss toward the observed L_X distribution")
+    parser.add_argument("--select", choices=["inner", "final"], default="inner",
+                        help="pick the reported checkpoint on an inner split "
+                             "of the training folds (default) or just take "
+                             "the last epoch")
+    parser.add_argument("--inner-frac", type=float, default=0.15,
+                        help="fraction of each training fold held out for "
+                             "checkpoint selection (--select inner)")
     args = parser.parse_args()
     main(args.tau, args.folds, args.epochs, args.batch_size, args.seed,
          args.pseudo_tsc, args.merger_tsc, args.huber_delta, args.tsc_max,
-         args.dataset, args.sample_weights, args.weights_eval_only)
+         args.dataset, args.sample_weights, args.weights_eval_only,
+         args.select, args.inner_frac)
