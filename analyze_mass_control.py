@@ -21,6 +21,7 @@ Reported here, all on the same 352 clusters and the same 5-fold splits:
   5. The reverse direction: can the scalars predict what the CNN predicts?
      A CNN that is only reading brightness is fully explained by them.
 """
+import argparse
 import glob
 
 import h5py
@@ -32,7 +33,17 @@ from sklearn.model_selection import KFold, cross_val_predict
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import make_pipeline
 
-DATASET = "dataset_nh4_128.h5"
+_ap = argparse.ArgumentParser()
+_ap.add_argument("--dataset", default="dataset_nh4_128.h5",
+                 help="source of the scalar features. Keep this pointed at "
+                      "the UN-normalised dataset even when analysing a "
+                      "shape-only model: 'total flux' has to keep its "
+                      "physical meaning for the comparison to say anything.")
+_ap.add_argument("--preds", default="cnn_preds/pooled_nh4_inner_s*.npz",
+                 help="glob of saved OOF predictions to analyse")
+_args = _ap.parse_args()
+
+DATASET = _args.dataset
 KF = KFold(5, shuffle=True, random_state=0)
 
 
@@ -67,7 +78,7 @@ SCALARS = np.column_stack([logm, np.log10(r500), lin_tot, arc_mean, frac_pos])
 SCALAR_NAMES = ["log M500", "log r500", "log total w", "mean arcsinh", "filled frac"]
 
 cnn = {}
-for p in sorted(glob.glob("cnn_preds/pooled_nh4_inner_s*.npz")):
+for p in sorted(glob.glob(_args.preds)):
     d = np.load(p, allow_pickle=True)
     assert np.array_equal(d["halo_id"], hid), p
     assert np.allclose(d["label"], tsc), p

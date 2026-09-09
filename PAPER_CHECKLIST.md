@@ -174,6 +174,37 @@ real cluster reads to our model as "faint → low mass → old" rather than
 | **3. Use the sim's own power** | drop the anchor, keep the DSA model's relative power, set only the overall normalisation | most defensible: total flux becomes a *prediction* carrying merger state, and the Cuciti relation becomes a validation test instead of an input | sim power is uncalibrated across ~55 decades and pathologically concentrated; sim L_X is 3.6× tilted, so the absolute scale is suspect; the brightness distribution may stop matching LoTSS, undoing part of the 8/10 KS agreement | several days, re-validates everything |
 | **4. Flux-normalised ablation** | divide each image by its own total flux so brightness carries nothing | a clean "morphology alone" number — an honest lower bound on the image claim | discards information that is physically real | ~hours |
 
+**Option 4 result — DONE 2026-09-09** (`build_shape_dataset.py`,
+`compare_shape.py`, jobs 6125878 / 6125963 / 6126951). Every projection
+rescaled to the dataset median total linear weight — the maps spanned
+6.89 dex before, exactly one value after. Same 5 seeds, same folds, paired:
+
+| | full flux | shape only |
+|---|---|---|
+| per-seed OOF R² | 0.487 ± 0.033 | **0.418 ± 0.027** |
+| 5-seed ensemble | 0.528 | 0.473 |
+| within mass terciles | 0.332 / 0.322 / 0.222 | 0.246 / 0.258 / 0.140 |
+| partial ρ(pred, TSC \| M500) | 0.475 | **0.460** |
+| increment over the 5 scalars | +0.083 | +0.052 |
+
+Paired shape − full = **−0.069 ± 0.023 SE, p=0.040, 5/5 seeds negative**.
+
+So morphology alone is worth **0.418**, comfortably above mass alone
+(0.314), and brightness adds ~0.07 on top. Two readings that matter more
+than the headline number:
+
+1. **The mass-independent part of the signal is morphological.** Removing
+   flux barely moves the partial correlation at fixed mass (0.475 → 0.460).
+   Flux was mostly carrying the mass-correlated part of the label, which is
+   exactly what B1's tercile table implied.
+2. **Brightness and morphology are not separable in this data.** The
+   shape-only model's output is *still* 59% predictable from total flux
+   (ρ = −0.84 with it) even though every map it saw had identical total
+   flux. Bright clusters genuinely look different, so the CNN reconstructs
+   the brightness we deleted. This bounds what any ablation of this kind
+   can establish, and is worth a sentence in the paper: "morphology-only"
+   and "brightness-only" are not orthogonal decompositions here.
+
 **Recommendation.** Do **4** immediately regardless of what else we pick —
 it is cheap and it bounds the morphology claim, which is the number the
 paper actually lives or dies on. Take **1** as the primary model for this
