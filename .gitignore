@@ -76,3 +76,22 @@ a780_mapping_details.csv
 
 # Old/removed files
 Cluster Comparison*
+
+# Generated datasets (rebuildable from build_dataset.py / build_radio_cells.py)
+dataset_*.h5
+mock*.h5
+injected_*.h5
+*.hdf5
+*.npz
+
+# Regenerated shock-cell catalogues (~2 GB) and downloaded LoTSS backgrounds
+Radio_Cells*/
+lotss_fields/
+
+# Symlinks to collaborator data directories
+TNGCluster_Xray_Snap99
+TSC_Cutimages
+
+# Partial/intermediate label builds
+camels_proxy_parts/
+merger_proxy_parts/
