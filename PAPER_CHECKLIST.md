@@ -20,9 +20,34 @@ Items A1 and B1 are the two that currently undercut 1 and 4.
 
 ---
 
-## A. Fix before quoting any number
+## A. Fix before quoting any number — DONE 2026-09-09
 
-- [ ] **A1. Remove best-epoch-on-the-test-fold selection.**
+Outcome (jobs 6122014 / 6122015, `summarize_a3.py`). The honest numbers, to
+be used everywhere from here:
+
+| configuration | old (best-epoch on test fold) | inner-split selection | final epoch |
+|---|---|---|---|
+| pooled CNN, pseudo-TSC, n_H<1e-4, 128px | 0.567 ± 0.018 | **0.487 ± 0.033** | 0.514 ± 0.026 |
+| field-injected transfer, mock OOF | 0.426 | **0.374 / 0.360** | 0.357 / 0.366 |
+
+So the headline baseline loses **0.053–0.080** and the transfer result
+**0.052–0.066**. The transfer drop is smaller than the +0.32 the logs
+implied because the optimizer fix (A2) also stabilised the training curve,
+so the two changes partly cancel — the model really is better, it was just
+being scored dishonestly.
+
+`inner` and `final` are statistically indistinguishable on the baseline
+(paired −0.027 ± 0.018 SE, p=0.22, though 0/5 seeds favour inner — it pays
+15% of its training data for the privilege). Reporting `inner` as the
+headline anyway: with `final`, the epoch count is itself a hyperparameter
+that was historically chosen by looking at test performance, and inner
+selection makes it per-fold and data-driven. Quote `final` alongside it.
+
+**The mass confound is untouched by the protocol fix** — ρ(OOF pred, M500)
+is still −0.86 to −0.89 and ρ(real pred, total SNR) −0.77 to −0.91 across
+all four transfer runs. B1/B2 are now the binding items.
+
+- [x] **A1. Remove best-epoch-on-the-test-fold selection.**
   `train_cnn.py`, `train_cnn_pooled.py`, `train_cnn_mock.py` all keep the
   epoch with the best validation score *on the fold they then report*, with
   no inner split. Measured inflation (best − final-epoch fold R², from the
@@ -32,14 +57,14 @@ Items A1 and B1 are the two that currently undercut 1 and 4.
   but absolute numbers do not.
   *Do:* add an inner validation split for checkpoint selection, or fix the
   epoch count and let the cosine schedule land. Re-run headline configs.
-- [ ] **A2. Fix `train_cnn_mock.py`'s optimizer.** It uses Adam lr 1e-3 with
+- [x] **A2. Fix `train_cnn_mock.py`'s optimizer.** It uses Adam lr 1e-3 with
   no schedule, so per-epoch val R² swings between −0.5 and +0.5 and "0.426"
   is substantially the pick of the best swing. Match `train_cnn_pooled.py`
   (AdamW 3e-4 + cosine).
-- [ ] **A3. Re-run and re-record after A1/A2.** Pooled CNN + pseudo-TSC +
+- [x] **A3. Re-run and re-record after A1/A2.** Pooled CNN + pseudo-TSC +
   `dataset_nh4_128.h5` (5 seeds); injected transfer (`injected_nh4.h5`,
   2+ seeds). Expect 0.567 → ~0.52 and 0.426 → lower.
-- [ ] **A4. Save OOF predictions from `train_cnn_pooled.py`.** It currently
+- [x] **A4. Save OOF predictions from `train_cnn_pooled.py`.** It currently
   prints R² and discards `oof_preds`; B1 and the scatter figure both need
   them on disk (`np.savez` keyed by `halo_id`, as `train_cnn_mock.py` does).
 
@@ -107,9 +132,14 @@ Items A1 and B1 are the two that currently undercut 1 and 4.
 
 ## D. Writing, figures, corrections
 
-- [ ] **D1. README number corrections.** Pooled + pseudo-TSC is
-  **0.549 ± 0.015 over 5 seeds**, not the single lucky 0.564 still in the
-  Comparison table. Sweep for other single-seed numbers.
+- [ ] **D1. README number corrections.** Every CNN number in the Comparison
+  table is on the retired protocol. The nh4 pooled baseline is now
+  **0.487 ± 0.033** (inner) / 0.514 ± 0.026 (final) — see the A table — not
+  0.567, and certainly not the single lucky 0.564 still printed. The
+  re-centring comparison (0.536 → 0.549) and the density-cut grid
+  (0.546 → 0.567) are *paired* results, so their deltas survive, but their
+  absolute values do not: either re-run those grids under `--select inner`
+  or quote only the deltas. Sweep for remaining single-seed numbers.
 - [ ] **D2. Citation fix.** The injection precedent is **Bruno et al. 2023,
   A&A 672, A41** (Botteon is a co-author); memory and two commit messages
   say "Botteon 2023". Cite Cuciti's **BCES Y|X fit for 0.06 < z < 0.4**
