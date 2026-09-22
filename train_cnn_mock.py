@@ -21,19 +21,23 @@ import h5py
 import numpy as np
 import torch
 import torch.nn as nn
+import pandas as pd
+from scipy import stats
 from sklearn.metrics import r2_score, mean_absolute_error
 from sklearn.model_selection import GroupKFold, GroupShuffleSplit
 from torch.utils.data import DataLoader, Dataset
 
+from forward_model_lotss import target_key
 from train_cnn_pooled import PooledCNN, augment
 
 
 class MockDataset(Dataset):
     """One item per (cluster, realization); each carries its 3 projections."""
 
-    def __init__(self, images, labels, train=False):
+    def __init__(self, images, labels, scalars=None, train=False):
         self.images = images          # (M, 3, H, W)
         self.labels = labels
+        self.scalars = scalars        # (M, n_scalar) or None
         self.train = train
 
     def __len__(self):
@@ -43,11 +47,14 @@ class MockDataset(Dataset):
         imgs = self.images[i].copy()
         if self.train:
             imgs = np.stack([augment(imgs[p]) for p in range(imgs.shape[0])])
-        return (torch.tensor(imgs[:, None], dtype=torch.float32),
+        s = (torch.zeros(0) if self.scalars is None
+             else torch.tensor(self.scalars[i], dtype=torch.float32))
+        return (torch.tensor(imgs[:, None], dtype=torch.float32), s,
                 torch.tensor(self.labels[i], dtype=torch.float32))
 
 
-def run_fold(tr_x, tr_y, sel_x, sel_y, epochs, batch_size, device, delta):
+def run_fold(tr_x, tr_y, sel_x, sel_y, epochs, batch_size, device, delta,
+             tr_s=None, sel_s=None, n_scalar=0):
     """Train one fold; pick the checkpoint on `sel`, never on the outer fold.
 
     `sel` is a held-out slice of this fold's *training* clusters. Selecting
@@ -59,21 +66,24 @@ def run_fold(tr_x, tr_y, sel_x, sel_y, epochs, batch_size, device, delta):
     matches train_cnn_pooled.py (AdamW 3e-4 + cosine), which is most of why
     the curve settles down. Pass sel_x=None to take the final epoch.
     """
-    model = PooledCNN().to(device)
+    model = PooledCNN(n_scalar=n_scalar).to(device)
     opt = torch.optim.AdamW(model.parameters(), lr=3e-4, weight_decay=1e-3)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=epochs)
     crit = nn.HuberLoss(delta=delta)
-    tl = DataLoader(MockDataset(tr_x, tr_y, train=True), batch_size=batch_size,
+    tl = DataLoader(MockDataset(tr_x, tr_y, tr_s, train=True),
+                    batch_size=batch_size,
                     shuffle=True, num_workers=2, drop_last=True)
     sl = (None if sel_x is None
-          else DataLoader(MockDataset(sel_x, sel_y), batch_size=batch_size))
+          else DataLoader(MockDataset(sel_x, sel_y, sel_s),
+                          batch_size=batch_size))
     best, best_state, best_ep = -np.inf, None, epochs
     for ep in range(epochs):
         model.train()
-        for imgs, y in tl:
+        for imgs, sc, y in tl:
             imgs, y = imgs.to(device), y.to(device)
+            sc = sc.to(device) if n_scalar else None
             opt.zero_grad()
-            loss = crit(model(imgs), y)
+            loss = crit(model(imgs, sc), y)
             loss.backward()
             opt.step()
         sched.step()
@@ -82,8 +92,9 @@ def run_fold(tr_x, tr_y, sel_x, sel_y, epochs, batch_size, device, delta):
         model.eval()
         preds = []
         with torch.no_grad():
-            for imgs, _ in sl:
-                preds.append(model(imgs.to(device)).cpu().numpy())
+            for imgs, sc, _ in sl:
+                sc = sc.to(device) if n_scalar else None
+                preds.append(model(imgs.to(device), sc).cpu().numpy())
         r2 = r2_score(sel_y, np.concatenate(preds))
         if r2 > best:
             best, best_ep = r2, ep + 1
@@ -98,13 +109,16 @@ def run_fold(tr_x, tr_y, sel_x, sel_y, epochs, batch_size, device, delta):
 
 
 @torch.no_grad()
-def predict(model, x, device, batch_size=32):
+def predict(model, x, device, scalars=None, batch_size=32):
     model.eval()
     out = []
     for i in range(0, len(x), batch_size):
         b = torch.tensor(x[i:i + batch_size][:, :, None],
                          dtype=torch.float32).to(device)
-        out.append(model(b).cpu().numpy())
+        s = (None if scalars is None else
+             torch.tensor(scalars[i:i + batch_size],
+                          dtype=torch.float32).to(device))
+        out.append(model(b, s).cpu().numpy())
     return np.concatenate(out)
 
 
@@ -123,7 +137,24 @@ def main():
     ap.add_argument("--inner-frac", type=float, default=0.15,
                     help="fraction of each training fold held out for "
                          "checkpoint selection (--select inner)")
+    ap.add_argument("--mass", action="store_true",
+                    help="condition on log10 M500c -- the sim's true mass "
+                         "while training, the LoVoCCS weak-lensing mass at "
+                         "inference -- so the image only has to supply what "
+                         "mass does not already explain (checklist B2).")
+    ap.add_argument("--wl-masses", default="lovoccs_wl_masses.csv")
+    ap.add_argument("--catalog", default="Radio_Data/TNG-Cluster_Catalog.hdf5")
+    ap.add_argument("--mass-noise", action="store_true",
+                    help="perturb training masses by the per-cluster error "
+                         "actually measured for the real sample (median 25%% "
+                         "on M200c). Without it the model learns to trust a "
+                         "mass more precisely than the real ones deserve.")
+    ap.add_argument("--no-image", action="store_true",
+                    help="zero the images: the mass-only baseline, on the "
+                         "same folds, protocol and architecture.")
     args = ap.parse_args()
+    if args.no_image and not args.mass:
+        raise SystemExit("--no-image without --mass leaves no input at all")
 
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
@@ -137,6 +168,11 @@ def main():
         obs_name = [s.decode() if isinstance(s, bytes) else str(s)
                     for s in f["obs/name"][:]]
         obs_z = f["obs/z"][:]
+        if "obs/key" in f:
+            obs_key = [s.decode() if isinstance(s, bytes) else str(s)
+                       for s in f["obs/key"][:]]
+        else:   # datasets built before the key was stored
+            obs_key = [target_key(n) for n in obs_name]
     N, R, P, H, _ = mock.shape
     print(f"mock {mock.shape}, obs {obs.shape}, device {device}")
 
@@ -150,6 +186,50 @@ def main():
     # three times leaves the mean-pool unchanged, so the obs path is a plain
     # single-image forward pass through the same weights.
     obs_x = np.repeat(obs[:, None], P, axis=1)
+
+    # ---- mass conditioning (checklist B2) ----
+    sim_s = obs_s = None
+    n_scalar = 0
+    rng = np.random.default_rng(args.seed)
+    if args.mass:
+        n_scalar = 1
+        with h5py.File(args.catalog, "r") as f:
+            mmap = dict(zip(f["haloID"][:], f["mhalo_500c"][:]))
+        sim_logm = np.array([mmap[h] for h in halo], dtype=np.float64)
+
+        wl = pd.read_csv(args.wl_masses)
+        wlm = dict(zip(wl["key"], wl["log_m500c"]))
+        wle = dict(zip(wl["key"], wl["frac_err"]))
+        keep = np.array([k in wlm for k in obs_key])
+        dropped = [n for n, kp in zip(obs_name, keep) if not kp]
+        if dropped:
+            print(f"  no weak-lensing mass for {len(dropped)}: "
+                  f"{', '.join(dropped)}")
+        obs_x = obs_x[keep]
+        obs_name = [n for n, kp in zip(obs_name, keep) if kp]
+        obs_z = obs_z[keep]
+        obs_logm = np.array([wlm[k] for k, kp in zip(obs_key, keep) if kp])
+        # The fit reports a fractional error on M200c; d(log10 M) = f/ln10.
+        err_dex = np.array([wle[k] for k, kp in zip(obs_key, keep) if kp]) \
+            / np.log(10.0)
+        print(f"  conditioning on mass: {len(obs_logm)} real targets, "
+              f"log M500c {obs_logm.min():.2f}-{obs_logm.max():.2f}, "
+              f"median error {np.median(err_dex):.3f} dex")
+
+        if args.mass_noise:
+            # One draw per cluster, fixed for the run: the point is to blur
+            # the mass the model is given, not to augment it every epoch.
+            sig = rng.choice(err_dex, size=N)
+            sim_logm = sim_logm + rng.normal(0.0, sig)
+            print(f"  training masses blurred by {sig.mean():.3f} dex "
+                  f"on average")
+        sim_s = np.repeat(sim_logm, R)[:, None].astype(np.float32)
+        obs_s = obs_logm[:, None].astype(np.float32)
+
+    if args.no_image:
+        x[...] = 0.0
+        obs_x = np.zeros_like(obs_x)
+        print("  images zeroed: this is the mass-only baseline")
 
     oof = np.full(N * R, np.nan, dtype=np.float32)
     obs_preds = []
@@ -165,12 +245,22 @@ def main():
             fit, sel = tr, None
         print(f"  fold {k}/{args.folds}: train {len(fit)}, "
               f"sel {0 if sel is None else len(sel)}, val {len(va)}")
+        # Standardize the scalar on the training fold only, and put the real
+        # masses on that same scale -- a shift between the two would show up
+        # as a systematic offset in the real predictions.
+        if n_scalar:
+            mu, sd = sim_s[fit].mean(), sim_s[fit].std() + 1e-8
+            f_s, v_s = (sim_s[fit] - mu) / sd, (sim_s[va] - mu) / sd
+            s_s = None if sel is None else (sim_s[sel] - mu) / sd
+            o_s = (obs_s - mu) / sd
+        else:
+            f_s = v_s = s_s = o_s = None
         model, best, best_ep = run_fold(
             x[fit], y[fit], None if sel is None else x[sel],
             None if sel is None else y[sel], args.epochs, args.batch_size,
-            device, args.huber_delta)
-        oof[va] = predict(model, x[va], device)
-        obs_preds.append(predict(model, obs_x, device))
+            device, args.huber_delta, tr_s=f_s, sel_s=s_s, n_scalar=n_scalar)
+        oof[va] = predict(model, x[va], device, scalars=v_s)
+        obs_preds.append(predict(model, obs_x, device, scalars=o_s))
         print(f"  fold {k}: checkpoint epoch {best_ep}/{args.epochs}, "
               f"sel R2 {best:+.3f}  ->  outer val R2 "
               f"{r2_score(y[va], oof[va]):+.3f}")
@@ -182,6 +272,28 @@ def main():
     mae = mean_absolute_error(tsc, oof_cluster)
     print(f"\nmock OOF R2 (per realization): {r2_score(y, oof):+.3f}")
     print(f"mock OOF R2 (cluster-mean)  : {r2:+.3f}   MAE {mae:.3f} Gyr")
+
+    # The confound this experiment exists to measure: how much of the
+    # prediction is mass, and does anything survive at fixed mass?
+    with h5py.File(args.catalog, "r") as f:
+        cmap = dict(zip(f["haloID"][:], f["mhalo_500c"][:]))
+    logm = np.array([cmap[h] for h in halo], dtype=np.float64)
+    rho = lambda a, b: stats.spearmanr(a, b)[0]
+    rk = lambda v: stats.rankdata(v)
+    def resid(a, b):
+        A = np.column_stack([b, np.ones_like(b)])
+        return a - A @ np.linalg.lstsq(A, a, rcond=None)[0]
+    partial = stats.pearsonr(resid(rk(oof_cluster), rk(logm)),
+                             resid(rk(tsc), rk(logm)))[0]
+    print(f"  rho(pred, M500) {rho(oof_cluster, logm):+.3f}   "
+          f"rho(pred, TSC) {rho(oof_cluster, tsc):+.3f}   "
+          f"partial(pred, TSC | M500) {partial:+.3f}")
+    q = np.quantile(logm, [1 / 3, 2 / 3])
+    for lab, b in [("low", logm <= q[0]),
+                   ("mid", (logm > q[0]) & (logm <= q[1])),
+                   ("high", logm > q[1])]:
+        print(f"    mass tercile {lab:<5} n={b.sum():3d}  "
+              f"R2 {r2_score(tsc[b], oof_cluster[b]):+.3f}")
 
     obs_pred = np.mean(obs_preds, axis=0)
     print(f"\nreal LoTSS predictions from the {args.folds}-model ensemble:")
@@ -196,7 +308,11 @@ def main():
     np.savez(f"{args.out_prefix}_preds.npz", oof_cluster=oof_cluster,
              tsc=tsc, halo_id=halo, obs_pred=obs_pred,
              obs_name=np.array(obs_name), obs_z=obs_z,
-             select=args.select, seed=args.seed, dataset=args.dataset)
+             select=args.select, seed=args.seed, dataset=args.dataset,
+             mass=args.mass, no_image=args.no_image,
+             mass_noise=args.mass_noise,
+             obs_logm=(obs_s[:, 0] if obs_s is not None else np.zeros(0)),
+             sim_logm=logm)
     print(f"\nsaved -> {args.out_prefix}_preds.npz")
 
 

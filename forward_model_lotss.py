@@ -220,19 +220,35 @@ def make_mock(sim_map, sim_px_kpc, log_m500, z, rms_jyb, box_kpc, rng,
     return cut
 
 
+def target_key(name):
+    """Normalise a cluster name so the three spellings in play agree.
+
+    The target list writes "MKW 3s" and "RXC J0034.2-0204"; the cutouts are
+    saved as lotss_MKW_3s.fits and lotss_RXC_J0034.2-0204.fits. Stripping
+    only spaces (the original behaviour) left the underscores in the
+    filenames unmatched, so five targets that have redshifts were silently
+    dropped as "no redshift in target list": MKW 3s, RXC J0034.2-0204,
+    RXC J0034.6-0208, RXC J1217.6+0339 and RX J0820.9+0751.
+    """
+    return re.sub(r"[\s_]+", "", str(name)).upper()
+
+
 def load_obs(lotss_glob, targets_csv, box_kpc, mask_rng=None,
              max_beams=2.0):
     df = pd.read_csv(targets_csv)
-    df["key"] = df["name"].astype(str).str.replace(" ", "")
+    df["key"] = df["name"].map(target_key)
     df["redshift"] = pd.to_numeric(df["redshift"], errors="coerce")
     zmap = dict(zip(df["key"], df["redshift"]))
 
     obs = []
     for path in sorted(glob.glob(lotss_glob)):
-        key = re.sub(r"^lotss_|\.fits$", "", os.path.basename(path))
+        # `name` stays readable for printing and for the stored obs labels;
+        # `key` is the normalised form used only for joins.
+        name = re.sub(r"^lotss_|\.fits$", "", os.path.basename(path))
+        key = target_key(name)
         z = zmap.get(key, np.nan)
         if not np.isfinite(z):
-            print(f"  skip {key}: no redshift in target list")
+            print(f"  skip {name}: no redshift in target list")
             continue
         with fits.open(path) as hdul:
             img = np.squeeze(hdul[0].data).astype(np.float64)
@@ -241,12 +257,12 @@ def load_obs(lotss_glob, targets_csv, box_kpc, mask_rng=None,
         half_px = box_kpc / 2.0 / (OBS_PIX_ARCSEC * kpas)
         cut = crop_resample(img, half_px)
         if cut is None:
-            print(f"  skip {key}: z={z:.3f}, cutout smaller than "
+            print(f"  skip {name}: z={z:.3f}, cutout smaller than "
                   f"{box_kpc} kpc box")
             continue
         rms = sigma_clipped_rms(cut)
         if not np.isfinite(rms) or rms <= 0:
-            print(f"  skip {key}: degenerate rms (blank/edge cutout)")
+            print(f"  skip {name}: degenerate rms (blank/edge cutout)")
             continue
         nmask = 0
         if mask_rng is not None:
@@ -254,7 +270,8 @@ def load_obs(lotss_glob, targets_csv, box_kpc, mask_rng=None,
             fwhm_px = BEAM_FWHM_ARCSEC * kpas / px_kpc
             cut, nmask = mask_compact(cut, rms, fwhm_px, mask_rng,
                                       max_beams=max_beams)
-        obs.append(dict(name=key, z=z, rms=rms, map=cut, n_masked=nmask))
+        obs.append(dict(name=name, key=key, z=z, rms=rms, map=cut,
+                        n_masked=nmask))
     return obs
 
 

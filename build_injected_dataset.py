@@ -172,6 +172,10 @@ def main():
                          compression_opts=4)
         o.create_dataset("name", data=np.array([x["name"] for x in obs],
                                                dtype=h5py.string_dtype()))
+        # Normalised join key, so the weak-lensing masses can be matched
+        # without every consumer re-deriving the name normalisation.
+        o.create_dataset("key", data=np.array([x["key"] for x in obs],
+                                              dtype=h5py.string_dtype()))
         o.create_dataset("z", data=obs_z)
         o.create_dataset("rms", data=np.array([x["rms"] for x in obs]))
     print(f"wrote {args.output}: mock {out[keep].shape}, obs {obs_imgs.shape}")

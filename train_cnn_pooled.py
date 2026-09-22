@@ -77,10 +77,17 @@ class ConvBlock(nn.Module):
 
 
 class PooledCNN(nn.Module):
-    """Shared encoder + mean-pool across projections + regression head."""
+    """Shared encoder + mean-pool across projections + regression head.
 
-    def __init__(self, embed_dim=256):
+    `n_scalar` > 0 concatenates that many per-cluster scalars onto the pooled
+    embedding before the head. Used by train_cnn_mock.py to hand the model
+    halo mass explicitly, so the image has to supply what mass does not
+    already explain. Defaults to 0, which is the original architecture.
+    """
+
+    def __init__(self, embed_dim=256, n_scalar=0):
         super().__init__()
+        self.n_scalar = n_scalar
         self.encoder = nn.Sequential(
             ConvBlock(1,  32),   # 128 → 64
             ConvBlock(32, 64),   # 64  → 32
@@ -89,13 +96,13 @@ class PooledCNN(nn.Module):
         )
         self.pool = nn.AdaptiveAvgPool2d(1)
         self.head = nn.Sequential(
-            nn.Linear(embed_dim, 64),
+            nn.Linear(embed_dim + n_scalar, 64),
             nn.ReLU(inplace=True),
             nn.Dropout(0.4),
             nn.Linear(64, 1),
         )
 
-    def forward(self, x):
+    def forward(self, x, s=None):
         # x: (B, 3, 1, H, W) — batch of 3 projections
         B, P, C, H, W = x.shape
         # encode all projections through shared backbone
@@ -104,6 +111,10 @@ class PooledCNN(nn.Module):
         x = x.reshape(B, P, -1)               # (B, 3, 256)
         # mean-pool across projections
         x = x.mean(dim=1)                     # (B, 256)
+        if self.n_scalar:
+            if s is None:
+                raise ValueError(f"model expects {self.n_scalar} scalar(s)")
+            x = torch.cat([x, s], dim=1)      # (B, 256 + n_scalar)
         return self.head(x).squeeze(1)         # (B,)
 
 
