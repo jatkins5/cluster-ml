@@ -126,8 +126,42 @@ all four transfer runs. B1/B2 are now the binding items.
   partial ρ(pred, TSC | M) = 0.30–0.39, R² inside mass terciles 0.08–0.24.
   *Do:* report R² within mass bins and partial correlations; put the scalar
   baselines in the main results table.
-- [ ] **B2. Decide the mass treatment for the transfer model, then re-run.**
-  **Needs a decision before any code.** See the brief below.
+- [x] **B2. Mass treatment — DONE 2026-09-22** (option 1, mass conditioning;
+  option 4 already done). `train_cnn_mock.py --mass`, jobs 6622280/6623225,
+  5 seeds x 4 conditions on `injected_nh4.h5` (25 obs, 208 backgrounds).
+
+  | condition | mock OOF R² | ρ(pred,M500) | partial at fixed mass | R² in mass terciles |
+  |---|---|---|---|---|
+  | mass only | 0.279 | −0.99 | **−0.093** | −0.06 / −0.01 / −0.04 |
+  | image only | 0.338 | −0.89 | 0.312 | 0.06 / 0.11 / 0.17 |
+  | image + mass | 0.358 | −0.90 | 0.342 | 0.09 / 0.15 / 0.18 |
+  | image + blurred mass | 0.367 | −0.90 | 0.355 | 0.09 / 0.17 / 0.18 |
+
+  **The headline: the image is worth +0.079 ± 0.012 R² over mass alone
+  (p=0.0024, 5/5 seeds), and +0.088 ± 0.013 when the mass carries the real
+  sample's measured error.** The mass-only control scores ~0 inside every
+  mass tercile and −0.09 on the partial correlation, exactly as a function
+  of mass must, which is what validates the test.
+
+  Two secondary results. Conditioning does **not** improve raw accuracy over
+  image-only (+0.020 ± 0.016, p=0.29, 3/5) — it changes what can be *claimed*,
+  not what is achieved. And blurring the mass by 25% costs nothing
+  (+0.009, p=0.23), so the claim survives being made with observed masses
+  rather than true ones, which is the form the paper needs.
+
+  On real data, giving the model mass breaks the brightness ordering:
+  ρ(pred, M500) goes from −1.00 (mass-only, by construction) to −0.36.
+  A1650 is the clearest case — mass alone calls it 0.68 Gyr because it is
+  massive; the image pulls it to 2.01.
+
+  **A401 is now weaker as a validation, not stronger.** It is the most
+  massive target (log M500c 14.92) and the mass-only model already assigns
+  it the lowest TSC of all 17. Its partner A399 has no weak-lensing mass and
+  drops out of the conditioned sample entirely.
+
+  *Remaining:* option 3 (use the simulation's own predicted power instead of
+  the Cuciti anchor) is still the more interesting physics and still
+  untested.
 - [ ] **B3. Reconcile with Lee's relic-separation relation.** Their group now
   publishes TSC = 0.52 d_drr/R500c − 0.24, r = 0.83 in TNG-Cluster
   (arXiv:2510.21632); our README records four independent negative attempts
@@ -224,18 +258,23 @@ the target list. Ask the PI.
 
 ## C. Data hygiene
 
-- [ ] **C1. Name-key bug drops 5 usable LoTSS targets.**
+- [x] **C1. DONE** — Name-key bug dropped 5 usable LoTSS targets.
   `forward_model_lotss.load_obs` keys the target CSV by name with *spaces*
   removed (`MKW3s`) but the FITS files use underscores (`lotss_MKW_3s.fits`),
   so MKW 3s, RXC J0034.2−0204, RXC J0034.6−0208, RXC J1217.6+0339 and
   RX J0820.9+0751 are skipped as "no redshift in target list" — the CSV has
   their redshifts. Strip spaces *and* underscores on both sides.
-- [ ] **C2. Re-download the three low-z targets larger.** A2052, A2063,
+- [x] **C2. DONE** (and the background fields needed the same fix — see C3).
+  Re-download the three low-z targets larger. A2052, A2063,
   A2147 (all z=0.035) fail the 1 Mpc crop because their cutouts are
   800 px × 1.5″ = 20′ and 1 Mpc subtends ~24′ there.
   `download_lotss_image.py --size-arcmin 40`. (A1750 is genuinely blank.)
-- [ ] **C3. Rebuild the `obs/` groups** in `mock_dataset_*.h5` and
-  `injected_*.h5` after C1/C2 — inference sample 17 → ~25.
+- [x] **C3. DONE** — rebuilt `injected_nh4.h5`: **25 obs** (17 with a
+  weak-lensing mass), all 352 clusters injected. The first rebuild silently
+  dropped to 235/352 because the 158 background fields were also 20′ and
+  could not supply a 1 Mpc box at z=0.035 — the same bug as C2, one level
+  down. Re-downloaded the fields at 40′ (208 kept, `lotss_fields_40/`).
+  `mock_dataset_*.h5` (analytic-noise tier) has *not* been rebuilt.
 - [ ] **C4. Regenerate the forward-model tables.** The `regen_*_mfs.npz`
   files (correlated noise, GroupPos, cuts) exist but the README KS tables
   still show pre-fix numbers. Nothing predating `--correlated-noise` should
