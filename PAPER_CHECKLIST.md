@@ -159,9 +159,64 @@ all four transfer runs. B1/B2 are now the binding items.
   it the lowest TSC of all 17. Its partner A399 has no weak-lensing mass and
   drops out of the conditioned sample entirely.
 
-  *Remaining:* option 3 (use the simulation's own predicted power instead of
-  the Cuciti anchor) is still the more interesting physics and still
-  untested.
+- [x] **B2 option 3 — DONE 2026-09-23.** Dropped the observed flux anchor;
+  each mock's total flux is now the emission model's own predicted power
+  (`--flux-mode sim`), with one global constant setting the absolute scale.
+  Jobs 6651354 / 6651423, 3 seeds.
+
+  | condition | anchored | sim power | ρ(pred,M) anch → sim | partial anch → sim |
+  |---|---|---|---|---|
+  | image only | 0.338 | **0.412** | −0.89 → **−0.61** | 0.31 → **0.46** |
+  | image + blurred mass | 0.367 | **0.437** | −0.90 → −0.67 | 0.36 → 0.46 |
+  | mass only | 0.279 | 0.286 | −0.99 → −0.99 | −0.09 → −0.09 |
+
+  **The increment over mass-only nearly doubles: +0.151 ± 0.006 (p=0.0016,
+  3/3) against +0.088 ± 0.013 anchored.** The mass-only baseline is
+  unchanged, as it must be — it never sees an image. Realism is comparable
+  (separations within ±1 except `max`), and real predictions stay in range
+  (median 1.70, range 0.59–2.76). **This is the configuration the paper
+  should use.**
+
+  **It also turns the observed relation into a test the simulation passes
+  and fails in specific ways:**
+
+  | | simulation | Cuciti+2023 |
+  |---|---|---|
+  | slope | **3.30 ± 0.33** | 3.55 |
+  | scatter about the relation | **1.65 dex** | 0.35 dex |
+
+  The slope agrees within 1σ — a genuine success for the DSA model with our
+  density cut. The scatter is **5× too large**, the same pathology as the
+  concentrated weights. The normalisation is *not* a prediction (the global
+  offset was fitted to the median), so only slope and scatter are testable.
+
+  **And the scatter is a merger signal, in the direction the observations
+  report.** Residual vs pseudo-TSC Spearman −0.365 (p=1.5e-12), monotonic
+  across terciles: **+0.74 / +0.37 / −0.64 dex** from recent to relaxed.
+  Cuciti's Fig. 3 finds the same sign for X-ray disturbance. The old design
+  was filling exactly this quantity with N(0, 0.35 dex) of pure noise —
+  it was destroying a real signal, not just adding a confound.
+
+  *The caveat to state:* total flux now carries genuine merger information
+  (corr(log P150, TSC) = −0.615), so part of this model's skill is "the
+  simulation says recent mergers are brighter" rather than morphology. That
+  is a testable physical prediction rather than an imposed relation, which
+  is the improvement — but it is not a morphology claim, and the 1.4 dex
+  swing across TSC terciles is far larger than observations support.
+- [ ] **Weak-lensing peak check — DONE, and it is underpowered.**
+  (`analyze_wl_peaks.py`, jobs 6651381 / 6651407.) The peak catalogue covers
+  57 clusters but only **9** overlap our LOFAR targets, and that is the
+  binding limit — using all 25 image-only predictions instead of the 17
+  mass-conditioned ones gives the same 9. At S/N>3 every correlation is null
+  and two have the wrong sign. At S/N>4, peak count gives ρ = −0.756,
+  p = 0.030 in the expected direction, but it is one of ~16 tests, driven
+  entirely by A401 and A1307 being the only clusters with a second peak, and
+  it flips sign at the neighbouring threshold. At n=9 only |ρ| ≳ 0.65 is
+  detectable. **Report as inconclusive; it neither supports nor refutes.**
+  The idea is still right — weak lensing is a genuinely independent
+  observable — it just needs a peak catalogue covering more of the LOFAR
+  footprint.
+
 - [ ] **B3. Reconcile with Lee's relic-separation relation.** Their group now
   publishes TSC = 0.52 d_drr/R500c − 0.24, r = 0.83 in TNG-Cluster
   (arXiv:2510.21632); our README records four independent negative attempts

@@ -68,13 +68,35 @@ def kpc_per_arcsec(z):
     return COSMO.angular_diameter_distance(z).to("kpc").value * ARCSEC
 
 
+def flux_from_logp(logp, z):
+    """log10 rest-frame 150 MHz power [W/Hz] -> observed flux density [Jy]."""
+    dl_m = COSMO.luminosity_distance(z).to("m").value
+    s = 10.0 ** logp * (1 + z) ** (1 - SPEC_INDEX) / (4 * np.pi * dl_m**2)
+    return s / 1e-26  # W/m^2/Hz -> Jy
+
+
 def total_flux_jy(log_m500, z, rng=None):
     logp = P150_LOGP0 + P150_SLOPE * (log_m500 - P150_LOGM_PIVOT)
     if rng is not None:
         logp += rng.normal(0.0, P150_SCATTER_DEX)
-    dl_m = COSMO.luminosity_distance(z).to("m").value
-    s = 10.0 ** logp * (1 + z) ** (1 - SPEC_INDEX) / (4 * np.pi * dl_m**2)
-    return s / 1e-26  # W/m^2/Hz -> Jy
+    return flux_from_logp(logp, z)
+
+
+def sim_logp(cut, offset):
+    """log10 power implied by the simulation's own emission, plus `offset`.
+
+    The stored maps are arcsinh(weight), so sinh() recovers the summed DSA
+    weight per pixel and the box total is the cluster's own predicted 150 MHz
+    power in the model's arbitrary units. `offset` is the single global
+    constant that puts those units on the observed scale; it is fixed from
+    the sample median, so every cluster-to-cluster difference -- the slope
+    against mass, and the scatter about it -- comes from the simulation
+    rather than from an imposed relation.
+    """
+    tot = np.sinh(np.clip(cut, 0.0, 40.0)).sum()
+    if not np.isfinite(tot) or tot <= 0:
+        return None
+    return np.log10(tot) + offset
 
 
 def sigma_clipped_rms(img, nsig=3.0, iters=5):
