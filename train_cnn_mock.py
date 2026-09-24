@@ -110,6 +110,8 @@ def run_fold(tr_x, tr_y, sel_x, sel_y, epochs, batch_size, device, delta,
 
 @torch.no_grad()
 def predict(model, x, device, scalars=None, batch_size=32):
+    if len(x) == 0:
+        return np.zeros(0, dtype=np.float32)
     model.eval()
     out = []
     for i in range(0, len(x), batch_size):
@@ -164,11 +166,21 @@ def main():
         mock = f["mock/images"][:]            # (N, R, 3, H, W)
         halo = f["mock/halo_id"][:]
         tsc = f["mock/pseudo_tsc"][:]
-        obs = f["obs/images"][:]              # (n_obs, H, W)
-        obs_name = [s.decode() if isinstance(s, bytes) else str(s)
-                    for s in f["obs/name"][:]]
-        obs_z = f["obs/z"][:]
-        if "obs/key" in f:
+        if "obs" not in f:
+            # Sim-only datasets (e.g. the realistic-depth X-ray mocks, for
+            # which no real cutouts exist yet): score the mocks, skip the
+            # real-data predictions.
+            H0 = mock.shape[-1]
+            obs = np.zeros((0, H0, H0), dtype=np.float32)
+            obs_name, obs_z = [], np.zeros(0)
+        else:
+            obs = f["obs/images"][:]          # (n_obs, H, W)
+            obs_name = [s.decode() if isinstance(s, bytes) else str(s)
+                        for s in f["obs/name"][:]]
+            obs_z = f["obs/z"][:]
+        if "obs" not in f:
+            obs_key = []
+        elif "obs/key" in f:
             obs_key = [s.decode() if isinstance(s, bytes) else str(s)
                        for s in f["obs/key"][:]]
         else:   # datasets built before the key was stored
@@ -296,6 +308,8 @@ def main():
               f"R2 {r2_score(tsc[b], oof_cluster[b]):+.3f}")
 
     obs_pred = np.mean(obs_preds, axis=0)
+    if len(obs_pred) == 0:
+        print("\n(no real observations in this dataset)")
     print(f"\nreal LoTSS predictions from the {args.folds}-model ensemble:")
     print(f"{'target':<16}{'z':>8}{'pred TSC [Gyr]':>16}")
     for n, z, p in zip(obs_name, obs_z, obs_pred):
@@ -303,7 +317,8 @@ def main():
     print(f"\n{'':<16}{'mock (train)':>16}{'real LoTSS':>14}")
     for lab, fn in [("median", np.median), ("mean", np.mean),
                     ("std", np.std), ("min", np.min), ("max", np.max)]:
-        print(f"{lab:<16}{fn(tsc):>16.3f}{fn(obs_pred):>14.3f}")
+        real = fn(obs_pred) if len(obs_pred) else np.nan
+        print(f"{lab:<16}{fn(tsc):>16.3f}{real:>14.3f}")
 
     np.savez(f"{args.out_prefix}_preds.npz", oof_cluster=oof_cluster,
              tsc=tsc, halo_id=halo, obs_pred=obs_pred,

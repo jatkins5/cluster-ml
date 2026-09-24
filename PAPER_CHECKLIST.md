@@ -232,6 +232,19 @@ all four transfer runs. B1/B2 are now the binding items.
   ones. *Remaining:* the X-ray/dual README numbers are void; the transfer
   (real-data) version needs X-ray mocks, which do not exist.
 
+- [x] **X-ray at realistic depth — DONE 2026-09-23** (`build_xray_realistic.py`).
+  The mocks were Chandra ACIS-I at 2 Ms with no sky backgrounds; real
+  archival Chandra for our targets is a median 50 ks (19/26 observed). Thinned
+  the photon counts to real depths and added soxs sky backgrounds:
+  1 ks 0.391, 3 ks 0.402, 10 ks 0.440, 30 ks 0.446, **archive-drawn (median
+  50 ks) 0.483**, 100 ks 0.498, 2 Ms 0.484. No loss at real depths; below
+  ~10 ks the within-mass skill goes first. *Caveats:* mocks fixed at
+  z=0.05 and TNG is ~3.6x over-luminous, so a real z~0.1 cluster at 50 ks
+  behaves like ~3–5 ks here (~0.40). **The X-ray FoV is ±500 kpc (the ACIS-I
+  square), not ±1 r500** as the README states. *Remaining:* redshift
+  placement; a joint transfer model with both modalities degraded; real
+  X-ray cutouts for inference.
+
 - [ ] **B3. Reconcile with Lee's relic-separation relation.** Their group now
   publishes TSC = 0.52 d_drr/R500c − 0.24, r = 0.83 in TNG-Cluster
   (arXiv:2510.21632); our README records four independent negative attempts
