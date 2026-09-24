@@ -26,9 +26,11 @@ from sklearn.metrics import r2_score, mean_absolute_error, root_mean_squared_err
 
 # ---------- augmentation ----------
 
-def augment(img):
-    """Random rotation (0/90/180/270) + optional flip."""
-    k = np.random.randint(8)
+def augment(img, k=None):
+    """Random rotation (0/90/180/270) + optional flip. Pass `k` to apply a
+    specific one of the 8 transforms, e.g. the same one to both modalities."""
+    if k is None:
+        k = np.random.randint(8)
     if k >= 4:
         img = np.fliplr(img)
     img = np.rot90(img, k % 4)
@@ -55,6 +57,34 @@ class RadioClusterDataset(Dataset):
         imgs  = torch.tensor(imgs[:, None], dtype=torch.float32)  # (3, 1, H, W)
         label = torch.tensor(self.labels[idx], dtype=torch.float32)
         return imgs, label
+
+
+class JointClusterDataset(Dataset):
+    """Radio and X-ray projections of one cluster, delivered together.
+
+    Each projection pair gets the same random transform, so the i-th radio
+    view and the i-th X-ray view stay the same view of the cluster. The two
+    encoders never compare pixels across modalities, so this is tidiness
+    rather than a requirement -- but it costs nothing and removes a doubt.
+    """
+
+    def __init__(self, radio, xray, labels, train=False):
+        self.radio, self.xray = radio, xray      # (N, 3, H, W) each
+        self.labels = labels
+        self.train = train
+
+    def __len__(self):
+        return len(self.labels)
+
+    def __getitem__(self, idx):
+        r, x = self.radio[idx].copy(), self.xray[idx].copy()
+        if self.train:
+            ks = np.random.randint(8, size=r.shape[0])
+            r = np.stack([augment(r[p], ks[p]) for p in range(r.shape[0])])
+            x = np.stack([augment(x[p], ks[p]) for p in range(x.shape[0])])
+        return (torch.tensor(r[:, None], dtype=torch.float32),
+                torch.tensor(x[:, None], dtype=torch.float32),
+                torch.tensor(self.labels[idx], dtype=torch.float32))
 
 
 # ---------- model ----------
@@ -118,19 +148,54 @@ class PooledCNN(nn.Module):
         return self.head(x).squeeze(1)         # (B,)
 
 
+class JointPooledCNN(nn.Module):
+    """Two PooledCNN encoders -- one radio, one X-ray -- joined before the head.
+
+    Each modality gets its own encoder, because the maps are physically
+    different (radio +-4 r500 of shock emission, X-ray +-1 r500 of thermal
+    gas) and share nothing pixel-for-pixel. Each is mean-pooled over the
+    three projections exactly as PooledCNN does, the two 256-d embeddings
+    are concatenated, and a head twice as wide predicts TSC. Only the input
+    changes relative to the single-modality runs it is compared against.
+    """
+
+    def __init__(self, embed_dim=256):
+        super().__init__()
+        self.radio = PooledCNN(embed_dim)
+        self.xray = PooledCNN(embed_dim)
+        self.head = nn.Sequential(
+            nn.Linear(2 * embed_dim, 64),
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.4),
+            nn.Linear(64, 1),
+        )
+
+    @staticmethod
+    def _embed(net, x):
+        B, P, C, H, W = x.shape
+        z = net.pool(net.encoder(x.reshape(B * P, C, H, W)))
+        return z.reshape(B, P, -1).mean(dim=1)
+
+    def forward(self, radio, xray):
+        z = torch.cat([self._embed(self.radio, radio),
+                       self._embed(self.xray, xray)], dim=1)
+        return self.head(z).squeeze(1)
+
+
 # ---------- training ----------
 
 def train_epoch(model, loader, optimizer, criterion, device):
     model.train()
     total_loss = 0.0
-    for imgs, labels in loader:
-        imgs, labels = imgs.to(device), labels.to(device)
+    for *inputs, labels in loader:
+        inputs = [t.to(device) for t in inputs]
+        labels = labels.to(device)
         optimizer.zero_grad()
-        preds = model(imgs)
+        preds = model(*inputs)
         loss  = criterion(preds, labels)
         loss.backward()
         optimizer.step()
-        total_loss += loss.item() * len(imgs)
+        total_loss += loss.item() * len(labels)
     return total_loss / len(loader.dataset)
 
 
@@ -138,15 +203,16 @@ def train_epoch(model, loader, optimizer, criterion, device):
 def evaluate(model, loader, device):
     model.eval()
     all_preds, all_labels = [], []
-    for imgs, labels in loader:
-        preds = model(imgs.to(device)).cpu().numpy()
+    for *inputs, labels in loader:
+        preds = model(*[t.to(device) for t in inputs]).cpu().numpy()
         all_preds.append(preds)
         all_labels.append(labels.numpy())
     return np.concatenate(all_preds), np.concatenate(all_labels)
 
 
 def run_cv(images, labels, n_folds, n_epochs, batch_size, seed, huber_delta=0.5,
-           select="inner", inner_frac=0.15, halo_ids=None, save_preds=None):
+           select="inner", inner_frac=0.15, halo_ids=None, save_preds=None,
+           xray=None):
     """5-fold CV. `select` decides where the reported checkpoint comes from.
 
     "inner" holds out a further `inner_frac` of each fold's *training*
@@ -181,24 +247,31 @@ def run_cv(images, labels, n_folds, n_epochs, batch_size, seed, huber_delta=0.5,
         else:
             train_idx, sel_idx = outer_train_idx, None
 
-        # normalise using training stats only
+        # normalise using training stats only, separately per modality
         tr_mean = images[train_idx].mean()
         tr_std  = images[train_idx].std() + 1e-8
-        imgs_tr  = (images[train_idx] - tr_mean) / tr_std
-        imgs_val = (images[val_idx]   - tr_mean) / tr_std
+        norm_r = lambda idx: (images[idx] - tr_mean) / tr_std
+        if xray is not None:
+            x_mean = xray[train_idx].mean()
+            x_std  = xray[train_idx].std() + 1e-8
+            norm_x = lambda idx: (xray[idx] - x_mean) / x_std
+            make = lambda idx, tr: JointClusterDataset(
+                norm_r(idx), norm_x(idx), labels[idx], train=tr)
+        else:
+            make = lambda idx, tr: RadioClusterDataset(
+                norm_r(idx), labels[idx], train=tr)
 
-        train_ds = RadioClusterDataset(imgs_tr, labels[train_idx], train=True)
-        val_ds   = RadioClusterDataset(imgs_val, labels[val_idx],  train=False)
+        train_ds = make(train_idx, True)
+        val_ds   = make(val_idx, False)
         train_dl = DataLoader(train_ds, batch_size=batch_size, shuffle=True,  num_workers=2, pin_memory=True)
         val_dl   = DataLoader(val_ds,   batch_size=batch_size, shuffle=False, num_workers=2, pin_memory=True)
         sel_dl = None
         if sel_idx is not None:
-            sel_ds = RadioClusterDataset((images[sel_idx] - tr_mean) / tr_std,
-                                         labels[sel_idx], train=False)
-            sel_dl = DataLoader(sel_ds, batch_size=batch_size, shuffle=False,
-                                num_workers=2, pin_memory=True)
+            sel_dl = DataLoader(make(sel_idx, False), batch_size=batch_size,
+                                shuffle=False, num_workers=2, pin_memory=True)
 
-        model     = PooledCNN().to(device)
+        model     = (JointPooledCNN() if xray is not None
+                     else PooledCNN()).to(device)
         optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4, weight_decay=1e-3)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=n_epochs)
         criterion = nn.HuberLoss(delta=huber_delta)
@@ -256,7 +329,8 @@ def run_cv(images, labels, n_folds, n_epochs, batch_size, seed, huber_delta=0.5,
         np.savez(save_preds, oof_pred=oof_preds, label=labels,
                  halo_id=(np.arange(len(labels)) if halo_ids is None
                           else halo_ids),
-                 fold_r2=np.array(fold_r2), select=select, seed=seed)
+                 fold_r2=np.array(fold_r2), select=select, seed=seed,
+                 modality="radio+xray" if xray is not None else "single")
         print(f"  saved predictions -> {save_preds}")
     return oof_preds
 
@@ -264,7 +338,7 @@ def run_cv(images, labels, n_folds, n_epochs, batch_size, seed, huber_delta=0.5,
 def main(tau, n_folds, n_epochs, batch_size, seed, pseudo_tsc=False,
          merger_tsc=False, huber_delta=0.5, log_transform=False,
          dataset="dataset.h5", select="inner", inner_frac=0.15,
-         save_preds=None):
+         save_preds=None, xray_dataset=None):
     dataset_path = dataset
 
     print("Loading dataset...")
@@ -285,6 +359,7 @@ def main(tau, n_folds, n_epochs, batch_size, seed, pseudo_tsc=False,
             images = images[valid]
             labels = labels[valid]
             halo_ids = halo_ids[valid]     # keep the join key aligned
+            xray_valid = valid
             print(f"Using merger-catalog TSC label ({valid.sum()}/{len(valid)} clusters, "
                   f"{(~valid).sum()} dropped — no recorded collision)")
         elif pseudo_tsc:
@@ -296,6 +371,19 @@ def main(tau, n_folds, n_epochs, batch_size, seed, pseudo_tsc=False,
             actual_tau = float(tau_vals[tau_idx])
             labels = f["labels/label_score_all"][:, tau_idx]
             print(f"Using tau = {actual_tau:.1f} Gyr (index {tau_idx})")
+
+    xray = None
+    if xray_dataset is not None:
+        with h5py.File(xray_dataset, "r") as f:
+            xray = f["images"][:]
+            x_hids = f["meta/halo_id"][:]
+        if merger_tsc:
+            xray, x_hids = xray[xray_valid], x_hids[xray_valid]
+        if not np.array_equal(x_hids, halo_ids):
+            raise SystemExit(f"halo order differs between {dataset} and "
+                             f"{xray_dataset}; refusing to pair them")
+        print(f"Joint model: radio {images.shape} + X-ray {xray.shape} "
+              f"from {xray_dataset}")
 
     labels = labels.astype(np.float32)
     if log_transform:
@@ -309,7 +397,7 @@ def main(tau, n_folds, n_epochs, batch_size, seed, pseudo_tsc=False,
     print(f"Huber delta: {huber_delta}")
     run_cv(images, labels, n_folds, n_epochs, batch_size, seed, huber_delta,
            select=select, inner_frac=inner_frac, halo_ids=halo_ids,
-           save_preds=save_preds)
+           save_preds=save_preds, xray=xray)
 
 
 if __name__ == "__main__":
@@ -339,7 +427,11 @@ if __name__ == "__main__":
                              "checkpoint selection (--select inner)")
     parser.add_argument("--save-preds", type=str, default=None,
                         help="npz path for the per-cluster OOF predictions")
+    parser.add_argument("--xray-dataset", type=str, default=None,
+                        help="X-ray h5 with the same halo order: trains the "
+                             "joint radio + X-ray model instead")
     args = parser.parse_args()
     main(args.tau, args.folds, args.epochs, args.batch_size, args.seed,
          args.pseudo_tsc, args.merger_tsc, args.huber_delta, args.log_transform,
-         args.dataset, args.select, args.inner_frac, args.save_preds)
+         args.dataset, args.select, args.inner_frac, args.save_preds,
+         args.xray_dataset)

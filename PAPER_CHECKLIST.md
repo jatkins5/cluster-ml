@@ -223,9 +223,14 @@ all four transfer runs. B1/B2 are now the binding items.
   the CNN never saw the outskirts. With `arcsinh(x / global median)`:
   X-ray alone **0.320 → 0.511 ± 0.026** (p=0.0003, 5/5), matching radio's
   0.487; radio + X-ray stacked **0.523 → 0.577 (+0.054)** against +0.018
-  with the old stretch. Mass adds nothing on top. *Remaining:* a real
-  dual-encoder run under the current protocol (the stacking is an upper
-  bound, not a joint model), and the X-ray/dual README numbers are void.
+  with the old stretch. Mass adds nothing on top. **Joint model run —
+  confirmed:** `train_cnn_pooled.py --xray-dataset`, 5 seeds, same protocol:
+  joint **0.537 ± 0.016** (ensemble 0.575) vs radio 0.487 / X-ray 0.511;
+  joint − radio +0.050 ± 0.008 (p=0.004, 5/5), joint − X-ray +0.026
+  (p=0.016, 5/5). The stacking estimate (0.577) was not optimistic. The gain
+  is in dating older mergers (TSC > 2 Gyr RMSE 1.25 → 1.13), not recent
+  ones. *Remaining:* the X-ray/dual README numbers are void; the transfer
+  (real-data) version needs X-ray mocks, which do not exist.
 
 - [ ] **B3. Reconcile with Lee's relic-separation relation.** Their group now
   publishes TSC = 0.52 d_drr/R500c − 0.24, r = 0.83 in TNG-Cluster
