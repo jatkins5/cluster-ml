@@ -35,7 +35,7 @@ from astropy.coordinates import SkyCoord
 from astroquery.heasarc import Heasarc
 
 BASE = "https://cxc.cfa.harvard.edu/cdaftp/byobsid"
-WANT = ("evt2", "fov1", "bpix1")
+WANT = ("evt2", "fov1", "bpix1", "asol1")   # asol: fluximage needs the aspect solution
 key = lambda s: re.sub(r"[\s_]+", "", str(s)).upper()
 
 

@@ -98,3 +98,5 @@ merger_proxy_parts/
 lotss_fields_40/
 xray_bkg_work/
 xray_*.h5
+ciao_env/
+chandra/

@@ -3,4 +3,4 @@
 #SBATCH -J cmpjr
 #SBATCH -o logs/compare_jointreal_%j.out
 cd /oscar/data/idellant/cluster-ml
-./venv/bin/python -u compare_jointreal.py
+./venv/bin/python -u compare_jointreal.py --placed

@@ -46,6 +46,11 @@ import h5py
 import numpy as np
 
 QUANTUM = 0.00455          # image units per detected count (measured)
+Z_MOCK = 0.05              # every mock was observed at this redshift
+# Radius, at z=0.05, of the circle safely inside the ACIS-I field around the
+# cluster (the square is 16.9' across and the cluster sits at the aimpoint on
+# I3, slightly off-centre; measured coverage falls to ~half by 6-9').
+APERTURE_ARCMIN = 8.0
 T_MOCK_KS = 2000.0         # exposure of the existing mocks
 RAW, CROP = 4880, 4864     # same centre crop as build_xray_dataset.py
 GRID = 128
@@ -97,6 +102,42 @@ def stage_counts(args):
     print(f"wrote {args.counts_h5}")
 
 
+# ---------------------------------------------------------------- geometry
+def cosmo():
+    from astropy.cosmology import Planck15   # as in the mock pipeline
+    return Planck15
+
+
+def distance_factor(z):
+    """Photons from the same cluster at z relative to z=0.05: 1/D_L^2."""
+    c = cosmo()
+    return float((c.luminosity_distance(Z_MOCK)
+                  / c.luminosity_distance(z)).value ** 2)
+
+
+def aperture_blocks(z):
+    """Radius, in 128-grid blocks, of the physical aperture covered both by
+    the mock (ACIS-I at z=0.05) and by ACIS-I at redshift z.
+
+    The grid is fixed in *physical* units (each block is 38 x 0.492" at
+    z=0.05), so a cluster placed at another redshift needs no rebinning --
+    only the part of it the detector could have seen changes. Above z=0.05
+    the real field would reach further out than the mock contains, so the
+    mock's own aperture is the limit; below it the detector sees less."""
+    c = cosmo()
+    block_arcsec = BLOCK * 0.492
+    r0 = APERTURE_ARCMIN * 60.0 / block_arcsec
+    ratio = float((c.angular_diameter_distance(z)
+                   / c.angular_diameter_distance(Z_MOCK)).value)
+    return r0 * min(1.0, ratio)
+
+
+def aperture_mask(z):
+    yy, xx = np.mgrid[:GRID, :GRID]
+    rr = np.hypot(yy - GRID / 2 + 0.5, xx - GRID / 2 + 0.5)
+    return rr <= aperture_blocks(z)
+
+
 # ---------------------------------------------------------------- bkg
 def stage_bkg(args):
     from soxs.utils import soxs_cfg
@@ -135,6 +176,54 @@ def stage_bkg(args):
 
 
 # ---------------------------------------------------------------- build
+def stage_pbkg(args):
+    """Particle background alone, at 2 Ms. The mocks already contain it,
+    mixed into the source counts; when a cluster is placed further away and
+    its photons are thinned by the distance factor, the particle background
+    must NOT be dimmed with it, so the shortfall is topped up from these."""
+    from soxs.utils import soxs_cfg
+    soxs_cfg.set("soxs", "bkgnd_nH", "0.018")
+    import soxs
+    from astropy.io import fits
+    os.makedirs(args.work_dir, exist_ok=True)
+    out = np.zeros((args.n_bkg, GRID, GRID), dtype=np.int64)
+    for k in range(args.n_bkg):
+        evt = os.path.join(args.work_dir, f"pbkg_{k}_evt.fits")
+        exp = os.path.join(args.work_dir, f"pbkg_{k}_expmap.fits")
+        img = os.path.join(args.work_dir, f"pbkg_{k}_img.fits")
+        soxs.make_background_file(
+            evt, (T_MOCK_KS, "ks"), "chandra_acisi_cy22", (0.0, 0.0),
+            overwrite=True, foreground=False, instr_bkgnd=True,
+            ptsrc_bkgnd=False, prng=np.random.default_rng(2000 + k))
+        soxs.make_exposure_map(evt, exp, energy=1.2, overwrite=True)
+        soxs.write_image(evt, img, emin=0.1, emax=2.0, overwrite=True,
+                         expmap_file=exp)
+        with fits.open(img) as h:
+            d = h[0].data.astype(np.float64)
+        q = d[d > 0].min()
+        out[k] = np.round(block_sum(d / q)).astype(np.int64)
+        print(f"  particle background {k}: {out[k].sum():.3g} counts at 2 Ms")
+    with h5py.File(args.pbkg_h5, "w") as g:
+        g.create_dataset("counts", data=out)
+        g.attrs["exposure_ks"] = T_MOCK_KS
+    print(f"wrote {args.pbkg_h5}")
+
+
+def acis_i_targets(obs_csv, targets_csv):
+    """{normalised name: (z, total ACIS-I ks)} from the downloaded archive."""
+    import pandas as pd
+    import re
+    key = lambda x: re.sub(r"[\s_]+", "", str(x)).upper()
+    o = pd.read_csv(obs_csv)
+    o = o[o["detector"].astype(str).str.strip() == "ACIS-I"]
+    ks = (o.groupby(o["target"].map(key))["exposure"].sum() / 1e3).to_dict()
+    t = pd.read_csv(targets_csv)
+    zmap = dict(zip(t["name"].map(key),
+                    pd.to_numeric(t["redshift"], errors="coerce")))
+    return {k: (float(zmap[k]), float(v)) for k, v in ks.items()
+            if np.isfinite(zmap.get(k, np.nan))}
+
+
 def archive_exposures(path):
     import pandas as pd
     t = pd.read_csv(path)
@@ -152,6 +241,9 @@ def stage_build(args):
         bkg = f["counts"][:]
     N, P = src.shape[:2]
     R = args.realizations
+
+    if args.z_from:
+        return build_placed(args, rng, src, hid, tsc, bkg)
 
     if args.depth == "archive":
         pool = archive_exposures(args.archive_csv)
@@ -192,13 +284,110 @@ def stage_build(args):
     print(f"wrote {args.output}: mock {img.shape}")
 
 
+def build_placed(args, rng, src, hid, tsc, bkg):
+    """Put each mock at a real target's redshift and exposure.
+
+    The redshift of realization r of cluster i is taken from the radio mock
+    set (--z-from), so a joint model sees one consistent cluster. Exposure is
+    the real ACIS-I total of the target at that redshift, or a draw from the
+    ACIS-I pool if that target has no ACIS-I data.
+
+      source (+ the particle bkg baked into the mocks)  thinned by
+          p_src = (t / 2 Ms) * D_L(0.05)^2 / D_L(z)^2
+      particle background top-up    by max(p_t - p_src, 0), so its level is
+          right for the exposure rather than dimmed with distance
+      sky background                by p_t = t / 2 Ms
+      then zeroed outside the common physical aperture.
+    For z < 0.05 the baked-in particle background is over-kept by at most a
+    factor ~2 on ~1% of the counts; left as is.
+    """
+    with h5py.File(args.pbkg_h5, "r") as f:
+        pbkg = f["counts"][:]
+    with h5py.File(args.z_from, "r") as f:
+        rz = f["mock/z"][:]
+        rh = f["mock/halo_id"][:]
+    pos = {h: i for i, h in enumerate(hid)}
+    order = np.array([pos[h] for h in rh])       # radio order
+    src, hid, tsc = src[order], hid[order], tsc[order]
+    N, P = src.shape[:2]
+    R = min(args.realizations, rz.shape[1])
+
+    acis = acis_i_targets(args.obs_csv, args.targets_csv)
+    pool = np.array([v[1] for v in acis.values()])
+    by_z = {}
+    for k, (z, ks) in acis.items():
+        by_z.setdefault(round(z, 4), []).append(ks)
+    print(f"{len(acis)} targets with ACIS-I data; exposure median "
+          f"{np.median(pool):.0f} ks (range {pool.min():.0f}-{pool.max():.0f})")
+
+    rate = np.zeros((N, R, P, GRID, GRID), dtype=np.float64)
+    t_ks = np.zeros((N, R))
+    z_used = np.zeros((N, R))
+    capped = matched = 0
+    for i in range(N):
+        for r in range(R):
+            z = float(rz[i, r])
+            cand = by_z.get(round(z, 4))
+            if cand:
+                matched += 1
+                t = float(rng.choice(cand))
+            else:
+                t = float(rng.choice(pool))
+            t = min(t, T_MOCK_KS)
+            p_t = t / T_MOCK_KS
+            p_src = p_t * distance_factor(z)
+            if p_src > 1.0:
+                capped += 1
+                p_src = 1.0
+            b = bkg[rng.integers(len(bkg))]
+            pb = pbkg[rng.integers(len(pbkg))]
+            m = aperture_mask(z)
+            for j in range(P):
+                c = (rng.binomial(src[i, j], p_src)
+                     + rng.binomial(pb, max(p_t - p_src, 0.0))
+                     + rng.binomial(b, p_t))
+                rate[i, r, j] = np.where(m, c, 0) / t
+            t_ks[i, r], z_used[i, r] = t, z
+    a = float(np.median(rate[rate > 0]))
+    img = np.arcsinh(rate / a).astype(np.float32)
+    print(f"placed at radio-mock redshifts {z_used.min():.3f}-{z_used.max():.3f};"
+          f" exposure from the matching ACIS-I target for "
+          f"{matched}/{N * R} realizations; p_src capped at 1 for {capped}")
+    print(f"stretch scale {a:.4g} (real data must use this same constant)")
+
+    with h5py.File(args.output, "w") as g:
+        mg = g.create_group("mock")
+        mg.create_dataset("images", data=img, compression="gzip",
+                          compression_opts=4)
+        mg.create_dataset("halo_id", data=hid)
+        mg.create_dataset("pseudo_tsc", data=tsc)
+        mg.create_dataset("exposure_ks", data=t_ks.astype(np.float32))
+        mg.create_dataset("z", data=z_used.astype(np.float32))
+        g.attrs["depth"] = "real ACIS-I target exposure"
+        g.attrs["stretch_scale"] = a
+        g.attrs["aperture_arcmin_at_z005"] = APERTURE_ARCMIN
+        g.attrs["preprocessing"] = ("arcsinh(counts per ks per block / scale), "
+                                    "zero outside the common aperture")
+        g.attrs["realism"] = ("ACIS-I, placed at the radio mocks' redshifts: "
+                              "1/D_L^2 dimming, real target exposures, sky + "
+                              "particle background, common physical aperture")
+    print(f"wrote {args.output}: mock {img.shape}")
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("stage", choices=["counts", "bkg", "build"])
+    ap.add_argument("stage", choices=["counts", "bkg", "pbkg", "build"])
     ap.add_argument("--xray-h5", default="dataset_xray_128_orig.h5")
     ap.add_argument("--xray-root", default="TNGCluster_Xray_Snap99")
     ap.add_argument("--counts-h5", default="xray_counts_2Ms_128.h5")
     ap.add_argument("--bkg-h5", default="xray_skybkg_2Ms_128.h5")
+    ap.add_argument("--pbkg-h5", default="xray_partbkg_2Ms_128.h5")
+    ap.add_argument("--z-from", default=None,
+                    help="radio mock h5 whose mock/z sets each realization's "
+                         "redshift (redshift placement)")
+    ap.add_argument("--obs-csv", default=os.path.expanduser(
+        "~/data/cluster-ml/chandra/observations.csv"))
+    ap.add_argument("--targets-csv", default="LoVoCCS_target_list - lovoccs.csv")
     ap.add_argument("--work-dir", default="xray_bkg_work")
     ap.add_argument("--n-bkg", type=int, default=6)
     ap.add_argument("--depth", default="archive",
@@ -209,7 +398,8 @@ def main():
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--output", default="xray_real_archive.h5")
     args = ap.parse_args()
-    {"counts": stage_counts, "bkg": stage_bkg, "build": stage_build}[args.stage](args)
+    {"counts": stage_counts, "bkg": stage_bkg, "pbkg": stage_pbkg,
+     "build": stage_build}[args.stage](args)
 
 
 if __name__ == "__main__":

@@ -22,9 +22,18 @@ from sklearn.model_selection import KFold, cross_val_predict
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
+import sys
 PAT = {"radio": "cnn_preds/b2_sfimg_s*_preds.npz",
        "xray": "cnn_preds/xreal_archive_s*_preds.npz",
        "joint": "cnn_preds/jointreal_s*_preds.npz"}
+if "--placed" in sys.argv:
+    # X-ray at each target's redshift and ACIS-I exposure, with the fixed
+    # z=0.05 versions kept alongside for comparison.
+    PAT = {"radio": "cnn_preds/b2_sfimg_s*_preds.npz",
+           "xray": "cnn_preds/xplaced_s*_preds.npz",
+           "joint": "cnn_preds/jointplaced_s*_preds.npz",
+           "xray_z05": "cnn_preds/xreal_archive_s*_preds.npz",
+           "joint_z05": "cnn_preds/jointreal_s*_preds.npz"}
 
 runs, ref = {}, None
 for k, pat in PAT.items():
@@ -60,14 +69,17 @@ stack = cross_val_predict(make_pipeline(StandardScaler(), RidgeCV(
 print(f"\n  stacked radio + X-ray ensembles: {r2_score(tsc, stack):.3f}")
 
 print("\n======== paired differences")
-for a, b in [("joint", "radio"), ("joint", "xray"), ("xray", "radio")]:
+pairs = [("joint", "radio"), ("joint", "xray"), ("xray", "radio")]
+if "joint_z05" in runs:
+    pairs += [("xray", "xray_z05"), ("joint", "joint_z05")]
+for a, b in pairs:
     d = r2[a] - r2[b]
     print(f"  {a:<6} - {b:<6} {d.mean():+.3f} +- "
           f"{d.std(ddof=1) / np.sqrt(len(d)):.3f} (SE)  "
           f"p={stats.ttest_rel(r2[a], r2[b]).pvalue:.4f}  "
           f"{int((d > 0).sum())}/{len(d)} positive")
 
-print("\n======== mass dependence (5-seed ensembles)")
+print("\n======== mass dependence (3-seed ensembles)")
 rk = stats.rankdata
 def partial(pred):
     def resid(a, b):

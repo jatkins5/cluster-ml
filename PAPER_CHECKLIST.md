@@ -232,7 +232,7 @@ all four transfer runs. B1/B2 are now the binding items.
   ones. *Remaining:* the X-ray/dual README numbers are void; the transfer
   (real-data) version needs X-ray mocks, which do not exist.
 
-- [x] **X-ray at realistic depth — DONE 2026-09-23** (`build_xray_realistic.py`).
+- [x] **X-ray at realistic depth — DONE 2026-09-23; redshift placement 2026-09-24 (X-ray 0.470, joint 0.500, both n.s. vs z=0.05)** (`build_xray_realistic.py`).
   The mocks were Chandra ACIS-I at 2 Ms with no sky backgrounds; real
   archival Chandra for our targets is a median 50 ks (19/26 observed). Thinned
   the photon counts to real depths and added soxs sky backgrounds:
