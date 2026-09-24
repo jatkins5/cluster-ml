@@ -84,13 +84,49 @@ def load_xray_image(xray_root, projection_dir, halo_id):
     return data.astype(np.float32)
 
 
-def main(img_size, output_path, xray_root, radio_dataset):
+def stretch(lin, mode, scale):
+    """Compress the dynamic range before the CNN sees it.
+
+    "arcsinh" is np.arcsinh(x) with no scale, the original behaviour. It is
+    effectively the identity for X-ray: count rates are a median 0.0034
+    counts/s/pixel and only 0.02% of pixels exceed 1, where arcsinh starts to
+    bend. After standardisation 92.8% of the image variance sat in the
+    central 0.1 r500 (0.76% of pixels) and everything beyond 0.5 r500 was
+    flat at the image minimum -- the CNN was shown a bright dot and none of
+    the 0.1-1 r500 structure where centroid shifts and substructure live.
+
+    "scaled" is arcsinh(x / scale) with `scale` a single global constant
+    (the median positive pixel of the whole sample): linear near the
+    background, logarithmic in the core. One constant for every image, so no
+    per-image normalisation leaks or erases brightness.
+    """
+    if mode == "arcsinh":
+        return np.arcsinh(lin)
+    return np.arcsinh(lin / scale)
+
+
+def main(img_size, output_path, xray_root, radio_dataset, mode="arcsinh",
+         restretch_from=None, labels_from=None):
     # use the same halo ordering as the radio dataset so indices align
     with h5py.File(radio_dataset, "r") as f:
         halo_ids = f["meta/halo_id"][:]            # (352,) int64
 
     n_halos = len(halo_ids)
     n_proj = len(PROJECTION_DIRS)
+
+    if restretch_from is not None:
+        # The stored maps are arcsinh(counts), which sinh inverts exactly, so a
+        # new stretch does not need the 4880^2 FITS files re-read.
+        with h5py.File(restretch_from, "r") as f:
+            assert np.array_equal(f["meta/halo_id"][:], halo_ids), \
+                "halo order differs"
+            lin_all = np.sinh(f["images"][:].astype(np.float64))
+        scale = float(np.median(lin_all[lin_all > 0]))
+        images = stretch(lin_all, mode, scale).astype(np.float32)
+        print(f"restretched {restretch_from} with mode={mode}, "
+              f"scale={scale:.4g}")
+        _write(output_path, images, halo_ids, mode, scale, labels_from)
+        return
     images = np.zeros((n_halos, n_proj, img_size, img_size), dtype=np.float32)
 
     print(f"Building X-ray dataset: {n_halos} halos x {n_proj} projections")
@@ -100,23 +136,42 @@ def main(img_size, output_path, xray_root, radio_dataset):
     print(f"  crop margin: {(RAW_SIZE - (RAW_SIZE // img_size) * img_size) // 2} px per side")
     print()
 
+    lin_all = np.zeros_like(images, dtype=np.float64)
     for i, hid in enumerate(halo_ids):
         for k, proj_dir in enumerate(PROJECTION_DIRS):
             raw = load_xray_image(xray_root, proj_dir, int(hid))
-            reduced = block_average(raw, img_size)
-            images[i, k] = np.arcsinh(reduced)
+            lin_all[i, k] = block_average(raw, img_size)
         if (i + 1) % 25 == 0 or (i + 1) == n_halos:
             print(f"  processed {i + 1}/{n_halos} halos")
+    scale = float(np.median(lin_all[lin_all > 0]))
+    images = stretch(lin_all, mode, scale).astype(np.float32)
+    _write(output_path, images, halo_ids, mode, scale, labels_from)
 
+
+def _write(output_path, images, halo_ids, mode, scale, labels_from):
     print(f"\nWriting {output_path}")
     with h5py.File(output_path, "w") as f:
         f.create_dataset("images", data=images, compression="gzip")
         f.create_dataset("meta/halo_id", data=halo_ids)
         f["images"].attrs["projection_order"] = "xy, yz, xz (matches dataset.h5)"
         f["images"].attrs["xray_dirs"] = ",".join(PROJECTION_DIRS)
-        f["images"].attrs["normalization"] = "arcsinh of block-averaged counts/sec/pixel"
+        f["images"].attrs["normalization"] = (
+            "arcsinh of block-averaged counts/sec/pixel" if mode == "arcsinh"
+            else f"arcsinh(counts/sec/pixel / {scale:.4g})")
+        f["images"].attrs["stretch_mode"] = mode
+        f["images"].attrs["stretch_scale"] = scale
         f["images"].attrs["raw_pixel_arcsec"] = 0.492
         f["images"].attrs["fov_r500c"] = 2.0
+        # Labels copied from the radio dataset so the standard trainers
+        # (--pseudo-tsc) work on the X-ray file directly.
+        if labels_from is not None:
+            with h5py.File(labels_from, "r") as g:
+                assert np.array_equal(g["meta/halo_id"][:], halo_ids), \
+                    "label source has a different halo order"
+                g.copy("labels", f)
+                for k in ("r500c_kpc", "mass_ratio"):
+                    if f"meta/{k}" in g:
+                        f.create_dataset(f"meta/{k}", data=g[f"meta/{k}"][:])
     print("done.")
 
 
@@ -131,5 +186,16 @@ if __name__ == "__main__":
                         help="Root directory containing snap99_{x,y,z}/")
     parser.add_argument("--radio-dataset", type=str, default="dataset.h5",
                         help="Radio dataset.h5 (used for halo_id ordering)")
+    parser.add_argument("--stretch", choices=["arcsinh", "scaled"],
+                        default="scaled",
+                        help="'scaled' = arcsinh(x / global median pixel), "
+                             "the fix; 'arcsinh' = the original, which is "
+                             "the identity at X-ray count rates")
+    parser.add_argument("--restretch-from", default=None,
+                        help="reuse an existing X-ray h5 instead of re-reading "
+                             "the FITS files")
+    parser.add_argument("--labels-from", default=None,
+                        help="radio dataset whose labels/ group to copy in")
     args = parser.parse_args()
-    main(args.img_size, args.output, args.xray_root, args.radio_dataset)
+    main(args.img_size, args.output, args.xray_root, args.radio_dataset,
+         args.stretch, args.restretch_from, args.labels_from)

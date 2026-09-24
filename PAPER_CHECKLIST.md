@@ -217,6 +217,16 @@ all four transfer runs. B1/B2 are now the binding items.
   observable — it just needs a peak catalogue covering more of the LOFAR
   footprint.
 
+- [x] **X-ray re-check — DONE 2026-09-23: it was a bug.** `build_xray_dataset.py`
+  applied bare `np.arcsinh` to count rates of median 0.0034/pixel, where it
+  is the identity; 92.8% of image variance sat in the central 0.1 r500 and
+  the CNN never saw the outskirts. With `arcsinh(x / global median)`:
+  X-ray alone **0.320 → 0.511 ± 0.026** (p=0.0003, 5/5), matching radio's
+  0.487; radio + X-ray stacked **0.523 → 0.577 (+0.054)** against +0.018
+  with the old stretch. Mass adds nothing on top. *Remaining:* a real
+  dual-encoder run under the current protocol (the stacking is an upper
+  bound, not a joint model), and the X-ray/dual README numbers are void.
+
 - [ ] **B3. Reconcile with Lee's relic-separation relation.** Their group now
   publishes TSC = 0.52 d_drr/R500c − 0.24, r = 0.83 in TNG-Cluster
   (arXiv:2510.21632); our README records four independent negative attempts
