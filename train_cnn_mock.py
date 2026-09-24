@@ -28,16 +28,17 @@ from sklearn.model_selection import GroupKFold, GroupShuffleSplit
 from torch.utils.data import DataLoader, Dataset
 
 from forward_model_lotss import target_key
-from train_cnn_pooled import PooledCNN, augment
+from train_cnn_pooled import JointPooledCNN, PooledCNN, augment
 
 
 class MockDataset(Dataset):
     """One item per (cluster, realization); each carries its 3 projections."""
 
-    def __init__(self, images, labels, scalars=None, train=False):
+    def __init__(self, images, labels, scalars=None, train=False, xray=None):
         self.images = images          # (M, 3, H, W)
         self.labels = labels
         self.scalars = scalars        # (M, n_scalar) or None
+        self.xray = xray              # (M, 3, H, W) or None: joint model
         self.train = train
 
     def __len__(self):
@@ -45,16 +46,25 @@ class MockDataset(Dataset):
 
     def __getitem__(self, i):
         imgs = self.images[i].copy()
+        xr = None if self.xray is None else self.xray[i].copy()
         if self.train:
-            imgs = np.stack([augment(imgs[p]) for p in range(imgs.shape[0])])
+            # Same transform for a projection's radio and X-ray views.
+            ks = np.random.randint(8, size=imgs.shape[0])
+            imgs = np.stack([augment(imgs[p], ks[p])
+                             for p in range(imgs.shape[0])])
+            if xr is not None:
+                xr = np.stack([augment(xr[p], ks[p])
+                               for p in range(xr.shape[0])])
         s = (torch.zeros(0) if self.scalars is None
              else torch.tensor(self.scalars[i], dtype=torch.float32))
-        return (torch.tensor(imgs[:, None], dtype=torch.float32), s,
+        xt = (torch.zeros(0) if xr is None
+              else torch.tensor(xr[:, None], dtype=torch.float32))
+        return (torch.tensor(imgs[:, None], dtype=torch.float32), xt, s,
                 torch.tensor(self.labels[i], dtype=torch.float32))
 
 
 def run_fold(tr_x, tr_y, sel_x, sel_y, epochs, batch_size, device, delta,
-             tr_s=None, sel_s=None, n_scalar=0):
+             tr_s=None, sel_s=None, n_scalar=0, tr_xr=None, sel_xr=None):
     """Train one fold; pick the checkpoint on `sel`, never on the outer fold.
 
     `sel` is a held-out slice of this fold's *training* clusters. Selecting
@@ -66,24 +76,31 @@ def run_fold(tr_x, tr_y, sel_x, sel_y, epochs, batch_size, device, delta,
     matches train_cnn_pooled.py (AdamW 3e-4 + cosine), which is most of why
     the curve settles down. Pass sel_x=None to take the final epoch.
     """
-    model = PooledCNN(n_scalar=n_scalar).to(device)
+    joint = tr_xr is not None
+    if joint and n_scalar:
+        raise ValueError("joint radio+X-ray model does not take scalars")
+    model = (JointPooledCNN() if joint
+             else PooledCNN(n_scalar=n_scalar)).to(device)
+    fwd = (lambda im, xr, sc: model(im, xr)) if joint else \
+          (lambda im, xr, sc: model(im, sc))
     opt = torch.optim.AdamW(model.parameters(), lr=3e-4, weight_decay=1e-3)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=epochs)
     crit = nn.HuberLoss(delta=delta)
-    tl = DataLoader(MockDataset(tr_x, tr_y, tr_s, train=True),
+    tl = DataLoader(MockDataset(tr_x, tr_y, tr_s, train=True, xray=tr_xr),
                     batch_size=batch_size,
                     shuffle=True, num_workers=2, drop_last=True)
     sl = (None if sel_x is None
-          else DataLoader(MockDataset(sel_x, sel_y, sel_s),
+          else DataLoader(MockDataset(sel_x, sel_y, sel_s, xray=sel_xr),
                           batch_size=batch_size))
     best, best_state, best_ep = -np.inf, None, epochs
     for ep in range(epochs):
         model.train()
-        for imgs, sc, y in tl:
+        for imgs, xr, sc, y in tl:
             imgs, y = imgs.to(device), y.to(device)
             sc = sc.to(device) if n_scalar else None
+            xr = xr.to(device) if joint else None
             opt.zero_grad()
-            loss = crit(model(imgs, sc), y)
+            loss = crit(fwd(imgs, xr, sc), y)
             loss.backward()
             opt.step()
         sched.step()
@@ -92,9 +109,10 @@ def run_fold(tr_x, tr_y, sel_x, sel_y, epochs, batch_size, device, delta,
         model.eval()
         preds = []
         with torch.no_grad():
-            for imgs, sc, _ in sl:
+            for imgs, xr, sc, _ in sl:
                 sc = sc.to(device) if n_scalar else None
-                preds.append(model(imgs.to(device), sc).cpu().numpy())
+                xr = xr.to(device) if joint else None
+                preds.append(fwd(imgs.to(device), xr, sc).cpu().numpy())
         r2 = r2_score(sel_y, np.concatenate(preds))
         if r2 > best:
             best, best_ep = r2, ep + 1
@@ -109,7 +127,7 @@ def run_fold(tr_x, tr_y, sel_x, sel_y, epochs, batch_size, device, delta,
 
 
 @torch.no_grad()
-def predict(model, x, device, scalars=None, batch_size=32):
+def predict(model, x, device, scalars=None, batch_size=32, xray=None):
     if len(x) == 0:
         return np.zeros(0, dtype=np.float32)
     model.eval()
@@ -120,7 +138,12 @@ def predict(model, x, device, scalars=None, batch_size=32):
         s = (None if scalars is None else
              torch.tensor(scalars[i:i + batch_size],
                           dtype=torch.float32).to(device))
-        out.append(model(b, s).cpu().numpy())
+        if xray is not None:
+            xb = torch.tensor(xray[i:i + batch_size][:, :, None],
+                              dtype=torch.float32).to(device)
+            out.append(model(b, xb).cpu().numpy())
+        else:
+            out.append(model(b, s).cpu().numpy())
     return np.concatenate(out)
 
 
@@ -154,7 +177,12 @@ def main():
     ap.add_argument("--no-image", action="store_true",
                     help="zero the images: the mass-only baseline, on the "
                          "same folds, protocol and architecture.")
+    ap.add_argument("--xray-dataset", default=None,
+                    help="realistic X-ray mocks (build_xray_realistic.py) to "
+                         "pair with the radio mocks in a joint model")
     args = ap.parse_args()
+    if args.xray_dataset and (args.mass or args.no_image):
+        raise SystemExit("--xray-dataset does not combine with --mass/--no-image")
     if args.no_image and not args.mass:
         raise SystemExit("--no-image without --mass leaves no input at all")
 
@@ -198,6 +226,28 @@ def main():
     # three times leaves the mean-pool unchanged, so the obs path is a plain
     # single-image forward pass through the same weights.
     obs_x = np.repeat(obs[:, None], P, axis=1)
+
+    xr_all = None
+    if args.xray_dataset:
+        with h5py.File(args.xray_dataset, "r") as f:
+            xm = f["mock/images"][:]
+            xh = f["mock/halo_id"][:]
+        order = {h: i for i, h in enumerate(xh)}
+        missing = [h for h in halo if h not in order]
+        if missing:
+            raise SystemExit(f"{len(missing)} radio clusters have no X-ray mock")
+        xm = xm[[order[h] for h in halo]]          # radio order
+        if xm.shape[1] < R:
+            raise SystemExit(f"X-ray has {xm.shape[1]} realizations, radio {R}")
+        # Realization r of the radio mock is paired with realization r of the
+        # X-ray mock: independent noise draws of the same cluster.
+        xr_all = xm[:, :R].reshape(N * R, P, xm.shape[-2], xm.shape[-1])
+        print(f"joint model: radio {x.shape} + X-ray {xr_all.shape} "
+              f"from {args.xray_dataset}")
+        # No real X-ray cutouts are processed yet, so the joint model scores
+        # the mocks only.
+        obs_x = obs_x[:0]
+        obs_name, obs_z = [], obs_z[:0]
 
     # ---- mass conditioning (checklist B2) ----
     sim_s = obs_s = None
@@ -270,8 +320,11 @@ def main():
         model, best, best_ep = run_fold(
             x[fit], y[fit], None if sel is None else x[sel],
             None if sel is None else y[sel], args.epochs, args.batch_size,
-            device, args.huber_delta, tr_s=f_s, sel_s=s_s, n_scalar=n_scalar)
-        oof[va] = predict(model, x[va], device, scalars=v_s)
+            device, args.huber_delta, tr_s=f_s, sel_s=s_s, n_scalar=n_scalar,
+            tr_xr=None if xr_all is None else xr_all[fit],
+            sel_xr=None if (xr_all is None or sel is None) else xr_all[sel])
+        oof[va] = predict(model, x[va], device, scalars=v_s,
+                          xray=None if xr_all is None else xr_all[va])
         obs_preds.append(predict(model, obs_x, device, scalars=o_s))
         print(f"  fold {k}: checkpoint epoch {best_ep}/{args.epochs}, "
               f"sel R2 {best:+.3f}  ->  outer val R2 "

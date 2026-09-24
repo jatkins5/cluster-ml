@@ -241,9 +241,12 @@ all four transfer runs. B1/B2 are now the binding items.
   ~10 ks the within-mass skill goes first. *Caveats:* mocks fixed at
   z=0.05 and TNG is ~3.6x over-luminous, so a real z~0.1 cluster at 50 ks
   behaves like ~3–5 ks here (~0.40). **The X-ray FoV is ±500 kpc (the ACIS-I
-  square), not ±1 r500** as the README states. *Remaining:* redshift
-  placement; a joint transfer model with both modalities degraded; real
-  X-ray cutouts for inference.
+  square), not ±1 r500** as the README states. **Joint degraded model done:** radio injected + X-ray at archive depth,
+  0.513 ± 0.001 vs radio 0.412 (+0.101, p=0.003) and X-ray 0.483 (+0.030,
+  n.s.), 3 seeds. **Real Chandra downloaded:** 55 obs / 19 targets (25
+  ACIS-I, 30 ACIS-S), 820 MB. *Remaining:* process real Chandra into model
+  inputs (needs a redshift/brightness decision and exposure maps); redshift
+  placement of the mocks.
 
 - [ ] **B3. Reconcile with Lee's relic-separation relation.** Their group now
   publishes TSC = 0.52 d_drr/R500c − 0.24, r = 0.83 in TNG-Cluster
