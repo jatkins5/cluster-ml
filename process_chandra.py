@@ -40,7 +40,8 @@ from astropy.io import fits
 from astropy.wcs import WCS
 from scipy import ndimage
 
-from build_xray_realistic import (BLOCK, GRID, Z_MOCK, aperture_mask, cosmo)
+from build_xray_realistic import (BLOCK, GRID, Z_MOCK, aperture_mask, cosmo,
+                                  sky_area_factor)
 
 CIAO = "/oscar/data/idellant/cluster-ml/ciao_env"
 EMIN, EMAX = 0.1, 2.0
@@ -89,6 +90,48 @@ def expmap_for(obsdir, obsid):
     return evt, done[0]
 
 
+def particle_band_ratio():
+    """Counts in 0.1-2 keV over counts in 9.5-12 keV for the ACIS-I particle
+    background, from the same soxs spectrum the mocks' particle background
+    was drawn from. ACIS PI channels are 14.6 eV wide."""
+    pha = os.path.expanduser("~/.cache/soxs/chandra_acisi_cy22_particle_bkgnd.pha")
+    with fits.open(pha) as h:
+        d = h[1].data
+        chan = d["CHANNEL"].astype(float)
+        cts = (d["COUNTS"] if "COUNTS" in d.names
+               else d["RATE"]).astype(float)
+    e = (chan + 0.5) * 0.0146
+    soft = cts[(e >= EMIN) & (e <= EMAX)].sum()
+    hard = cts[(e >= 9.5) & (e <= 12.0)].sum()
+    return soft / hard
+
+
+def mock_particle_rate(pbkg_h5="xray_partbkg_2Ms_128.h5"):
+    """The mocks' particle background, counts per ks per grid block."""
+    from build_xray_realistic import T_MOCK_KS
+    with h5py.File(pbkg_h5, "r") as f:
+        c = f["counts"][:].astype(float)
+    yy, xx = np.mgrid[:GRID, :GRID]
+    rr = np.hypot(yy - GRID / 2, xx - GRID / 2) * BLOCK * 0.492 / 60.0
+    return float(np.median(c[:, (rr > 2) & (rr < 6)])) / T_MOCK_KS
+
+
+def hard_band_rate(evt, emap):
+    """Particle background in the real data: 9.5-12 keV events (the mirrors
+    focus almost nothing there) per arcmin^2 of exposed chip per ks of
+    livetime."""
+    with fits.open(evt) as h:
+        d, hd = h["EVENTS"].data, h["EVENTS"].header
+        live = float(hd.get("LIVETIME", hd.get("EXPOSURE"))) / 1e3
+        e = d["energy"] / 1000.0
+        n_hard = int(((e >= 9.5) & (e <= 12.0)).sum())
+    with fits.open(emap) as h:
+        em = h[0].data
+        pix_arcmin2 = (abs(h[0].header["CDELT1"]) * 60.0) ** 2
+    area = float((em > 0.1 * np.nanmax(em)).sum()) * pix_arcmin2
+    return n_hard / area / live, live
+
+
 def events_radec(evt):
     """RA/Dec and energy (keV) of every event, from the sky x/y columns."""
     with fits.open(evt) as h:
@@ -125,6 +168,10 @@ def main():
     ap.add_argument("--targets-csv", default="LoVoCCS_target_list - lovoccs.csv")
     ap.add_argument("--output", default="xray_obs_acisi.h5")
     ap.add_argument("--min-exp-frac", type=float, default=0.3)
+    ap.add_argument("--no-particle-correct", dest="particle_correct",
+                    action="store_false",
+                    help="the original normalisation, kept for comparison")
+    ap.add_argument("--no-fill-gaps", dest="fill_gaps", action="store_false")
     args = ap.parse_args()
 
     obs = pd.read_csv(os.path.join(args.data_dir, "observations.csv"))
@@ -140,6 +187,16 @@ def main():
     A = aeff_cy22()
     print(f"stretch constant a={a:.4g} from {args.train_h5}; "
           f"A_eff(1.2 keV, cy22) = {A:.1f} cm^2; block = {block_kpc():.1f} kpc")
+    # Particle background, handled separately from focused photons: it is
+    # not collected by the mirrors, so dividing it by an effective-area-scaled
+    # exposure (1.5-2.6x the livetime for these epochs) pushed it below
+    # anything in the mocks. Subtract the real particle level, normalise only
+    # the focused photons, then add back the mocks' particle level.
+    R_soft_hard = particle_band_ratio() if args.particle_correct else None
+    p_mock = mock_particle_rate() if args.particle_correct else 0.0
+    if args.particle_correct:
+        print(f"particle background: 0.1-2 / 9.5-12 keV = {R_soft_hard:.3f}; "
+              f"mock level {p_mock:.4f} counts/ks/block")
 
     out_img, names, keys, zs, texp, cover = [], [], [], [], [], []
     for tgt, grp in obs.groupby(obs["target"]):
@@ -147,6 +204,7 @@ def main():
         ra0, dec0, z = pos[k]
         counts = np.zeros((GRID, GRID))
         t_eq = np.zeros((GRID, GRID))
+        p_real = np.zeros((GRID, GRID))          # expected particle counts
         all_ra, all_dec = [], []
         for _, o in grp.iterrows():
             d = os.path.join(args.data_dir, k, str(int(o["obsid"])))
@@ -172,6 +230,14 @@ def main():
             vals = ndimage.map_coordinates(em, [py.ravel(), px.ravel()],
                                            order=0, cval=0.0).reshape(gx.shape)
             t_eq += vals.reshape(GRID, 4, GRID, 4).mean(axis=(1, 3)) / A
+            if args.particle_correct:
+                hr, live = hard_band_rate(evt, emap)
+                onchip = (vals > 0).reshape(GRID, 4, GRID, 4).mean(axis=(1, 3))
+                # block area on the sky at the target's redshift
+                blk_sky = (block_kpc() / kpa / 60.0) ** 2
+                p_real += hr * R_soft_hard * blk_sky * live * onchip
+                print(f"    {o['obsid']}: particle {hr * R_soft_hard:.3f} "
+                      f"counts/ks/arcmin^2 in 0.1-2 keV (9.5-12 keV scaled)")
         if not all_ra:
             continue
         ra = np.concatenate(all_ra)
@@ -189,12 +255,34 @@ def main():
         shift_y, shift_x = py + 0.5 - GRID / 2, px + 0.5 - GRID / 2
         gx, gy = gx - shift_x, gy - shift_y
         t_eq = ndimage.shift(t_eq, (-shift_y, -shift_x), order=0, cval=0.0)
+        p_real = ndimage.shift(p_real, (-shift_y, -shift_x), order=0, cval=0.0)
         counts, _, _ = np.histogram2d(gy, gx, bins=GRID,
                                       range=[[0, GRID], [0, GRID]])
         t_ks = t_eq / 1000.0
         good = t_ks > args.min_exp_frac * np.median(t_ks[t_ks > 0])
         m = aperture_mask(z) & good
-        rate = np.where(m, counts / np.where(good, t_ks, 1.0), 0.0)
+        if args.particle_correct:
+            # focused photons normalised by the effective-area exposure,
+            # particle background at the mocks' level per ks
+            # the mocks' particle level per block, scaled to the sky area a
+            # block covers at this redshift (the grid is fixed in kpc)
+            rate = ((counts - p_real) / np.where(good, t_ks, 1.0)
+                    + p_mock * sky_area_factor(z))
+        else:
+            rate = counts / np.where(good, t_ks, 1.0)
+        rate = np.where(m, rate, 0.0)
+        if args.fill_gaps:
+            # Chip gaps and chip edges inside the aperture: fill from the
+            # neighbours (normalised convolution) instead of leaving zero
+            # lines the mocks never contain.
+            ap = aperture_mask(z)
+            hole = ap & ~good
+            if hole.any():
+                w = ndimage.gaussian_filter(good.astype(float), 1.5)
+                v = ndimage.gaussian_filter(np.where(good, rate, 0.0), 1.5)
+                fill = np.where(w > 1e-3, v / np.maximum(w, 1e-3), p_mock)
+                rate = np.where(hole, fill, rate)
+                m = ap
         out_img.append(np.arcsinh(rate / a).astype(np.float32))
         names.append(tgt)
         keys.append(k)

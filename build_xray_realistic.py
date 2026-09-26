@@ -115,6 +115,15 @@ def distance_factor(z):
                   / c.luminosity_distance(z)).value ** 2)
 
 
+def sky_area_factor(z):
+    """Sky area of one grid block at z relative to z=0.05. The grid is fixed
+    in physical units, so a block at higher redshift covers less sky and
+    collects proportionally less background: (D_A(0.05) / D_A(z))^2."""
+    c = cosmo()
+    return float((c.angular_diameter_distance(Z_MOCK)
+                  / c.angular_diameter_distance(z)).value ** 2)
+
+
 def aperture_blocks(z):
     """Radius, in 128-grid blocks, of the physical aperture covered both by
     the mock (ACIS-I at z=0.05) and by ACIS-I at redshift z.
@@ -294,9 +303,11 @@ def build_placed(args, rng, src, hid, tsc, bkg):
 
       source (+ the particle bkg baked into the mocks)  thinned by
           p_src = (t / 2 Ms) * D_L(0.05)^2 / D_L(z)^2
-      particle background top-up    by max(p_t - p_src, 0), so its level is
-          right for the exposure rather than dimmed with distance
-      sky background                by p_t = t / 2 Ms
+      particle background top-up    by max(p_t * f_sky - p_src, 0), so its
+          level is right for the exposure and block sky area, not dimmed
+          with the source's distance
+      sky background                by p_t * f_sky, f_sky = sky area of a
+          block at z relative to z=0.05
       then zeroed outside the common physical aperture.
     For z < 0.05 the baked-in particle background is over-kept by at most a
     factor ~2 on ~1% of the counts; left as is.
@@ -356,10 +367,19 @@ def build_placed(args, rng, src, hid, tsc, bkg):
             b = bkg[rng.integers(len(bkg))]
             pb = pbkg[rng.integers(len(pbkg))]
             m = aperture_mask(z)
+            # Backgrounds scale with the sky area a block covers at this
+            # redshift, not just with exposure. Before this factor was added
+            # every placed mock kept its z=0.05 background per block, i.e.
+            # ~3.6x too much at z=0.1 -- one of the two reasons the higher-
+            # redshift real clusters looked emptier than their mocks.
+            f_sky = sky_area_factor(z)
+            p_bkg = p_t * f_sky
+            if p_bkg > 1.0:
+                raise ValueError(f"background thinning p={p_bkg:.2f} > 1")
             for j in range(P):
                 c = (rng.binomial(src[i, j], p_src)
-                     + rng.binomial(pb, max(p_t - p_src, 0.0))
-                     + rng.binomial(b, p_t))
+                     + rng.binomial(pb, max(p_bkg - p_src, 0.0))
+                     + rng.binomial(b, p_bkg))
                 rate[i, r, j] = np.where(m, c, 0) / t
             t_ks[i, r], z_used[i, r] = t, z
     a = float(np.median(rate[rate > 0]))
