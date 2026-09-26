@@ -312,6 +312,19 @@ def build_placed(args, rng, src, hid, tsc, bkg):
     N, P = src.shape[:2]
     R = min(args.realizations, rz.shape[1])
 
+    # Optional source-brightness corrections, both applied as extra thinning
+    # of the source photons only: a global L_X scale (TNG-Cluster is ~3.6x
+    # over-luminous against the LoVoCCS catalogue L_X, so 1/3.6) and each
+    # target's Galactic absorption relative to the mock's single column
+    # (xray_absorption.py; median 0.977, down to 0.897 for A399/A401).
+    nh_by_z = {}
+    if args.nh_csv:
+        import pandas as pd
+        nh = pd.read_csv(args.nh_csv).dropna(subset=["ratio_kT5"])
+        for z, grp in nh.groupby(nh["z"].round(4)):
+            nh_by_z[z] = float(grp["ratio_kT5"].mean())
+        print(f"absorption factors for {len(nh_by_z)} redshifts; "
+              f"L_X scale {args.lx_scale}")
     acis = acis_i_targets(args.obs_csv, args.targets_csv)
     pool = np.array([v[1] for v in acis.values()])
     by_z = {}
@@ -335,7 +348,8 @@ def build_placed(args, rng, src, hid, tsc, bkg):
                 t = float(rng.choice(pool))
             t = min(t, T_MOCK_KS)
             p_t = t / T_MOCK_KS
-            p_src = p_t * distance_factor(z)
+            p_src = (p_t * distance_factor(z) * args.lx_scale
+                     * nh_by_z.get(round(z, 4), 1.0))
             if p_src > 1.0:
                 capped += 1
                 p_src = 1.0
@@ -364,6 +378,8 @@ def build_placed(args, rng, src, hid, tsc, bkg):
         mg.create_dataset("exposure_ks", data=t_ks.astype(np.float32))
         mg.create_dataset("z", data=z_used.astype(np.float32))
         g.attrs["depth"] = "real ACIS-I target exposure"
+        g.attrs["lx_scale"] = args.lx_scale
+        g.attrs["nh_corrected"] = bool(args.nh_csv)
         g.attrs["stretch_scale"] = a
         g.attrs["aperture_arcmin_at_z005"] = APERTURE_ARCMIN
         g.attrs["preprocessing"] = ("arcsinh(counts per ks per block / scale), "
@@ -388,6 +404,11 @@ def main():
     ap.add_argument("--obs-csv", default=os.path.expanduser(
         "~/data/cluster-ml/chandra/observations.csv"))
     ap.add_argument("--targets-csv", default="LoVoCCS_target_list - lovoccs.csv")
+    ap.add_argument("--lx-scale", type=float, default=1.0,
+                    help="global source-brightness factor, e.g. 1/3.6 for the "
+                         "TNG-Cluster L_X excess over the LoVoCCS catalogue")
+    ap.add_argument("--nh-csv", default=None,
+                    help="per-target absorption factors (xray_absorption.py)")
     ap.add_argument("--work-dir", default="xray_bkg_work")
     ap.add_argument("--n-bkg", type=int, default=6)
     ap.add_argument("--depth", default="archive",

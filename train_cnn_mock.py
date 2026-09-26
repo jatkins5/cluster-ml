@@ -227,7 +227,7 @@ def main():
     # single-image forward pass through the same weights.
     obs_x = np.repeat(obs[:, None], P, axis=1)
 
-    xr_all = None
+    xr_all = obs_xr = None
     if args.xray_dataset:
         with h5py.File(args.xray_dataset, "r") as f:
             xm = f["mock/images"][:]
@@ -244,10 +244,28 @@ def main():
         xr_all = xm[:, :R].reshape(N * R, P, xm.shape[-2], xm.shape[-1])
         print(f"joint model: radio {x.shape} + X-ray {xr_all.shape} "
               f"from {args.xray_dataset}")
-        # No real X-ray cutouts are processed yet, so the joint model scores
-        # the mocks only.
-        obs_x = obs_x[:0]
-        obs_name, obs_z = [], obs_z[:0]
+        # Real inference needs both modalities for the same cluster: keep the
+        # radio targets that also have processed Chandra data, matched by the
+        # normalised name key, and pair their cutouts.
+        xobs = None
+        with h5py.File(args.xray_dataset, "r") as f:
+            if "obs" in f:
+                xk = [s.decode() if isinstance(s, bytes) else str(s)
+                      for s in f["obs/key"][:]]
+                xobs = dict(zip(xk, f["obs/images"][:]))
+        if xobs is None:
+            print("  X-ray set has no real observations: mocks only")
+            obs_x = obs_x[:0]
+            obs_name, obs_z, obs_xr = [], obs_z[:0], None
+        else:
+            both = [i for i, k in enumerate(obs_key) if k in xobs]
+            obs_x = obs_x[both]
+            obs_name = [obs_name[i] for i in both]
+            obs_z = obs_z[both]
+            obs_xr = np.stack([np.repeat(xobs[obs_key[i]][None], P, axis=0)
+                               for i in both]) if both else None
+            print(f"  real clusters with both radio and X-ray: {len(both)} "
+                  f"({', '.join(obs_name)})")
 
     # ---- mass conditioning (checklist B2) ----
     sim_s = obs_s = None
@@ -325,7 +343,8 @@ def main():
             sel_xr=None if (xr_all is None or sel is None) else xr_all[sel])
         oof[va] = predict(model, x[va], device, scalars=v_s,
                           xray=None if xr_all is None else xr_all[va])
-        obs_preds.append(predict(model, obs_x, device, scalars=o_s))
+        obs_preds.append(predict(model, obs_x, device, scalars=o_s,
+                                 xray=obs_xr if xr_all is not None else None))
         print(f"  fold {k}: checkpoint epoch {best_ep}/{args.epochs}, "
               f"sel R2 {best:+.3f}  ->  outer val R2 "
               f"{r2_score(y[va], oof[va]):+.3f}")
