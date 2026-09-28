@@ -100,3 +100,6 @@ xray_bkg_work/
 xray_*.h5
 ciao_env/
 chandra/
+
+# paper figures are curated copies, tracked on purpose
+!paper/figures/*.png

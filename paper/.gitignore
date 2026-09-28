@@ -1,0 +1,12 @@
+*.aux
+*.log
+*.out
+*.bbl
+*.blg
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+main.pdf
+latexmk.out
+build_*.log
+mnras.zip
