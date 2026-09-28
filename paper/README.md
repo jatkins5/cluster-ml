@@ -17,7 +17,8 @@ to fetching it from CTAN if a future TeX installation lacks it. Output:
 
 | file | what |
 |---|---|
-| `main.tex` | sections with bullet-point talking points under each heading |
+| `main.tex` | preamble, front matter and the `\input` list |
+| `sections/` | one file per section (`0_abstract` ... `8_conclusions`, appendices `A_`, `B_`), bullet-point talking points under each heading |
 | `refs.bib` | starter bibliography; entries marked TODO need checking on ADS |
 | `figures/` | curated copies of existing plots (tracked in git on purpose) |
 | `build.sh` | SLURM build script |

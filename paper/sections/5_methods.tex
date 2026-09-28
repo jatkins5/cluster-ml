@@ -1,0 +1,14 @@
+\section{Methods}
+\label{sec:methods}
+\begin{itemize}
+  \item Pooled CNN: shared encoder over three projections, mean-pooled;
+        joint model with separate radio and X-ray encoders.
+  \item Cross-validation: 5-fold, split by cluster; checkpoint chosen on an
+        inner split of the training folds (selecting on the test fold
+        inflated $R^2$ by 0.04--0.32; Appendix~\ref{app:audit}).
+  \item Five seeds for headline numbers; paired tests across conditions.
+  \item Baselines: halo mass, total flux, five-scalar ridge,
+        Minkowski-functional XGBoost, X-ray morphology scalars.
+  \item Mass conditioning: log\,\mfive\ as an input, blurred by the real
+        weak-lensing errors.
+\end{itemize}

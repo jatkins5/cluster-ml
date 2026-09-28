@@ -1,0 +1,54 @@
+\section{Simulations and labels}
+\label{sec:sims}
+
+\subsection{TNG-Cluster}
+\begin{itemize}
+  \item 352 zoom clusters, $M_{500} \sim 10^{14.0-15.3}\,{\rm M_\odot}$,
+        snapshot 99 ($z = 0$); three orthogonal projections each.
+  \item Halo-centred on \texttt{GroupPos}; note the earlier weight-centroid
+        centring was off by a median 0.70\,\rfive\ (Appendix~\ref{app:audit}).
+  \item \todo{Earlier full snapshots (91, 84) if included.}
+\end{itemize}
+
+\subsection{Radio emission model}
+\begin{itemize}
+  \item Hoeft \& Br\"uggen (2007) DSA emission per shocked cell
+        (Mach $>1.3$, positive energy dissipation), as in Lee et al.\ (2024).
+  \item Key finding: the emission is pathologically concentrated (one cell
+        carries a median 29.5\% of a cluster's radio weight), and the cells
+        that dominate are cold ($\sim$66\,000\,K), 379$\times$ overdense,
+        Mach $\sim$26 gas at 1.37\,\rfive\ -- stripped ISM, not ICM.
+  \item Density cut $n_{\rm H} < 10^{-4}\,{\rm cm^{-3}}$ on shock cells:
+        improves realism against LoTSS and the CNN (paired $p = 0.010$).
+        \todo{Pending Chuiyang's sign-off; justify physically.}
+  \item Images: arcsinh-stretched projected weight, 128\,px over
+        $\pm4$\,\rfive.
+\end{itemize}
+\figplaceholder{Emitting-gas phase diagram: temperature vs density of
+shock cells, coloured by radio weight, before/after the density cut
+(\texttt{check\_emitting\_gas.py} data).}{Where the radio weight sits.}
+
+\subsection{X-ray mocks}
+\begin{itemize}
+  \item pyxsim APEC emission from hot, non-star-forming gas; soxs
+        Chandra ACIS-I (Cycle 22) response, PSF, dither, particle
+        background; originally 2\,Ms at $z = 0.05$.
+  \item Field of view: only the ACIS-I square has data, $\pm$500\,kpc
+        (0.3--0.6\,\rfive), \emph{not} $\pm1\,r_{500}$.
+  \item Stretch: bare arcsinh is the identity at X-ray count rates; we use
+        ${\rm arcsinh}(x/a)$ with one global $a$ (Section~\ref{sec:xray}).
+\end{itemize}
+
+\subsection{Merger-time labels}
+\begin{itemize}
+  \item Time since the most recent collision of \emph{any} mass ratio
+        (merger catalogue of Lee et al.\ 2024; median ratio 1:11).
+        \todo{Confirm definition with Chuiyang.}
+  \item Pseudo-TSC (interpolated merger-score crossing) agrees at
+        Spearman 0.961; which one we headline, and why.
+  \item Major-merger-only labels are far less predictable
+        ($R^2$ 0.435 $\to$ 0.074): radio morphology reflects recent
+        disturbance of any size.
+\end{itemize}
+\figplaceholder{Label distribution: pseudo-TSC histogram and pseudo-TSC
+vs merger-catalogue TSC scatter.}{The regression target.}

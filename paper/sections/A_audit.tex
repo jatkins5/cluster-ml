@@ -1,0 +1,11 @@
+\section{Audit of the pipeline}
+\label{app:audit}
+\begin{itemize}
+  \item Checkpoint selection on the test fold: $+0.043$ (baselines),
+        $+0.32$ (mock transfer); fixed with inner-split selection.
+  \item Weight-centroid centring (median 0.70\,\rfive\ off).
+  \item Name-key and cutout-size bugs (17 $\to$ 25 real clusters).
+  \item X-ray stretch; X-ray background normalisation; background sky-area
+        scaling.
+  \item \todo{Decide how much of this belongs in the paper vs the repo.}
+\end{itemize}

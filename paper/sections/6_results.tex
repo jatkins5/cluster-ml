@@ -1,0 +1,69 @@
+\section{Results}
+\label{sec:results}
+
+\subsection{What the radio image knows}
+\begin{itemize}
+  \item Pooled CNN $0.487 \pm 0.033$ (ensemble 0.528) vs total flux 0.432,
+        mass 0.314, five scalars 0.455.
+  \item Within mass terciles: CNN 0.33/0.32/0.22 while scalars fall to
+        $-0.28$ in the high-mass bin; partial $\rho = 0.475$ at fixed mass.
+  \item Morphology alone (flux-normalised maps): 0.418; but shape and
+        brightness are not separable (shape-only model 59\% predictable
+        from the flux it never saw).
+  \item Caveat: scalars explain 72\% of the CNN output.
+  \item Minkowski functionals as an interpretable baseline: XGBoost on 48
+        topology numbers reaches 0.454; fragmentation rises with merger age.
+\end{itemize}
+\begin{figure*}
+  \centering
+  \includegraphics[width=\textwidth]{minkowski.png}
+  \caption{Minkowski functionals of the simulated radio maps and their
+  relation to merger time.
+  \stale{built on weight-centroid-centred maps before the density cut and
+  the protocol fix; rerun \texttt{minkowski\_functionals.py} on
+  \texttt{dataset\_nh4\_128.h5}.}}
+  \label{fig:mf}
+\end{figure*}
+\figplaceholder{Bar chart: OOF $R^2$ of the scalar baselines, morphology
+only, CNN, ensemble (\texttt{analyze\_mass\_control.py},
+\texttt{compare\_shape.py}).}{The image against scalar baselines.}
+\figplaceholder{True vs predicted TSC, with residuals by age bin
+(\texttt{plot\_tsc\_predictions.py} on saved OOF predictions).}
+{Predicted against true merger time.}
+
+\subsection{X-ray, and radio with X-ray}
+\begin{itemize}
+  \item The stretch bug and fix: X-ray 0.320 $\to$ 0.511 ($p = 0.0003$).
+  \item Joint model $0.537 \pm 0.016$: beats radio by $+0.050$ and X-ray by
+        $+0.026$; gains on older mergers (RMSE $>2$\,Gyr 1.25 $\to$ 1.13).
+\end{itemize}
+
+\subsection{Under observational degradation}
+\label{sec:flux}
+\begin{itemize}
+  \item Anchored vs simulation-power flux: 0.338 $\to$ 0.412; image beyond
+        mass $+0.079 \to +0.151$; $\rho({\rm pred}, M)$ $-0.89 \to -0.61$.
+  \item The simulation's $P_{150}$--\mfive: slope $3.30\pm0.33$ (obs.\ 3.55),
+        scatter 1.65\,dex (obs.\ 0.35); scatter tracks merger state with
+        the observed sign.
+  \item Realistic X-ray and joint (after all background fixes): X-ray 0.339,
+        joint 0.438. \todo{5 seeds; snapshot 91.}
+\end{itemize}
+\figplaceholder{Simulated $P_{150}$--\mfive\ relation coloured by TSC,
+with the Cuciti et al.\ (2023) fit (\texttt{summarize\_b23.py} data).}
+{The simulation's own mass--power relation.}
+
+\subsection{Application to LoVoCCS}
+\begin{itemize}
+  \item Predictions for 25 (radio), 15 (X-ray), 14 (joint) clusters; all
+        within the label range.
+  \item Radio and X-ray agree: $\rho = 0.62$ ($p = 0.019$), 0.67 at fixed
+        $z$; at fixed weak-lensing mass 0.38 ($n = 10$, n.s.).
+  \item A399/A401 youngest -- but mass-driven; do not present as
+        validation.
+  \item Weak-lensing peak check: only 9 overlapping clusters,
+        inconclusive.
+\end{itemize}
+\figplaceholder{Radio vs X-ray predictions for the 14 clusters with both,
+coloured by weak-lensing mass (\texttt{compare\_real\_preds.py}).}
+{Two independent observables on real clusters.}

@@ -1,0 +1,81 @@
+\section{Forward modelling}
+\label{sec:fwd}
+
+\subsection{Radio: from simulated maps to LoTSS}
+\begin{itemize}
+  \item Beam convolution, 1\,Mpc/128\,px common grid at each target's
+        redshift.
+  \item Noise must be beam-correlated: with white noise, real-cluster
+        predictions ran to 10--27\,Gyr.
+  \item Field injection into 208 real LoTSS DR3 fields (Bruno et al.\ 2023
+        precedent; Bottrell ``FullReal'' tier): real noise, sources and
+        artefacts.
+  \item Flux: the simulation's own predicted power, one global constant
+        -- \emph{not} an observed $P_{150}$--\mfive\ anchor
+        (Section~\ref{sec:flux}).
+  \item Realism: image statistics vs LoTSS as separations in mock
+        standard deviations (KS $p$ values inflate with sample size).
+\end{itemize}
+\begin{figure*}
+  \centering
+  \includegraphics[width=\textwidth]{forward_examples.png}
+  \caption{Simulated, forward-modelled and real LoTSS images.
+  \stale{made before the noise-correlation fix and field injection;
+  regenerate with \texttt{plot\_forward\_examples.py} on
+  \texttt{injected\_nh4\_simflux.h5}.}}
+  \label{fig:radio_gallery}
+\end{figure*}
+
+\begin{figure*}
+  \centering
+  \includegraphics[width=\textwidth]{regen_nh4_arc_s0.png}
+  \caption{Minkowski functionals of forward-modelled mocks against LoTSS:
+  perimeter and Euler characteristic vs threshold, fragmentation at
+  3$\sigma$, and merger time recovered from the mock functionals.
+  \stale{analytic-noise tier with 17 targets, before field injection and
+  the simulation-power flux; rerun on \texttt{injected\_nh4\_simflux.h5}
+  with 25 targets, and quote separations rather than KS $p$ values.}}
+  \label{fig:radio_mf}
+\end{figure*}
+
+\subsection{X-ray: from 2\,Ms mocks to real Chandra depths}
+\label{sec:xray}
+\begin{itemize}
+  \item Binomial thinning of photon counts is an exact shallower
+        observation; real archival depths (median 50\,ks all instruments,
+        20\,ks ACIS-I).
+  \item Sky backgrounds from soxs; particle background handled separately.
+  \item Redshift placement: $1/D_L^2$ dimming, sky-area scaling of the
+        background per (physically fixed) pixel, common aperture.
+  \item TNG over-luminosity: mocks $\sim$3$\times$ brighter than real
+        clusters (0.32 measured on Chandra; 0.28 from catalogue $L_X$);
+        corrected with the catalogue value.
+  \item Galactic absorption per target (small: median 2\%).
+  \item Fig.~\ref{fig:lx}: the luminosity offset seen in catalogue $L_X$.
+  \item Real-data processing and the particle-background normalisation
+        lesson (effective-area-scaled exposure is wrong for unfocused
+        background).
+\end{itemize}
+\begin{figure*}
+  \centering
+  \includegraphics[width=0.7\textwidth]{xray_real_vs_mock.png}
+  \caption{Real Chandra inputs (left column) beside redshift-matched mocks.
+  \stale{made before the particle-background and sky-area fixes;
+  regenerate with \texttt{plot\_xray\_real\_vs\_mock.py} on
+  \texttt{xray\_real\_placed\_lx.h5}.}}
+  \label{fig:xray_gallery}
+\end{figure*}
+\begin{figure*}
+  \centering
+  \includegraphics[width=0.8\textwidth]{sim_obs_dist.png}
+  \caption{TNG-Cluster X-ray luminosities against the LoVoCCS sample:
+  simulated clusters are $\sim$3.6$\times$ brighter at the same selection.
+  \stale{the mass panel predates the weak-lensing masses; replace it with
+  the mass-matched real/mock brightness comparison
+  (\texttt{check\_xray\_domain\_gap.py}, median ratio 1.28 after
+  correction). The reweighting panel belongs to a negative result.}}
+  \label{fig:lx}
+\end{figure*}
+\figplaceholder{X-ray accuracy vs exposure (1\,ks to 2\,Ms) with the real
+archive depth distribution overlaid (\texttt{summarize\_xray\_depth.py}).}
+{X-ray skill survives realistic Chandra depths.}
