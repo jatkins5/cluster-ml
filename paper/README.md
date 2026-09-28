@@ -31,19 +31,22 @@ bibliography section is empty in the PDF.
 
 ## Figures
 
-Every figure in `figures/` is a copy of an existing plot in the repo root, kept
-under its original name so its provenance is traceable.
+`fig_*.pdf` are made by `scripts/make_figures.py` from the current datasets
+(run from the repo root through SLURM:
+`sbatch paper/scripts/run_py.sh paper/scripts/make_figures.py [name ...]`);
+it prints the numbers each caption quotes. The `.png` files are copies of
+older plots from the repo root, kept under their original names.
 
-| figure | made by | status |
+| figure | made by | inputs |
 |---|---|---|
-| `forward_examples.png` | `plot_forward_examples.py` | stale: before noise-correlation fix and field injection |
-| `regen_nh4_arc_s0.png` | `forward_model_lotss.py` | stale: analytic-noise tier, 17 targets |
-| `minkowski.png` | `minkowski_functionals.py` | stale: pre-recentring, pre-density-cut |
-| `sim_obs_dist.png` | `compare_sim_obs_distributions.py` | L_X panels valid; mass panel predates WL masses |
-| `xray_real_vs_mock.png` | `plot_xray_real_vs_mock.py` | stale: before background fixes |
+| `fig_radio_gallery.pdf` | `make_figures.py radio_gallery` | `dataset_nh4_512.h5`, `injected_nh4_simflux.h5` |
+| `fig_radio_mf.pdf` | `make_figures.py radio_mf` | `injected_nh4_simflux.h5` (25 LoTSS targets) |
+| `fig_mf_tsc.pdf` | `make_figures.py mf_tsc` | `dataset_nh4_128.h5` |
+| `fig_lx_mass.pdf` | `make_figures.py lx_mass` | TNG catalogue, LoVoCCS target list, `lovoccs_wl_masses.csv`, `xray_real_placed_lx.h5` |
+| `fig_xray_gallery.pdf` | `make_figures.py xray_gallery` | `xray_real_placed_lx.h5` |
+| `fig_relic.pdf` | `detect_relics_radio.py --dataset dataset_nh4_512.h5`, then `make_figures.py relic` | `relic_catalog_radio_nh4.h5` |
+| `fig_aug.pdf` | `submit_cnn_aug_oof_inner.sh`, then `make_figures.py aug` | `cnn_aug_oof_128_inner/` |
 | `lotss_A119.png`, `lotss_A2443.png` | `download_lotss_image.py` | raw cutouts, placeholder for a proper gallery |
-| `relic_v3_validation.png`, `relic_radio_validation.png` | `plot_relic_validation_v3.py`, `detect_relics_radio.py` | negative result; predates audit |
-| `aug_comparison_128.png` | `train_cnn_aug.py` | negative result; single-split protocol |
 | `camels_mass_tsc.png` | CAMELS label scripts | negative result |
 
 ### Still to make (placeholders in `main.tex`)

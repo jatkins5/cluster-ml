@@ -18,23 +18,28 @@
 \end{itemize}
 \begin{figure*}
   \centering
-  \includegraphics[width=\textwidth]{forward_examples.png}
-  \caption{Simulated, forward-modelled and real LoTSS images.
-  \stale{made before the noise-correlation fix and field injection;
-  regenerate with \texttt{plot\_forward\_examples.py} on
-  \texttt{injected\_nh4\_simflux.h5}.}}
+  \includegraphics[width=\textwidth]{fig_radio_gallery.pdf}
+  \caption{Top: simulated 144\,MHz maps (GroupPos-centred, $n_{\rm H} <
+  10^{-4}$\,cm$^{-3}$ shock cells, $\pm2\,r_{500}$) for four clusters
+  spanning merger time. Middle: the same clusters forward-modelled at a
+  LoVoCCS redshift and injected into a real LoTSS DR3 field with the
+  simulation's own flux. Bottom: real LoTSS targets on the same grid; the
+  circular regions are masked compact sources.
+  \todo{the middle row is dominated by the injected field; consider showing
+  the brightest realization or marking the cluster extent.}}
   \label{fig:radio_gallery}
 \end{figure*}
 
 \begin{figure*}
   \centering
-  \includegraphics[width=\textwidth]{regen_nh4_arc_s0.png}
-  \caption{Minkowski functionals of forward-modelled mocks against LoTSS:
-  perimeter and Euler characteristic vs threshold, fragmentation at
-  3$\sigma$, and merger time recovered from the mock functionals.
-  \stale{analytic-noise tier with 17 targets, before field injection and
-  the simulation-power flux; rerun on \texttt{injected\_nh4\_simflux.h5}
-  with 25 targets, and quote separations rather than KS $p$ values.}}
+  \includegraphics[width=\textwidth]{fig_radio_mf.pdf}
+  \caption{Minkowski functionals of the 3168 injected mocks (band: 16--84
+  per cent) against the 25 LoTSS targets (points: median and 16--84 per
+  cent), at thresholds 1--20$\sigma$ of each map's noise. Bottom: the
+  median offset of the real maps in units of the mock scatter. Every
+  offset is below 0.5 mock standard deviations; the largest are the
+  component count and Euler characteristic at $\gtrsim$10$\sigma$, where
+  compact AGN dominate.}
   \label{fig:radio_mf}
 \end{figure*}
 
@@ -56,24 +61,26 @@
         lesson (effective-area-scaled exposure is wrong for unfocused
         background).
 \end{itemize}
-\begin{figure*}
+\begin{figure}
   \centering
-  \includegraphics[width=0.7\textwidth]{xray_real_vs_mock.png}
-  \caption{Real Chandra inputs (left column) beside redshift-matched mocks.
-  \stale{made before the particle-background and sky-area fixes;
-  regenerate with \texttt{plot\_xray\_real\_vs\_mock.py} on
-  \texttt{xray\_real\_placed\_lx.h5}.}}
+  \includegraphics[width=\columnwidth]{fig_xray_gallery.pdf}
+  \caption{Real Chandra ACIS-I inputs (left; particle-background
+  corrected, Cycle-22-equivalent exposure) beside two mocks placed at the
+  same redshift and depth, with the $L_X$ and absorption corrections.
+  Pixels outside the common 8$'$ (at $z = 0.05$) aperture are zero.}
   \label{fig:xray_gallery}
-\end{figure*}
+\end{figure}
 \begin{figure*}
   \centering
-  \includegraphics[width=0.8\textwidth]{sim_obs_dist.png}
-  \caption{TNG-Cluster X-ray luminosities against the LoVoCCS sample:
-  simulated clusters are $\sim$3.6$\times$ brighter at the same selection.
-  \stale{the mass panel predates the weak-lensing masses; replace it with
-  the mass-matched real/mock brightness comparison
-  (\texttt{check\_xray\_domain\_gap.py}, median ratio 1.28 after
-  correction). The reweighting panel belongs to a negative result.}}
+  \includegraphics[width=\textwidth]{fig_lx_mass.pdf}
+  \caption{Left: catalogue X-ray luminosity, TNG-Cluster against LoVoCCS
+  (whose $10^{44}$\,erg\,s$^{-1}$ selection cut is visible); the medians
+  differ by 0.55\,dex, a factor 3.6. Middle: $M_{500}$ of TNG-Cluster
+  against LoVoCCS weak-lensing masses. Right: for the 11 Chandra targets
+  with a weak-lensing mass, real X-ray count rate in the common aperture
+  divided by the median of mass-matched ($\pm0.15$\,dex) mocks at the same
+  redshift, after the $L_X$ correction: median 1.29, no trend with mass
+  (slope $0.08 \pm 0.32$).}
   \label{fig:lx}
 \end{figure*}
 \figplaceholder{X-ray accuracy vs exposure (1\,ks to 2\,Ms) with the real

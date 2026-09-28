@@ -20,8 +20,10 @@ Notes / caveats:
     reproduction of the 0.511 run.
   - Synthetic samples are mixed into the TRAIN portion of every fold only;
     they are never scored (they belong to no held-out cluster).
-  - Best-epoch selection peeks at the fold's val R² to pick the checkpoint,
-    matching the "best-epoch checkpoint" methodology of the 0.511 runs.
+  - The checkpoint is chosen on clusters held out of the training portion
+    (--select inner, the default). The original runs picked it on the test
+    fold itself (--select final), which inflates R²; see
+    PAPER_CHECKLIST.md section A.
 
 Usage:
   python train_cnn_aug_oof.py --data diffusion_radio_128_v2.h5 --ch 48 \
@@ -78,10 +80,14 @@ def load_aug(aug_path: str, tsc_lo: float, tsc_hi: float
 
 
 def train_one_fold(train_imgs: np.ndarray, train_labels: np.ndarray,
-                   val_imgs: np.ndarray, val_labels: np.ndarray,
+                   sel_imgs: np.ndarray, sel_labels: np.ndarray,
+                   test_imgs: np.ndarray,
                    args: argparse.Namespace, dev: str) -> np.ndarray:
-    """Train a fresh CNN on one fold; return val predictions from the
-    checkpoint that maximises the selection metric (overall or recent R²)."""
+    """Train a fresh CNN on one fold; return test predictions from the
+    checkpoint that maximises the selection metric (overall or recent R²)
+    on the selection set. With --select inner that set is clusters held out
+    of the training portion, so the test fold never influences the choice;
+    with --select final it is the test fold itself (the old, biased mode)."""
     loader = DataLoader(
         RadioMapsCNN(train_imgs, train_labels, train=True, seed=args.seed),
         batch_size=args.batch_size, shuffle=True, num_workers=4, drop_last=True)
@@ -90,8 +96,9 @@ def train_one_fold(train_imgs: np.ndarray, train_labels: np.ndarray,
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=args.epochs)
 
-    val_tensor = torch.from_numpy(val_imgs).to(dev)
-    recent_mask = val_labels <= 2.0
+    sel_tensor = torch.from_numpy(sel_imgs).to(dev)
+    test_tensor = torch.from_numpy(test_imgs).to(dev)
+    recent_mask = sel_labels <= 2.0
 
     best_score = -np.inf
     best_pred = None
@@ -105,19 +112,20 @@ def train_one_fold(train_imgs: np.ndarray, train_labels: np.ndarray,
 
         model.eval()
         with torch.no_grad():
-            val_pred = model(val_tensor).cpu().numpy()
+            sel_pred = model(sel_tensor).cpu().numpy()
+            test_pred = model(test_tensor).cpu().numpy()
         if args.select_by == "recent":
-            score = (r2(val_pred[recent_mask], val_labels[recent_mask])
+            score = (r2(sel_pred[recent_mask], sel_labels[recent_mask])
                      if recent_mask.sum() > 5 else -np.inf)
         else:
-            score = r2(val_pred, val_labels)
+            score = r2(sel_pred, sel_labels)
         # NaN guard so an undefined-variance epoch never wins selection
         if np.isfinite(score) and score > best_score:
             best_score = score
-            best_pred = val_pred.copy()
+            best_pred = test_pred.copy()
 
     # fall back to the last epoch if no epoch produced a finite score
-    return best_pred if best_pred is not None else val_pred
+    return best_pred if best_pred is not None else test_pred
 
 
 def main(args: argparse.Namespace) -> None:
@@ -140,13 +148,24 @@ def main(args: argparse.Namespace) -> None:
     gkf = GroupKFold(n_splits=args.n_folds)
     oof_pred = np.full(len(labels), np.nan, dtype=np.float32)
     fold_r2_all = []
+    rng = np.random.default_rng(args.seed)
     for fold, (tr_idx, val_idx) in enumerate(gkf.split(imgs, labels, groups=halo)):
+        if args.select == "inner":
+            # hold out whole clusters of the training portion for selection
+            tr_halo = np.unique(halo[tr_idx])
+            n_sel = int(round(args.inner_frac * len(tr_halo)))
+            sel_halo = rng.choice(tr_halo, n_sel, replace=False)
+            is_sel = np.isin(halo[tr_idx], sel_halo)
+            sel_idx, tr_idx = tr_idx[is_sel], tr_idx[~is_sel]
+        else:
+            sel_idx = val_idx
         tr_imgs, tr_labels = imgs[tr_idx], labels[tr_idx]
         if aug_imgs is not None:
             tr_imgs = np.concatenate([tr_imgs, aug_imgs], axis=0)
             tr_labels = np.concatenate([tr_labels, aug_labels], axis=0)
         val_pred = train_one_fold(tr_imgs, tr_labels,
-                                  imgs[val_idx], labels[val_idx], args, dev)
+                                  imgs[sel_idx], labels[sel_idx],
+                                  imgs[val_idx], args, dev)
         oof_pred[val_idx] = val_pred
         r2_fold = r2(val_pred, labels[val_idx])
         fold_r2_all.append(r2_fold)
@@ -157,8 +176,8 @@ def main(args: argparse.Namespace) -> None:
     recent = labels <= 2.0
     very = labels <= 1.0
     late = labels > 2.0
-    print(f"\n=== {args.tag}  OOF (select_by={args.select_by}, "
-          f"{args.n_folds}-fold) ===")
+    print(f"\n=== {args.tag}  OOF (select={args.select}, "
+          f"select_by={args.select_by}, {args.n_folds}-fold) ===")
     print(f"OOF R² all (TSC 0–7.7):     {r2(oof_pred, labels):+.4f}  "
           f"(n={len(labels)})   per-fold {np.mean(fold_r2_all):+.3f} "
           f"± {np.std(fold_r2_all):.3f}")
@@ -172,7 +191,8 @@ def main(args: argparse.Namespace) -> None:
     out_path = f"{args.out_dir}/oof_{args.tag}.npz"
     np.savez(out_path, y=labels, yhat=oof_pred, halo=halo,
              fold_r2_all=np.array(fold_r2_all),
-             aug_used=bool(args.aug_samples), select_by=args.select_by)
+             aug_used=bool(args.aug_samples), select_by=args.select_by,
+             select=args.select, seed=args.seed)
     print(f"saved {out_path}")
 
 
@@ -189,6 +209,12 @@ if __name__ == "__main__":
     p.add_argument("--select-by", type=str, default="overall",
                    choices=["overall", "recent"],
                    help="metric used to pick the best-epoch checkpoint per fold")
+    p.add_argument("--select", type=str, default="inner",
+                   choices=["inner", "final"],
+                   help="inner: pick the checkpoint on clusters held out of the "
+                        "training portion; final: on the test fold (biased, "
+                        "kept only to reproduce old numbers)")
+    p.add_argument("--inner-frac", type=float, default=0.15)
     p.add_argument("--epochs", type=int, default=80)
     p.add_argument("--batch-size", type=int, default=64)
     p.add_argument("--lr", type=float, default=2e-4)

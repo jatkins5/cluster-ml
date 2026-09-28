@@ -2,29 +2,33 @@
 \label{app:negative}
 \begin{figure}
   \centering
-  \includegraphics[width=\columnwidth]{relic_v3_validation.png}
-  \caption{Relic separation against merger time in TNG-Cluster, four
-  slicings: no positive relation.
-  \stale{labels and centring predate the audit; re-check before use.}}
+  \includegraphics[width=\columnwidth]{fig_relic.pdf}
+  \caption{Distance of the outermost radio peak from the halo centre
+  against merger-catalogue time since collision, one point per projection,
+  for peaks detected in the GroupPos-centred, density-cut maps
+  (0.3--2\,$r_{500}$ annulus, peaks above 25 per cent of the annulus
+  maximum, 600\,kpc apart). The dashed line is a shock moving at a
+  constant 1500\,km\,s$^{-1}$. There is no positive relation: Spearman
+  $\rho = -0.18$ for all 774 projections with TSC $\leq 2$\,Gyr and
+  $-0.08$ ($p = 0.34$) for the 156 with mass ratio $\geq 0.1$. Every
+  projection has several peaks (median 5), so ``outermost peak'' is a
+  loose proxy for a relic.
+  \todo{the shock-cell version of this test (\texttt{relic\_v3}) has not
+  been rerun on the current maps; drop it or regenerate it.}}
   \label{fig:relic_null}
 \end{figure}
 
 \begin{figure}
   \centering
-  \includegraphics[width=\columnwidth]{relic_radio_validation.png}
-  \caption{The same test with relics detected directly in the radio maps
-  rather than from shock cells.
-  \stale{predates the audit.}}
-  \label{fig:relic_radio}
-\end{figure}
-
-\begin{figure}
-  \centering
-  \includegraphics[width=\columnwidth]{aug_comparison_128.png}
-  \caption{CNN with and without diffusion-generated augmentation: no gain
-  under cross-validation.
-  \stale{single-split protocol shown; the 5-fold result (no gain,
-  $\Delta R^2 = +0.001$) needs its own plot.}}
+  \IfFileExists{figures/fig_aug.pdf}
+    {\includegraphics[width=\columnwidth]{fig_aug.pdf}}
+    {\fbox{\parbox{0.9\columnwidth}{\centering\small
+      augmentation figure pending (paired-seed runs in progress)}}}
+  \caption{CNN with and without diffusion-generated training samples,
+  5-fold out-of-fold $R^2$ with checkpoints selected on held-out training
+  clusters, overall and within bins of merger time; bars are the mean over
+  paired seeds, dots the individual seeds.
+  \todo{fill in the numbers when the paired-seed runs finish.}}
   \label{fig:aug}
 \end{figure}
 

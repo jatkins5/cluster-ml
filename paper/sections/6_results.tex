@@ -12,16 +12,20 @@
         from the flux it never saw).
   \item Caveat: scalars explain 72\% of the CNN output.
   \item Minkowski functionals as an interpretable baseline: XGBoost on 48
-        topology numbers reaches 0.454; fragmentation rises with merger age.
+        topology numbers reaches 0.41 (cluster mean of the three
+        projections; 0.30 per projection); fragmentation rises with merger
+        age ($\rho = 0.62$ for the component count at the highest
+        threshold).
 \end{itemize}
 \begin{figure*}
   \centering
-  \includegraphics[width=\textwidth]{minkowski.png}
-  \caption{Minkowski functionals of the simulated radio maps and their
-  relation to merger time.
-  \stale{built on weight-centroid-centred maps before the density cut and
-  the protocol fix; rerun \texttt{minkowski\_functionals.py} on
-  \texttt{dataset\_nh4\_128.h5}.}}
+  \includegraphics[width=\textwidth]{fig_mf_tsc.pdf}
+  \caption{Minkowski functionals of the simulated radio maps
+  (\texttt{dataset\_nh4\_128}) against merger time. Left and middle:
+  connected components and Euler characteristic vs area-fraction threshold
+  for the three pseudo-TSC terciles (mean and standard deviation). Right:
+  out-of-fold XGBoost prediction from the functionals, averaged over
+  projections.}
   \label{fig:mf}
 \end{figure*}
 \figplaceholder{Bar chart: OOF $R^2$ of the scalar baselines, morphology
@@ -43,9 +47,12 @@ only, CNN, ensemble (\texttt{analyze\_mass\_control.py},
 \begin{itemize}
   \item Anchored vs simulation-power flux: 0.338 $\to$ 0.412; image beyond
         mass $+0.079 \to +0.151$; $\rho({\rm pred}, M)$ $-0.89 \to -0.61$.
-  \item The simulation's $P_{150}$--\mfive: slope $3.30\pm0.33$ (obs.\ 3.55),
-        scatter 1.65\,dex (obs.\ 0.35); scatter tracks merger state with
-        the observed sign.
+  \item The simulation's $P_{150}$--\mfive, from the cells with the density
+        cut: slope $2.67\pm0.16$, scatter 0.78\,dex. Compare the relic
+        relation (de Gasperin et al.\ 2014, $2.83\pm0.39$), not the halo
+        one (Cuciti et al.\ 2023, 3.55). Scatter tracks merger state with
+        the observed sign. (The earlier 3.30 / 1.65\,dex came from an image
+        approximation.)
   \item Realistic X-ray and joint (after all background fixes): X-ray 0.339,
         joint 0.438. \todo{5 seeds; snapshot 91.}
 \end{itemize}
