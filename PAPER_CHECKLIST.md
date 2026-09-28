@@ -248,6 +248,17 @@ all four transfer runs. B1/B2 are now the binding items.
   inputs (needs a redshift/brightness decision and exposure maps); redshift
   placement of the mocks.
 
+- [x] **Radio code vs Hoeft & Brüggen (2007) — DONE 2026-09-28**
+  (`check_radio_theory.py`). Code matches HB07 / Lee et al. eq. 9 except
+  (a) the (ν/1.4 GHz)^(−s/2) factor, omitted — harmless in practice, ~a
+  global ×10 because Ψ suppresses weak shocks; (b) z hard-coded to 0 —
+  fixed for snapshot 91. **Evidence for B4:** the density cut is required
+  by HB07's stated assumptions (non-radiative ICM shocks, no Coulomb
+  losses), and it moves the emission to Mach ~4.6, spectral index 1.11 and
+  a P–M500 slope of 2.64 ± 0.16 — matching observed relics (2.83 ± 0.39,
+  de Gasperin et al. 2014) where the uncut model gives 1.40 ± 0.13. Also:
+  the Cuciti relation is for halos, the wrong comparison for this emission.
+
 - [ ] **B3. Reconcile with Lee's relic-separation relation.** Their group now
   publishes TSC = 0.52 d_drr/R500c − 0.24, r = 0.83 in TNG-Cluster
   (arXiv:2510.21632); our README records four independent negative attempts

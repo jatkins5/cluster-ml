@@ -32,9 +32,13 @@ from scipy.interpolate import RegularGridInterpolator
 
 GAMMA = 5.0 / 3.0
 XH = 0.76
+H0 = Planck15.h
+# Redshift enters the unit conversions (a = 1/(1+z)), B_CMB and the density
+# conversion. Chuiyang's code hard-codes z = 0, which is right for snapshot 99
+# and wrong for any earlier snapshot; set_redshift() must be called before
+# generating from snapshot 91 (z = 0.1) or 84 (z = 0.2).
 Z = 0.0
 A = 1.0 / (1.0 + Z)
-H0 = Planck15.h
 
 # Code-unit conversions, transcribed from Radio_generation.py.
 UNIT_B_G = (np.sqrt(1e10 * u.Msun / u.kpc) * (u.km / u.s) / u.kpc).to(
@@ -43,6 +47,15 @@ ECONV = ((1e10 * u.Msun / u.kpc) * (u.km / u.s) ** 3).to(u.erg / u.s).value
 # Density code unit (1e10 Msun/h)/(ckpc/h)^3 -> g/cm^3, then n_H = rho*XH/m_p.
 RHO_CGS = ((1e10 * u.Msun / u.kpc ** 3).to(u.g / u.cm ** 3).value
            * H0 ** 2 / A ** 3)
+
+
+def set_redshift(z):
+    """Switch every redshift-dependent constant to snapshot redshift z."""
+    global Z, A, RHO_CGS
+    Z = float(z)
+    A = 1.0 / (1.0 + Z)
+    RHO_CGS = ((1e10 * u.Msun / u.kpc ** 3).to(u.g / u.cm ** 3).value
+               * H0 ** 2 / A ** 3)
 
 
 def r_of_M(M):
@@ -67,7 +80,7 @@ def make_psi(table):
 
 
 def generate(cutout, interp_psi, min_T_keV=0.0, max_nH=np.inf,
-             exclude_sf=False):
+             exclude_sf=False, nu_ghz=1.4):
     with h5py.File(cutout, "r") as f:
         p0 = f["PartType0"]
         mach = p0["Machnumber"][:]
@@ -114,6 +127,14 @@ def generate(cutout, interp_psi, min_T_keV=0.0, max_nH=np.inf,
     s = s_of_M(M)
     phi = interp_psi(np.column_stack([s, np.log10(T_keV * 10.0 / 511.0)]))
     w = 5.2e23 * E * B_uG ** (1.0 + 0.5 * s) / (B_uG ** 2 + bcmb_uG(Z) ** 2) * phi
+    # Hoeft & Brueggen (2007) eq. 32 / Lee et al. (2024) eq. 9 carry a
+    # (nu / 1.4 GHz)^(-s/2) factor that the upstream code omits, i.e. it
+    # computes 1.4 GHz emission. Default keeps that; nu_ghz=0.144 gives the
+    # LOFAR-band weights. Measured over all 352 clusters
+    # (check_radio_theory.py) the difference is close to a global factor of
+    # ~10, because Psi suppresses weak shocks, so it barely moves morphology.
+    if nu_ghz != 1.4:
+        w = w * (nu_ghz / 1.4) ** (-0.5 * s)
 
     # Equivalent-sphere radius of each Voronoi cell. Mass units cancel, so
     # only the length unit needs converting to physical kpc.
@@ -140,7 +161,16 @@ def main():
                          "(typical shock cell is ~5e-5)")
     ap.add_argument("--exclude-sf", action="store_true",
                     help="drop star-forming cells")
+    ap.add_argument("--z", type=float, default=0.0,
+                    help="snapshot redshift (99: 0, 91: 0.1, 84: 0.2)")
+    ap.add_argument("--nu-ghz", type=float, default=1.4,
+                    help="emission frequency; 1.4 reproduces the upstream "
+                         "weights, 0.144 is the LOFAR band")
     args = ap.parse_args()
+    set_redshift(args.z)
+    if args.validate and (args.z != 0.0 or args.nu_ghz != 1.4):
+        raise SystemExit("--validate compares with the stored z=0, 1.4 GHz "
+                         "weights; run it without --z / --nu-ghz")
 
     os.makedirs(args.out_dir, exist_ok=True)
     interp_psi = make_psi(args.psi_table)
@@ -162,7 +192,7 @@ def main():
         out = generate(cutout, interp_psi,
                        min_T_keV=args.min_temp_kev,
                        max_nH=args.max_nh,
-                       exclude_sf=args.exclude_sf)
+                       exclude_sf=args.exclude_sf, nu_ghz=args.nu_ghz)
         if out is None:
             print(f"  FOF{fof}: no shock cells")
             continue
