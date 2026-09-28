@@ -26,3 +26,11 @@ w = 5.2e+23 * E * (B_uG**(1.0 + 0.5*s)) / (B_uG**2 + Bcmb**2) * phi
 There is no temperature or density cut, which is why the weight is carried
 by cold, 379x overdense, Mach-26 gas -- stripped ISM of infalling galaxies
 rather than the ICM in which radio relics form.
+
+## Redaction
+
+The upstream TNG-Cluster radio script hard-codes its author's personal TNG
+API key. In these copies it is replaced by `REDACTED-TNG-API-KEY` (the only
+change from the originals), because this repository is public. The copies
+are for reading the model, not running the download step; anyone running
+it needs their own key from tng-project.org.
