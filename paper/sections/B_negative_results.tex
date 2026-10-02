@@ -20,15 +20,16 @@
 
 \begin{figure}
   \centering
-  \IfFileExists{figures/fig_aug.pdf}
-    {\includegraphics[width=\columnwidth]{fig_aug.pdf}}
-    {\fbox{\parbox{0.9\columnwidth}{\centering\small
-      augmentation figure pending (paired-seed runs in progress)}}}
+  \includegraphics[width=\columnwidth]{fig_aug.pdf}
   \caption{CNN with and without diffusion-generated training samples,
   5-fold out-of-fold $R^2$ with checkpoints selected on held-out training
-  clusters, overall and within bins of merger time; bars are the mean over
-  paired seeds, dots the individual seeds.
-  \todo{fill in the numbers when the paired-seed runs finish.}}
+  clusters: root-mean-square error overall and within bins of merger time
+  (merger-catalogue TSC); bars are the mean of three paired seeds, dots the
+  individual seeds. Overall $R^2$ is unchanged ($0.398 \to 0.404$,
+  $\Delta = +0.006 \pm 0.021$). The synthetic samples, all drawn at
+  0.3--2\,Gyr, shave 0.03--0.06\,Gyr off the error for young mergers and
+  add 0.04\,Gyr for old ones: they move error between age bins rather than
+  remove it.}
   \label{fig:aug}
 \end{figure}
 

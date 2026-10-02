@@ -166,6 +166,12 @@ def main():
     ap.add_argument("--nu-ghz", type=float, default=1.4,
                     help="emission frequency; 1.4 reproduces the upstream "
                          "weights, 0.144 is the LOFAR band")
+    ap.add_argument("--w-scale", type=float, default=1.0,
+                    help="divide every weight by this constant. The maps are "
+                         "arcsinh(w), so a global change of units also changes "
+                         "the stretch; at 0.144 GHz pass the sample-median "
+                         "ratio (12.5 = 9.72^1.11, integrated index 1.11) to keep the "
+                         "1.4 GHz units and isolate the per-cell effect")
     args = ap.parse_args()
     set_redshift(args.z)
     if args.validate and (args.z != 0.0 or args.nu_ghz != 1.4):
@@ -197,6 +203,7 @@ def main():
             print(f"  FOF{fof}: no shock cells")
             continue
         pos, w, r_kpc = out
+        w = w / args.w_scale
 
         if args.validate:
             # Only meaningful with no cuts applied.

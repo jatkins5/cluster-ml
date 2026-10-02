@@ -338,19 +338,27 @@ def aug():
     checkpoint selection, paired by seed (train_cnn_aug_oof.py)."""
     import glob
     r2 = lambda p, y: 1 - np.sum((y - p) ** 2) / np.sum((y - y.mean()) ** 2)
-    bins = [("all", lambda y: y >= 0), ("TSC $\\leq$ 1", lambda y: y <= 1.0),
+    bins = [("all", lambda y: y >= 0), ("TSC $\\leq$ 1 Gyr", lambda y: y <= 1.0),
             ("1-2 Gyr", lambda y: (y > 1.0) & (y <= 2.0)),
-            ("TSC > 2", lambda y: y > 2.0)]
-    res = {}
+            ("> 2 Gyr", lambda y: y > 2.0)]
+    # within a narrow bin R^2 is dominated by the bin's tiny label variance,
+    # so the bins are shown as RMSE; overall R^2 is printed for the caption
+    rmse = lambda p, y: np.sqrt(np.mean((y - p) ** 2))
+    res, r2s = {}, {}
     for tag in ("baseline", "aug"):
-        rows = []
+        rows, rr = [], []
         for p in sorted(glob.glob(f"cnn_aug_oof_128_inner/oof_{tag}_s*.npz")):
             d = np.load(p)
-            rows.append([r2(d["yhat"][m(d["y"])], d["y"][m(d["y"])])
+            rows.append([rmse(d["yhat"][m(d["y"])], d["y"][m(d["y"])])
                          for _, m in bins])
-        res[tag] = np.array(rows)
+            rr.append(r2(d["yhat"], d["y"]))
+        res[tag], r2s[tag] = np.array(rows), np.array(rr)
     n = min(len(res["baseline"]), len(res["aug"]))
     b, a = res["baseline"][:n], res["aug"][:n]
+    dr = r2s["aug"][:n] - r2s["baseline"][:n]
+    print(f"  overall R2: base {r2s['baseline'][:n].mean():.3f}  aug "
+          f"{r2s['aug'][:n].mean():.3f}  delta {dr.mean():+.3f} +- "
+          f"{dr.std(ddof=1) if n > 1 else np.nan:.3f}")
     fig, ax = plt.subplots(figsize=(COL, COL * 0.75))
     x = np.arange(len(bins))
     for off, v, lab, c in [(-0.17, b, "no augmentation", "0.55"),
@@ -359,10 +367,9 @@ def aug():
                color=c, label=lab, capsize=2)
         for s in range(n):
             ax.plot(x + off, v[s], "k.", ms=2)
-    ax.axhline(0, color="k", lw=0.6)
     ax.set_xticks(x, [lab for lab, _ in bins])
-    ax.set_ylabel("OOF $R^2$ (within bin)")
-    ax.legend(loc="lower left")
+    ax.set_ylabel("out-of-fold RMSE [Gyr]")
+    ax.legend(loc="upper left")
     save(fig, "aug")
     print(f"  {n} paired seeds")
     for k, (lab, _) in enumerate(bins):
