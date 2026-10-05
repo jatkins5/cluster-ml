@@ -108,10 +108,11 @@ def cosmo():
     return Planck15
 
 
-def distance_factor(z):
-    """Photons from the same cluster at z relative to z=0.05: 1/D_L^2."""
+def distance_factor(z, z_mock=Z_MOCK):
+    """Photons from the same cluster at z relative to the redshift the mock
+    was observed at (0.05 for snapshot 99): 1/D_L^2."""
     c = cosmo()
-    return float((c.luminosity_distance(Z_MOCK)
+    return float((c.luminosity_distance(z_mock)
                   / c.luminosity_distance(z)).value ** 2)
 
 
@@ -311,12 +312,24 @@ def build_placed(args, rng, src, hid, tsc, bkg):
       then zeroed outside the common physical aperture.
     For z < 0.05 the baked-in particle background is over-kept by at most a
     factor ~2 on ~1% of the counts; left as is.
+
+    Mocks observed at another redshift (snapshot 91: z_mock = 0.0994, binned
+    onto the same physical grid by xray_counts_from_events.py) are dimmed
+    relative to their own distance, and their baked-in particle background
+    is that of the smaller sky area a block covered there, f_mock =
+    sky_area_factor(z_mock); the top-up becomes p_t * f_sky - p_src * f_mock.
     """
+    with h5py.File(args.counts_h5, "r") as f:
+        z_mock = float(f.attrs.get("z_mock", Z_MOCK))
+    f_mock = sky_area_factor(z_mock)
+    print(f"mock observed at z = {z_mock:.4f} (block sky area x{f_mock:.3f} "
+          f"of z=0.05)")
     with h5py.File(args.pbkg_h5, "r") as f:
         pbkg = f["counts"][:]
     with h5py.File(args.z_from, "r") as f:
         rz = f["mock/z"][:]
         rh = f["mock/halo_id"][:]
+        rlogm = f["mock/log_m500"][:] if "mock/log_m500" in f else None
     pos = {h: i for i, h in enumerate(hid)}
     order = np.array([pos[h] for h in rh])       # radio order
     src, hid, tsc = src[order], hid[order], tsc[order]
@@ -359,7 +372,7 @@ def build_placed(args, rng, src, hid, tsc, bkg):
                 t = float(rng.choice(pool))
             t = min(t, T_MOCK_KS)
             p_t = t / T_MOCK_KS
-            p_src = (p_t * distance_factor(z) * args.lx_scale
+            p_src = (p_t * distance_factor(z, z_mock) * args.lx_scale
                      * nh_by_z.get(round(z, 4), 1.0))
             if p_src > 1.0:
                 capped += 1
@@ -378,11 +391,14 @@ def build_placed(args, rng, src, hid, tsc, bkg):
                 raise ValueError(f"background thinning p={p_bkg:.2f} > 1")
             for j in range(P):
                 c = (rng.binomial(src[i, j], p_src)
-                     + rng.binomial(pb, max(p_bkg - p_src, 0.0))
+                     + rng.binomial(pb, max(p_bkg - p_src * f_mock, 0.0))
                      + rng.binomial(b, p_bkg))
                 rate[i, r, j] = np.where(m, c, 0) / t
             t_ks[i, r], z_used[i, r] = t, z
-    a = float(np.median(rate[rate > 0]))
+    # A fixed stretch lets sets built separately (e.g. two snapshots) share
+    # one intensity scale, so they can be combined and given one real set.
+    a = (float(args.stretch_scale) if args.stretch_scale
+         else float(np.median(rate[rate > 0])))
     img = np.arcsinh(rate / a).astype(np.float32)
     print(f"placed at radio-mock redshifts {z_used.min():.3f}-{z_used.max():.3f};"
           f" exposure from the matching ACIS-I target for "
@@ -397,11 +413,16 @@ def build_placed(args, rng, src, hid, tsc, bkg):
         mg.create_dataset("pseudo_tsc", data=tsc)
         mg.create_dataset("exposure_ks", data=t_ks.astype(np.float32))
         mg.create_dataset("z", data=z_used.astype(np.float32))
+        if rlogm is not None:                       # same (radio) row order
+            mg.create_dataset("log_m500", data=rlogm)
         g.attrs["depth"] = "real ACIS-I target exposure"
         g.attrs["lx_scale"] = args.lx_scale
         g.attrs["nh_corrected"] = bool(args.nh_csv)
         g.attrs["stretch_scale"] = a
         g.attrs["aperture_arcmin_at_z005"] = APERTURE_ARCMIN
+        g.attrs["z_mock"] = z_mock
+        with h5py.File(args.counts_h5, "r") as f:
+            g.attrs["snapshot"] = int(f.attrs.get("snapshot", 99))
         g.attrs["preprocessing"] = ("arcsinh(counts per ks per block / scale), "
                                     "zero outside the common aperture")
         g.attrs["realism"] = ("ACIS-I, placed at the radio mocks' redshifts: "
@@ -436,6 +457,8 @@ def main():
                          "Chandra totals in --archive-csv")
     ap.add_argument("--archive-csv", default="lofar_xray_archive.csv")
     ap.add_argument("--realizations", type=int, default=3)
+    ap.add_argument("--stretch-scale", type=float, default=None,
+                    help="fixed arcsinh scale (default: median nonzero rate)")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--output", default="xray_real_archive.h5")
     args = ap.parse_args()

@@ -125,6 +125,10 @@ def main():
                          "observed Cuciti P150-M500 relation; 'sim' uses the "
                          "simulation's own predicted power and fixes only "
                          "the overall normalisation from the sample median")
+    ap.add_argument("--sim-offset", type=float, default=None,
+                    help="with --flux-mode sim, use this offset [dex] instead "
+                         "of fitting it to the sample median (pass the z=0 "
+                         "value when building an earlier snapshot)")
     ap.add_argument("--output", default="injected_nh4.h5")
     args = ap.parse_args()
 
@@ -146,8 +150,15 @@ def main():
         halo_ids = f["meta/halo_id"][:]
         r500_kpc = f["meta/r500c_kpc"][:]
         tsc = f["labels/pseudo_tsc"][:]
-    with h5py.File(args.catalog, "r") as f:
-        m500 = dict(zip(f["haloID"][:], f["mhalo_500c"][:]))
+        # Datasets record each halo's own M500 at their snapshot; older
+        # (snap-99-only) ones do not, so fall back to the z=0 catalogue.
+        own_m = f["meta/log_m500"][:] if "meta/log_m500" in f else None
+        snapshot = int(f.attrs.get("snapshot", 99))
+    if own_m is not None:
+        m500 = dict(zip(halo_ids, own_m))
+    else:
+        with h5py.File(args.catalog, "r") as f:
+            m500 = dict(zip(f["haloID"][:], f["mhalo_500c"][:]))
     N, P, H, _ = images.shape
     R = args.realizations
 
@@ -157,7 +168,12 @@ def main():
     # the slope against mass and the scatter about it stay the simulation's
     # own predictions and can be tested against the observed relation later.
     sim_offset = None
-    if args.flux_mode == "sim":
+    if args.flux_mode == "sim" and args.sim_offset is not None:
+        # An earlier snapshot must use the z=0 constant: re-fitting the median
+        # would erase whatever evolution the simulation predicts.
+        sim_offset = float(args.sim_offset)
+        print(f"sim flux mode: fixed offset {sim_offset:+.3f} dex")
+    elif args.flux_mode == "sim":
         raw, ref = [], []
         for i in range(N):
             px_kpc_i = 8.0 * r500_kpc[i] / H
@@ -218,6 +234,7 @@ def main():
         f.attrs["realism"] = "injected into real LoTSS DR3 fields"
         f.attrs["n_backgrounds"] = len(bgs)
         f.attrs["flux_mode"] = args.flux_mode
+        f.attrs["snapshot"] = snapshot
         if sim_offset is not None:
             f.attrs["sim_flux_offset_dex"] = sim_offset
         g = f.create_group("mock")

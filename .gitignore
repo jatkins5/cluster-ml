@@ -103,3 +103,7 @@ chandra/
 
 # paper figures are curated copies, tracked on purpose
 !paper/figures/*.png
+
+# snapshot-91 scratch and intermediate parts
+smoke_s91/
+xray_s91_parts/

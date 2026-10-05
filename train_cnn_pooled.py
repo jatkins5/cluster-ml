@@ -210,9 +210,25 @@ def evaluate(model, loader, device):
     return np.concatenate(all_preds), np.concatenate(all_labels)
 
 
+def group_split(groups, idx, split):
+    """Apply a row-level sklearn splitter to whole groups. `groups` holds the
+    z=0 halo id of each row; groups are taken in order of first appearance,
+    so with one row per group this reproduces the plain row split exactly."""
+    g = groups[idx]
+    _, first = np.unique(g, return_index=True)
+    ug = g[np.sort(first)]
+    rows = {}
+    for r, gg in zip(idx, g):
+        rows.setdefault(gg, []).append(r)
+    # keep the splitter's own order (it feeds the seeded data loaders)
+    take = lambda sel: np.array([r for k in ug[sel] for r in rows[k]], dtype=int)
+    for a, b in split(ug):
+        yield take(a), take(b)
+
+
 def run_cv(images, labels, n_folds, n_epochs, batch_size, seed, huber_delta=0.5,
            select="inner", inner_frac=0.15, halo_ids=None, save_preds=None,
-           xray=None):
+           xray=None, groups=None, snaps=None):
     """5-fold CV. `select` decides where the reported checkpoint comes from.
 
     "inner" holds out a further `inner_frac` of each fold's *training*
@@ -232,18 +248,22 @@ def run_cv(images, labels, n_folds, n_epochs, batch_size, seed, huber_delta=0.5,
     kf = KFold(n_splits=n_folds, shuffle=True, random_state=seed)
     fold_r2, fold_mae, fold_rmse = [], [], []
     oof_preds = np.zeros(len(labels))
+    # Each row holds all projections of one cluster at one snapshot, so a
+    # row split cannot leak projections; with several snapshots the rows of
+    # one cluster are grouped so its epochs never straddle a boundary.
+    if groups is None:
+        groups = np.arange(len(labels))
+    all_idx = np.arange(len(labels))
 
-    for fold, (outer_train_idx, val_idx) in enumerate(kf.split(images)):
+    for fold, (outer_train_idx, val_idx) in enumerate(
+            group_split(groups, all_idx, kf.split)):
         torch.manual_seed(seed + fold)
         np.random.seed(seed + fold)
 
         if select == "inner":
-            # Each row is one cluster, so a plain shuffle split cannot leak
-            # projections across the boundary.
             ss = ShuffleSplit(n_splits=1, test_size=inner_frac,
                               random_state=seed + fold)
-            rel_fit, rel_sel = next(ss.split(outer_train_idx))
-            train_idx, sel_idx = outer_train_idx[rel_fit], outer_train_idx[rel_sel]
+            train_idx, sel_idx = next(group_split(groups, outer_train_idx, ss.split))
         else:
             train_idx, sel_idx = outer_train_idx, None
 
@@ -321,6 +341,11 @@ def run_cv(images, labels, n_folds, n_epochs, batch_size, seed, huber_delta=0.5,
     print(f"  MAE : {np.mean(fold_mae):.3f} ± {np.std(fold_mae):.3f}")
     print(f"  RMSE: {np.mean(fold_rmse):.3f} ± {np.std(fold_rmse):.3f}")
     print(f"  OOF R²: {r2_score(labels, oof_preds):.3f}")
+    if snaps is not None and len(np.unique(snaps)) > 1:
+        for s in np.unique(snaps):
+            m = snaps == s
+            print(f"  OOF R² snapshot {s}: {r2_score(labels[m], oof_preds[m]):.3f}"
+                  f"  (n={m.sum()})")
 
     # Keep the per-cluster predictions: the mass-control analysis and the
     # true-vs-predicted figure both need them, and re-running to recover
@@ -328,7 +353,8 @@ def run_cv(images, labels, n_folds, n_epochs, batch_size, seed, huber_delta=0.5,
     if save_preds:
         np.savez(save_preds, oof_pred=oof_preds, label=labels,
                  halo_id=(np.arange(len(labels)) if halo_ids is None
-                          else halo_ids),
+                          else halo_ids), group_id=groups,
+                 snap=(np.full(len(labels), 99) if snaps is None else snaps),
                  fold_r2=np.array(fold_r2), select=select, seed=seed,
                  modality="radio+xray" if xray is not None else "single")
         print(f"  saved predictions -> {save_preds}")
@@ -345,6 +371,11 @@ def main(tau, n_folds, n_epochs, batch_size, seed, pseudo_tsc=False,
     with h5py.File(dataset_path, "r") as f:
         images = f["images"][:]              # (352, 3, H, W)
         halo_ids = f["meta/halo_id"][:]
+        # multi-snapshot files (merge_snapshots.py): fold on the z=0 cluster
+        groups = f["meta/group_id"][:] if "meta/group_id" in f else None
+        snaps = f["meta/snap"][:] if "meta/snap" in f else None
+        if groups is not None and merger_tsc:
+            raise SystemExit("--merger-tsc reads the snap-99 catalogue only")
 
         if merger_tsc:
             # Load ground-truth TSC from merger catalog
@@ -397,7 +428,7 @@ def main(tau, n_folds, n_epochs, batch_size, seed, pseudo_tsc=False,
     print(f"Huber delta: {huber_delta}")
     run_cv(images, labels, n_folds, n_epochs, batch_size, seed, huber_delta,
            select=select, inner_frac=inner_frac, halo_ids=halo_ids,
-           save_preds=save_preds, xray=xray)
+           save_preds=save_preds, xray=xray, groups=groups, snaps=snaps)
 
 
 if __name__ == "__main__":

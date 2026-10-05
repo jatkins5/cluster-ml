@@ -194,6 +194,12 @@ def main():
         mock = f["mock/images"][:]            # (N, R, 3, H, W)
         halo = f["mock/halo_id"][:]
         tsc = f["mock/pseudo_tsc"][:]
+        # Multi-snapshot files (merge_snapshots.py): halo_id is a unique row
+        # id, group_id the z=0 cluster that folds must keep together, and
+        # each row's own-snapshot M500 is stored with it.
+        group_id = f["mock/group_id"][:] if "mock/group_id" in f else halo
+        snap = f["mock/snap"][:] if "mock/snap" in f else np.full(len(halo), 99)
+        own_logm = f["mock/log_m500"][:] if "mock/log_m500" in f else None
         if "obs" not in f:
             # Sim-only datasets (e.g. the realistic-depth X-ray mocks, for
             # which no real cutouts exist yet): score the mocks, skip the
@@ -215,12 +221,22 @@ def main():
             obs_key = [target_key(n) for n in obs_name]
     N, R, P, H, _ = mock.shape
     print(f"mock {mock.shape}, obs {obs.shape}, device {device}")
+    if own_logm is not None:
+        logm = own_logm.astype(np.float64)
+    else:
+        with h5py.File(args.catalog, "r") as f:
+            cmap = dict(zip(f["haloID"][:], f["mhalo_500c"][:]))
+        logm = np.array([cmap[h] for h in halo], dtype=np.float64)
+    if len(np.unique(snap)) > 1:
+        print("  snapshots: " + ", ".join(f"{s}: {(snap == s).sum()} rows"
+                                         for s in np.unique(snap))
+              + f"; {len(np.unique(group_id))} distinct clusters")
 
     # Flatten realizations into samples, keeping cluster identity for grouping
     # so no cluster is split across folds.
     x = mock.reshape(N * R, P, H, H)
     y = np.repeat(tsc, R).astype(np.float32)
-    groups = np.repeat(halo, R)
+    groups = np.repeat(group_id, R)
 
     # The pooled model expects 3 views; a real cutout has one. Repeating it
     # three times leaves the mean-pool unchanged, so the obs path is a plain
@@ -273,9 +289,7 @@ def main():
     rng = np.random.default_rng(args.seed)
     if args.mass:
         n_scalar = 1
-        with h5py.File(args.catalog, "r") as f:
-            mmap = dict(zip(f["haloID"][:], f["mhalo_500c"][:]))
-        sim_logm = np.array([mmap[h] for h in halo], dtype=np.float64)
+        sim_logm = logm.copy()
 
         wl = pd.read_csv(args.wl_masses)
         wlm = dict(zip(wl["key"], wl["log_m500c"]))
@@ -356,12 +370,14 @@ def main():
     mae = mean_absolute_error(tsc, oof_cluster)
     print(f"\nmock OOF R2 (per realization): {r2_score(y, oof):+.3f}")
     print(f"mock OOF R2 (cluster-mean)  : {r2:+.3f}   MAE {mae:.3f} Gyr")
+    if len(np.unique(snap)) > 1:
+        for s in np.unique(snap):
+            m = snap == s
+            print(f"  snapshot {s}: R2 (cluster-mean) "
+                  f"{r2_score(tsc[m], oof_cluster[m]):+.3f}  n={m.sum()}")
 
     # The confound this experiment exists to measure: how much of the
     # prediction is mass, and does anything survive at fixed mass?
-    with h5py.File(args.catalog, "r") as f:
-        cmap = dict(zip(f["haloID"][:], f["mhalo_500c"][:]))
-    logm = np.array([cmap[h] for h in halo], dtype=np.float64)
     rho = lambda a, b: stats.spearmanr(a, b)[0]
     rk = lambda v: stats.rankdata(v)
     def resid(a, b):
@@ -393,7 +409,8 @@ def main():
         print(f"{lab:<16}{fn(tsc):>16.3f}{real:>14.3f}")
 
     np.savez(f"{args.out_prefix}_preds.npz", oof_cluster=oof_cluster,
-             tsc=tsc, halo_id=halo, obs_pred=obs_pred,
+             tsc=tsc, halo_id=halo, group_id=group_id, snap=snap,
+             obs_pred=obs_pred,
              obs_name=np.array(obs_name), obs_z=obs_z,
              select=args.select, seed=args.seed, dataset=args.dataset,
              mass=args.mass, no_image=args.no_image,

@@ -98,6 +98,33 @@ def load_group_centers(gc_dir):
     return np.concatenate(pos) * conv, box * conv
 
 
+def load_group_props(gc_dir):
+    """GroupPos, R500c [physical kpc] and log10 M500c [Msun] by FOF index, plus
+    box size and redshift, from any snapshot's FOF catalogue -- what an
+    earlier snapshot needs in place of the z=0 TNG-Cluster catalogue."""
+    files = sorted(glob.glob(os.path.join(gc_dir, "fof_subhalo_tab_*.hdf5")),
+                   key=lambda p: int(re.search(r"\.(\d+)\.hdf5$", p).group(1)))
+    if not files:
+        raise SystemExit(f"no FOF catalogue chunks under {gc_dir}")
+    pos, r5, m5, hdr = [], [], [], None
+    for fn in files:
+        with h5py.File(fn, "r") as f:
+            if hdr is None:
+                hdr = {k: float(f["Header"].attrs[k])
+                       for k in ("BoxSize", "HubbleParam", "Time", "Redshift")}
+            if f["Header"].attrs["Ngroups_ThisFile"] == 0:
+                continue
+            pos.append(f["Group/GroupPos"][:])
+            r5.append(f["Group/Group_R_Crit500"][:])
+            m5.append(f["Group/Group_M_Crit500"][:])
+    conv = hdr["Time"] / hdr["HubbleParam"]               # ckpc/h -> kpc
+    m = np.concatenate(m5).astype(np.float64) * 1e10 / hdr["HubbleParam"]
+    with np.errstate(divide="ignore"):
+        logm = np.log10(m)
+    return (np.concatenate(pos) * conv, np.concatenate(r5) * conv, logm,
+            hdr["BoxSize"] * conv, hdr["Redshift"])
+
+
 def load_catalog(catalog_path, radius_field="r500c"):
     """Return dict halo_id -> radius_kpc for the requested radius field."""
     with h5py.File(catalog_path, "r") as f:
@@ -108,7 +135,7 @@ def load_catalog(catalog_path, radius_field="r500c"):
 
 def main(img_size, extent_r500, output_path, extent_r200=None,
          center_mode="grouppos", groupcat=None, cells_dir=None,
-         spread_cells=False):
+         spread_cells=False, snap=SNAP, halo_map=None):
     radio_dir    = "Radio_Data"
     catalog_path = os.path.join(radio_dir, "TNG-Cluster_Catalog.hdf5")
     pkl_path     = "feats_labels_dict_tngcluster.pkl"
@@ -120,9 +147,30 @@ def main(img_size, extent_r500, output_path, extent_r200=None,
         print(f"Using R200c-scaled FOV: +-{extent_r200} R200c")
     else:
         r500c_map = load_catalog(catalog_path)
+    with h5py.File(catalog_path, "r") as f:
+        logm_map = dict(zip(f["haloID"][:].astype(int), f["mhalo_500c"][:]))
 
+    # Earlier snapshots. Every output row stays keyed by the z=0 halo id (the
+    # label pickle, the fold grouping and the merger catalogue all use it);
+    # the snapshot's own FOF id is kept alongside. Centre, R500 and M500 come
+    # from that snapshot's FOF catalogue, and the label is the past-only score:
+    # at snap 99 'all' == 'pre', but earlier 'all' also counts mergers that
+    # have not happened yet (42% of halos differ at snap 91).
+    snap_fof = {}                    # z=0 id -> this snapshot's FOF id
+    redshift = 0.0
     group_pos = box_kpc = None
-    if center_mode == "grouppos":
+    if snap != SNAP:
+        if center_mode != "grouppos" or cells_dir is None or halo_map is None:
+            raise SystemExit("--snap other than 99 needs --center grouppos, "
+                             "--cells-dir and --halo-map")
+        import pandas as pd
+        hm = pd.read_csv(halo_map)
+        to99 = dict(zip(hm[f"FOF_Halo_ID_At{snap}"].astype(int),
+                        hm["FOF_Halo_ID_At99"].astype(int)))
+        group_pos, r500_s, logm_s, box_kpc, redshift = load_group_props(groupcat)
+        print(f"  snapshot {snap}: z = {redshift:.4f}, {len(to99)} mapped halos")
+
+    elif center_mode == "grouppos":
         print(f"Loading halo centres from {groupcat} ...")
         group_pos, box_kpc = load_group_centers(groupcat)
         print(f"  {len(group_pos)} groups, box {box_kpc:.4g} kpc")
@@ -131,7 +179,7 @@ def main(img_size, extent_r500, output_path, extent_r200=None,
         pkl = pickle.load(f)
 
     # collect tau values from pkl keys (label_score_all_tau*)
-    sample_entry = pkl[list(pkl.keys())[0]][SNAP]
+    sample_entry = pkl[list(pkl.keys())[0]][snap]
     tau_keys_all = sorted(
         [k for k in sample_entry if k.startswith("label_score_all_tau")],
         key=lambda k: float(k.split("tau")[1]),
@@ -157,9 +205,19 @@ def main(img_size, extent_r500, output_path, extent_r200=None,
         for fn in os.listdir(cells_dir):
             m = re.match(r"cells_FOF(\d+)_sub\d+\.npz", fn)
             if m:
-                cell_map[int(m.group(1))] = os.path.join(cells_dir, fn)
+                fof = int(m.group(1))
+                if snap != SNAP:          # files carry this snapshot's FOF id
+                    if fof not in to99:
+                        print(f"  FOF{fof} at snap {snap} has no z=0 match; skipped")
+                        continue
+                    snap_fof[to99[fof]] = fof
+                    fof = to99[fof]
+                cell_map[fof] = os.path.join(cells_dir, fn)
         print(f"Using volume-spread cells from {cells_dir} "
               f"({len(cell_map)} files)")
+    if snap != SNAP:
+        # same row order as the snap-99 datasets, minus halos with no match
+        halo_ids_ordered = [h for h in halo_ids_ordered if h in cell_map]
 
     N = len(halo_ids_ordered)
     print(f"Found {N} clusters.")
@@ -172,6 +230,8 @@ def main(img_size, extent_r500, output_path, extent_r200=None,
     all_labels_all  = np.zeros((N, n_tau), dtype=np.float32)  # all-merger score
     all_labels_pre  = np.zeros((N, n_tau), dtype=np.float32)  # pre-merger score
     all_pseudo_tsc  = np.zeros(N, dtype=np.float32)           # interpolated TSC
+    all_halo_snap   = np.zeros(N, dtype=np.int64)             # FOF id at `snap`
+    all_log_m500    = np.zeros(N, dtype=np.float32)
 
     for i, halo_id in enumerate(halo_ids_ordered):
         if i % 50 == 0:
@@ -200,11 +260,12 @@ def main(img_size, extent_r500, output_path, extent_r200=None,
         # 1 r500 and 1.1% outside the image entirely. It also correlates with
         # the label (Spearman +0.19 vs pseudo-TSC), so centring on it removes
         # a real merger clock from every image. Default to GroupPos.
+        gid = snap_fof.get(halo_id, halo_id)   # FOF index in this snapshot
         if center_mode == "grouppos":
-            if halo_id >= len(group_pos):
-                raise SystemExit(f"halo {halo_id} is beyond the {len(group_pos)} "
+            if gid >= len(group_pos):
+                raise SystemExit(f"halo {gid} is beyond the {len(group_pos)} "
                                  f"groups in the catalogue; refusing to guess")
-            center = group_pos[halo_id]
+            center = group_pos[gid]
             # Unwrap the periodic box, otherwise a halo straddling an edge
             # gets shifted by a full box length.
             pos = pos - center
@@ -216,7 +277,15 @@ def main(img_size, extent_r500, output_path, extent_r200=None,
                       else pos.mean(axis=0))
 
         # image half-width in kpc
-        r500c_kpc  = r500c_map[halo_id]
+        if snap == SNAP:
+            r500c_kpc = r500c_map[halo_id]
+            all_log_m500[i] = logm_map[halo_id]
+        else:
+            if extent_r200 is not None:
+                raise SystemExit("--extent-r200 is snap-99 only")
+            r500c_kpc = float(r500_s[gid])
+            all_log_m500[i] = logm_s[gid]
+        all_halo_snap[i] = gid
         half_width = extent_r500 * r500c_kpc
 
         if r_kpc is None:
@@ -226,7 +295,7 @@ def main(img_size, extent_r500, output_path, extent_r200=None,
             images = np.arcsinh(lin).astype(np.float32)
 
         # load labels from pkl
-        entry = pkl[halo_id][SNAP]
+        entry = pkl[halo_id][snap]
 
         all_images[i]     = images
         all_halo_ids[i]   = halo_id
@@ -239,7 +308,7 @@ def main(img_size, extent_r500, output_path, extent_r200=None,
         # pseudo-TSC: tau at which label_score_all first crosses 0.5
         # interpolated linearly between bracketing tau values.
         # Capped at tau_max for quiescent clusters that never reach 0.5.
-        score_curve = all_labels_all[i]
+        score_curve = all_labels_all[i] if snap == SNAP else all_labels_pre[i]
         cross_idx = np.argmax(score_curve >= 0.5)
         if score_curve[cross_idx] < 0.5:
             # never crosses — genuinely quiescent, cap at tau_max
@@ -256,7 +325,8 @@ def main(img_size, extent_r500, output_path, extent_r200=None,
     with h5py.File(output_path, "w") as f:
         f.attrs["img_size"]        = img_size
         f.attrs["extent_r500"]     = extent_r500
-        f.attrs["snapshot"]        = SNAP
+        f.attrs["snapshot"]        = snap
+        f.attrs["redshift"]        = redshift
         f.attrs["center_mode"]     = center_mode
         f.attrs["cells_dir"]       = cells_dir or ""
         f.attrs["spread_cells"]    = bool(spread_cells)
@@ -279,6 +349,10 @@ def main(img_size, extent_r500, output_path, extent_r200=None,
         meta.create_dataset("halo_id",     data=all_halo_ids)
         meta.create_dataset("mass_ratio",  data=all_mass_ratio)
         meta.create_dataset("r500c_kpc",   data=all_r500c_kpc)
+        meta.create_dataset("log_m500",    data=all_log_m500)
+        meta.create_dataset("halo_id_snap", data=all_halo_snap)
+        meta["halo_id"].attrs["note"] = "z=0 FOF id (label and fold key)"
+        meta["halo_id_snap"].attrs["note"] = f"FOF id at snapshot {snap}"
 
         # label sweeps
         labels = f.create_group("labels")
@@ -289,7 +363,8 @@ def main(img_size, extent_r500, output_path, extent_r200=None,
                               compression="gzip", compression_opts=4)
         labels.create_dataset("pseudo_tsc",       data=all_pseudo_tsc)
         labels.attrs["pseudo_tsc_description"] = (
-            "Interpolated tau [Gyr] at which label_score_all first crosses 0.5. "
+            f"Interpolated tau [Gyr] at which label_score_"
+            f"{'all' if snap == SNAP else 'pre'} first crosses 0.5. "
             "Proxy for time since last major merger. "
             f"Capped at {float(tau_vals[-1]):.1f} Gyr for {int((all_pseudo_tsc == tau_vals[-1]).sum())} "
             "quiescent clusters whose score never reaches 0.5."
@@ -333,8 +408,15 @@ if __name__ == "__main__":
                              "compressed one, so off by default")
     parser.add_argument("--output",      type=str,   default="dataset.h5",
                         help="Output HDF5 file path (default: dataset.h5)")
+    parser.add_argument("--snap", type=int, default=SNAP,
+                        help="snapshot; other than 99 needs --groupcat for that "
+                             "snapshot, --cells-dir built from its cutouts and "
+                             "--halo-map")
+    parser.add_argument("--halo-map", type=str, default=None,
+                        help="CSV mapping FOF_Halo_ID_At<snap> to "
+                             "FOF_Halo_ID_At99 (e.g. fof_halo_to_sub91.csv)")
     args = parser.parse_args()
 
     main(args.img_size, args.extent_r500, args.output, args.extent_r200,
          args.center, args.groupcat, args.cells_dir,
-         args.spread_cells)
+         args.spread_cells, args.snap, args.halo_map)
