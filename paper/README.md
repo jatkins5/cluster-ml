@@ -39,12 +39,12 @@ older plots from the repo root, kept under their original names.
 
 | figure | made by | inputs |
 |---|---|---|
-| `fig_radio_gallery.pdf` | `make_figures.py radio_gallery` | `dataset_nh4_512.h5`, `injected_nh4_simflux.h5` |
-| `fig_radio_mf.pdf` | `make_figures.py radio_mf` | `injected_nh4_simflux.h5` (25 LoTSS targets) |
-| `fig_mf_tsc.pdf` | `make_figures.py mf_tsc` | `dataset_nh4_128.h5` |
-| `fig_lx_mass.pdf` | `make_figures.py lx_mass` | TNG catalogue, LoVoCCS target list, `lovoccs_wl_masses.csv`, `xray_real_placed_lx.h5` |
-| `fig_xray_gallery.pdf` | `make_figures.py xray_gallery` | `xray_real_placed_lx.h5` |
-| `fig_relic.pdf` | `detect_relics_radio.py --dataset dataset_nh4_512.h5`, then `make_figures.py relic` | `relic_catalog_radio_nh4.h5` |
+| `fig_radio_gallery.pdf` | `make_figures.py radio_gallery` | `dataset_nh4_144_512.h5`, `injected_nh4_144_simflux.h5` |
+| `fig_radio_mf.pdf` | `make_figures.py radio_mf` | `injected_nh4_144_simflux.h5` (25 LoTSS targets) |
+| `fig_mf_tsc.pdf` | `make_figures.py mf_tsc` | `dataset_nh4_144_128.h5` |
+| `fig_lx_mass.pdf` | `make_figures.py lx_mass` | TNG catalogue, LoVoCCS target list, `lovoccs_wl_masses.csv`, `xray_placed_144.h5` |
+| `fig_xray_gallery.pdf` | `make_figures.py xray_gallery` | `xray_placed_144.h5` |
+| `fig_relic.pdf` | `detect_relics_radio.py --dataset dataset_nh4_144_512.h5`, then `make_figures.py relic` | `relic_catalog_radio_nh4_144.h5` |
 | `fig_aug.pdf` | `submit_cnn_aug_oof_inner.sh`, then `make_figures.py aug` | `cnn_aug_oof_128_inner/` |
 | `lotss_A119.png`, `lotss_A2443.png` | `download_lotss_image.py` | raw cutouts, placeholder for a proper gallery |
 | `camels_mass_tsc.png` | CAMELS label scripts | negative result |

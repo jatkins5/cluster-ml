@@ -3,16 +3,16 @@
 \begin{itemize}
   \item Merger timing (time since last collision) from images; TNG-Cluster
         (352 clusters), radio (DSA shock emission) and X-ray (Chandra mocks).
-  \item Clean-image skill: pooled CNN $R^2 = 0.487 \pm 0.033$ (radio);
-        X-ray $0.511$; joint $0.537$. Image adds $+0.083$ over scalar
+  \item Clean-image skill: pooled CNN $R^2 = 0.485 \pm 0.028$ (radio,
+        144\,MHz); X-ray $0.511$; joint $0.537$. Image adds $+0.082$ over scalar
         baselines and holds skill within mass bins.
   \item Physics: the model's radio emission is carried by cold, overdense,
         ram-pressure-stripped gas; a density cut fixes realism and accuracy.
   \item Forward modelling to LOFAR (field injection) and Chandra (real
         depths, backgrounds, redshift placement); realistic joint
-        $R^2 = 0.52$ when trained on two epochs ($z = 0$ and 0.1).
+        $R^2 = 0.49$ when trained on two epochs ($z = 0$ and 0.1).
   \item Applied to 25 LoVoCCS clusters; radio and X-ray predictions agree
-        ($\rho = 0.72$, $n = 14$); no ground truth, so framed as a
+        ($\rho = 0.69$, $n = 14$); no ground truth, so framed as a
         demonstration.
 \end{itemize}
 \end{abstract}

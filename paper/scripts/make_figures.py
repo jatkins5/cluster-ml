@@ -54,7 +54,7 @@ def save(fig, name):
 
 # ---------------------------------------------------------------- radio gallery
 def radio_gallery():
-    with h5py.File("injected_nh4_simflux.h5") as f:
+    with h5py.File("injected_nh4_144_simflux.h5") as f:
         mock = f["mock/images"][:, 0, 0]           # realization 0, projection xy
         mh = f["mock/halo_id"][:]
         tsc = f["mock/pseudo_tsc"][:]
@@ -62,7 +62,7 @@ def radio_gallery():
         obs = f["obs/images"][:]
         on = [s.decode() if isinstance(s, bytes) else str(s) for s in f["obs/name"][:]]
         oz = f["obs/z"][:]
-    with h5py.File("dataset_nh4_512.h5") as f:
+    with h5py.File("dataset_nh4_144_512.h5") as f:
         simh = f["meta/halo_id"][:]
         r500 = f["meta/r500c_kpc"][:]
         order = {h: i for i, h in enumerate(simh)}
@@ -105,7 +105,7 @@ def radio_gallery():
 def radio_mf():
     from minkowski_functionals import binary_mfs
     ks = np.geomspace(1.0, 20.0, 10)
-    with h5py.File("injected_nh4_simflux.h5") as f:
+    with h5py.File("injected_nh4_144_simflux.h5") as f:
         mock = f["mock/images"][:]
         obs = f["obs/images"][:]
     mock = mock.reshape(-1, *mock.shape[-2:])
@@ -144,7 +144,7 @@ def radio_mf():
 def mf_tsc():
     from minkowski_functionals import FRACS, mf_curves, oof_r2
     from xgboost import XGBRegressor
-    with h5py.File("dataset_nh4_128.h5") as f:
+    with h5py.File("dataset_nh4_144_128.h5") as f:
         images = f["images"][:]
         tsc = f["labels/pseudo_tsc"][:]
     N, P = images.shape[:2]
@@ -199,7 +199,7 @@ def lx_mass():
 
     # mass-matched X-ray brightness, real vs corrected mocks
     from build_xray_realistic import GRID, aperture_blocks
-    with h5py.File("xray_real_placed_lx.h5") as f:
+    with h5py.File("xray_placed_144.h5") as f:
         a = float(f.attrs["stretch_scale"])
         mimg, mz = f["mock/images"][:], f["mock/z"][:]
         mh = f["mock/halo_id"][:]
@@ -260,7 +260,7 @@ def lx_mass():
 
 # ---------------------------------------------------------------- X-ray gallery
 def xray_gallery():
-    with h5py.File("xray_real_placed_lx.h5") as f:
+    with h5py.File("xray_placed_144.h5") as f:
         mock, mz, tsc = f["mock/images"][:], f["mock/z"][:], f["mock/pseudo_tsc"][:]
         obs, oz, ot = f["obs/images"][:], f["obs/z"][:], f["obs/exposure_ks"][:]
         on = [s.decode() if isinstance(s, bytes) else str(s) for s in f["obs/name"][:]]
@@ -295,7 +295,7 @@ def relic():
     """Outermost radio peak distance vs merger-catalogue TSC, per projection,
     against the constant-speed shock expectation (1500 km/s, as in the
     Lee et al. comparison of plot_relic_validation_v3.py)."""
-    with h5py.File("relic_catalog_radio_nh4.h5") as f:
+    with h5py.File("relic_catalog_radio_nh4_144.h5") as f:
         d = f["d_max"][:] / 1000.0                # (N, 3) Mpc, NaN if none
         mt = f["merger_tsc"][:]
         mr = f["mass_ratio"][:]

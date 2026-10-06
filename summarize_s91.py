@@ -18,10 +18,10 @@ def r2_99(p, mock):
 
 
 rows = [("clean pooled CNN", "pooled_nh4_144_inner_s{}.npz", "pooled_s9991_inner_s{}.npz", range(42, 47), False),
-        ("radio transfer, image", "nu144_sfimg_s{}_preds.npz", "s9991_sfimg_s{}_preds.npz", range(42, 45), True),
-        ("radio transfer, image+mass", "nu144_sfimgmassn_s{}_preds.npz", "s9991_sfimgmassn_s{}_preds.npz", range(42, 45), True),
-        ("X-ray (real depth)", "x144_s{}_preds.npz", "s9991_x_s{}_preds.npz", range(42, 45), True),
-        ("joint radio+X-ray", "joint144_s{}_preds.npz", "s9991_joint_s{}_preds.npz", range(42, 45), True)]
+        ("radio transfer, image", "nu144_sfimg_s{}_preds.npz", "s9991_sfimg_s{}_preds.npz", range(42, 47), True),
+        ("radio transfer, image+mass", "nu144_sfimgmassn_s{}_preds.npz", "s9991_sfimgmassn_s{}_preds.npz", range(42, 47), True),
+        ("X-ray (real depth)", "x144_s{}_preds.npz", "s9991_x_s{}_preds.npz", range(42, 47), True),
+        ("joint radio+X-ray", "joint144_s{}_preds.npz", "s9991_joint_s{}_preds.npz", range(42, 47), True)]
 print(f"{'model':<28}{'99 only':>9}{'99+91':>9}{'paired diff':>18}{'real-pred shift':>32}")
 for name, a, b, seeds, mock in rows:
     ra = np.array([r2_99(f"cnn_preds/{a.format(s)}", mock) for s in seeds])

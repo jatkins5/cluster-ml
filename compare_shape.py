@@ -10,6 +10,7 @@ emission is arranged? The full-flux model's own output is 72% explainable
 by five scalars, 62% by total flux alone, so the expectation is a real drop
 -- the number that matters is whether what survives is still a result.
 """
+import argparse
 import glob
 import re
 
@@ -21,6 +22,13 @@ from sklearn.metrics import r2_score
 from sklearn.model_selection import KFold, cross_val_predict
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
+
+_ap = argparse.ArgumentParser()
+_ap.add_argument("--dataset", default="dataset_nh4_128.h5",
+                 help="un-normalised dataset (scalars and labels)")
+_ap.add_argument("--full", default="cnn_preds/pooled_nh4_inner_s*.npz")
+_ap.add_argument("--shape", default="cnn_preds/pooled_shape_inner_s*.npz")
+_args = _ap.parse_args()
 
 KF = KFold(5, shuffle=True, random_state=0)
 
@@ -51,7 +59,7 @@ def load(pattern):
 
 # Scalars always come from the un-normalised dataset: "total flux" has to
 # keep its physical meaning for the comparison to say anything.
-with h5py.File("dataset_nh4_128.h5") as f:
+with h5py.File(_args.dataset) as f:
     hid = f["meta/halo_id"][:]
     r500 = f["meta/r500c_kpc"][:]
     tsc = f["labels/pseudo_tsc"][:].astype(np.float64)
@@ -64,8 +72,8 @@ SCALARS = np.column_stack([logm, np.log10(r500), lin_tot,
                            imgs.mean(axis=(1, 2, 3)),
                            (imgs > 0).mean(axis=(1, 2, 3))])
 
-full = load("cnn_preds/pooled_nh4_inner_s*.npz")
-shape = load("cnn_preds/pooled_shape_inner_s*.npz")
+full = load(_args.full)
+shape = load(_args.shape)
 seeds = sorted(set(full) & set(shape))
 print(f"paired seeds: {seeds}\n")
 

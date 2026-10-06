@@ -8,7 +8,7 @@ wl = pd.read_csv("lovoccs_wl_masses.csv").set_index("key")
 key = lambda s: "".join(str(s).split()).replace("_", "").upper()
 
 
-def ens(pat, seeds=(42, 43, 44)):
+def ens(pat, seeds=(42, 43, 44, 45, 46)):
     ds = [np.load(f"cnn_preds/{pat.format(s)}") for s in seeds]
     names = [key(n) for n in ds[0]["obs_name"]]
     return dict(zip(names, np.mean([d["obs_pred"] for d in ds], 0))), \

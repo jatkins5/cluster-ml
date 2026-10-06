@@ -377,16 +377,23 @@ the target list. Ask the PI.
   still show pre-fix numbers. Nothing predating `--correlated-noise` should
   be published.
 - [x] **C6. DONE 2026-10-05 — 144 MHz and snapshot 91.**
-  - **144 MHz:** per-cell ν^(−s/2) in units of 1.4 GHz (`--w-scale 12.5`); clean CNN 0.487 → 0.485, so negligible. The clean-sim analyses (scalars, terciles, MF) are still at 1.4 GHz.
+  - **144 MHz:** per-cell ν^(−s/2) in units of 1.4 GHz (`--w-scale 12.5`); clean CNN 0.487 → 0.485, so negligible.
+    - Every clean-sim analysis, figure and the relic test was rerun at 144 MHz on 2026-10-06 (`submit_144_*.sh`). The largest shift is 0.02, in the high-mass tercile.
+    - Morphology-only: 0.414.
   - **Chuiyang's regenerated cells:** identical to ours. The density cut lives only in our code.
   - **Snapshot 91 (z = 0.0994, 351 clusters):** trained together with 99, folds grouped by z=0 cluster (`submit_s91_*.sh`, `summarize_s91.py`).
-  - **Gains, on the snap-99 clusters:**
-    - X-ray: 0.378 → 0.449 (p = 0.02).
-    - Joint: 0.480 → 0.516.
-    - Radio transfer: 0.390 → 0.418.
+  - **Gains on the snap-99 clusters, 5 paired seeds:**
+    - X-ray: 0.361 → 0.435 (p = 0.03).
+    - Radio + mass: 0.434 → 0.464 (p = 0.04).
+    - Joint: 0.464 → 0.492 (p = 0.10).
+    - Radio transfer: 0.382 → 0.409.
     - Clean CNN: no change.
-  - **Real clusters:** radio-vs-X-ray agreement is 0.72 (n = 14), up from 0.64. Open: more seeds.
-  - **Ask Chuiyang:** the snap-91 TSC catalogue includes collisions *at* the snapshot (38 at 0 Gyr), and 99 excludes them.
+  - **Real clusters:** radio-vs-X-ray agreement is 0.69 (n = 14), vs 0.61 for 99 only.
+    - A401 and A399 are still the youngest, but A401 is the heaviest target and a mass-only model also ranks it first.
+  - **Asked Chuiyang:** both TSC files contain zeros (99: 29, 91: 38), although only the 91 description says "at or before".
+    - Is it one definition?
+    - Should the value be 0 or half a snapshot spacing?
+    - What do the NaNs (6, 15) mean?
 - [ ] **C5. Flag or re-run the stale downstream work.** CAMELS, diffusion,
   X-ray and dual-encoder results all predate GroupPos re-centring and the
   density cut. Decide per-result: re-run, or state the caveat.
