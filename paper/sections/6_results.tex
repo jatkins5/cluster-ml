@@ -45,17 +45,45 @@ only, CNN, ensemble (\texttt{analyze\_mass\_control.py},
 \subsection{Under observational degradation}
 \label{sec:flux}
 \begin{itemize}
-  \item Anchored vs simulation-power flux: 0.338 $\to$ 0.412; image beyond
-        mass $+0.079 \to +0.151$; $\rho({\rm pred}, M)$ $-0.89 \to -0.61$.
+  \item Anchored vs simulation-power flux (1.4\,GHz, snapshot 99):
+        0.338 $\to$ 0.412; image beyond mass $+0.079 \to +0.151$;
+        $\rho({\rm pred}, M)$ $-0.89 \to -0.61$.
   \item The simulation's $P_{150}$--\mfive, from the cells with the density
         cut: slope $2.67\pm0.16$, scatter 0.78\,dex. Compare the relic
         relation (de Gasperin et al.\ 2014, $2.83\pm0.39$), not the halo
         one (Cuciti et al.\ 2023, 3.55). Scatter tracks merger state with
         the observed sign. (The earlier 3.30 / 1.65\,dex came from an image
         approximation.)
-  \item Realistic X-ray and joint (after all background fixes): X-ray 0.339,
-        joint 0.438. \todo{5 seeds; snapshot 91.}
+  \item Realistic pipeline at 144\,MHz, with and without snapshot 91
+        (Table~\ref{tab:realistic}). Adding the earlier epoch helps where
+        the training images are noisiest -- X-ray at real depths
+        significantly -- and not at all for the clean radio CNN.
+        Snapshot-91 clusters are themselves harder (0.35--0.43).
+        $\rho({\rm pred}, M)$ strengthens slightly with snapshot 91
+        ($-0.62 \to -0.64$ image only; $-0.70 \to -0.75$ with mass).
+        \todo{More seeds for the joint and transfer rows (3 so far).}
 \end{itemize}
+\begin{table}
+  \centering
+  \caption{Out-of-fold $R^2$ on the 352 snapshot-99 clusters, mean over
+  paired seeds, training on snapshot 99 alone or on snapshots 99 and 91.
+  Realistic rows: radio injected into real LoTSS fields with the
+  simulation's own flux; X-ray at the real ACIS-I exposure of a target at
+  the same redshift, with sky and particle backgrounds and the $L_X$ and
+  absorption corrections.}
+  \label{tab:realistic}
+  \begin{tabular}{lccc}
+    \hline
+    Model & 99 & 99 + 91 & paired $\Delta$ \\
+    \hline
+    Clean radio CNN (5 seeds)       & 0.485 & 0.484 & $-0.001 \pm 0.017$ \\
+    Radio, realistic (3)            & 0.390 & 0.418 & $+0.027 \pm 0.050$ \\
+    Radio + noisy mass (3)          & 0.452 & 0.475 & $+0.023 \pm 0.026$ \\
+    X-ray, real depth (3)           & 0.378 & 0.449 & $+0.071 \pm 0.016$ ($p=0.02$) \\
+    Radio + X-ray, realistic (3)    & 0.480 & 0.516 & $+0.036 \pm 0.039$ \\
+    \hline
+  \end{tabular}
+\end{table}
 \figplaceholder{Simulated $P_{150}$--\mfive\ relation coloured by TSC,
 with the Cuciti et al.\ (2023) fit (\texttt{summarize\_b23.py} data).}
 {The simulation's own mass--power relation.}
@@ -64,10 +92,15 @@ with the Cuciti et al.\ (2023) fit (\texttt{summarize\_b23.py} data).}
 \begin{itemize}
   \item Predictions for 25 (radio), 15 (X-ray), 14 (joint) clusters; all
         within the label range.
-  \item Radio and X-ray agree: $\rho = 0.62$ ($p = 0.019$), 0.67 at fixed
-        $z$; at fixed weak-lensing mass 0.38 ($n = 10$, n.s.).
+  \item Radio and X-ray agree (models trained on snapshots 99 + 91, 14
+        clusters): $\rho = 0.72$ ($p = 0.003$), 0.72 at fixed $z$; at fixed
+        weak-lensing mass 0.50 ($n = 10$, $p = 0.14$). Snapshot 99 alone
+        gave 0.64 / 0.69 / 0.52.
+  \item Adding snapshot 91 keeps the real clusters' rank order
+        ($\rho = 0.86$--0.96 against the snapshot-99 models) but shifts them
+        0.1--0.3\,Gyr younger on average.
   \item A399/A401 youngest -- but mass-driven; do not present as
-        validation.
+        validation. \todo{Recheck with the 99 + 91 models.}
   \item Weak-lensing peak check: only 9 overlapping clusters,
         inconclusive.
 \end{itemize}
