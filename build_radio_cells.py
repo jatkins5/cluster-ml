@@ -80,7 +80,7 @@ def make_psi(table):
 
 
 def generate(cutout, interp_psi, min_T_keV=0.0, max_nH=np.inf,
-             exclude_sf=False, nu_ghz=1.4):
+             exclude_sf=False, nu_ghz=1.4, phase=False):
     with h5py.File(cutout, "r") as f:
         p0 = f["PartType0"]
         mach = p0["Machnumber"][:]
@@ -140,6 +140,8 @@ def generate(cutout, interp_psi, min_T_keV=0.0, max_nH=np.inf,
     # only the length unit needs converting to physical kpc.
     vol = mass.astype(np.float64) / dens.astype(np.float64)
     r_kpc = (3.0 * vol / (4.0 * np.pi)) ** (1.0 / 3.0) * A / H0
+    if phase:                 # per-cell gas state, for diagnostics
+        return pos, w, r_kpc, T_keV, nH[keep] if not keep.all() else nH, M
     return pos, w, r_kpc
 
 

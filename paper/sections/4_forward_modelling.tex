@@ -15,6 +15,14 @@
         (Section~\ref{sec:flux}).
   \item Realism: image statistics vs LoTSS as separations in mock
         standard deviations (KS $p$ values inflate with sample size).
+  \item \todo{Field size. The mocks are 1\,Mpc boxes ($\pm500$\,kpc), but
+        with the density cut the shock emission sits at $\sim$1--2\,\rfive:
+        a 1\,Mpc box holds a median 4 per cent of a cluster's 144\,MHz
+        emission (16--84 per cent: 1--15), 2\,Mpc 27, 3\,Mpc 65, 4\,Mpc 91
+        (\texttt{check\_box\_fraction.py}). Likely why the realistic radio
+        model leans on mass, and why some mocks are nearly empty. Decide:
+        larger LoTSS cutouts (4\,Mpc is $\sim$96$'$ at $z = 0.035$,
+        $\sim$36$'$ at 0.1), or state the limitation.}
 \end{itemize}
 \begin{figure*}
   \centering
@@ -60,6 +68,13 @@
   \item Real-data processing and the particle-background normalisation
         lesson (effective-area-scaled exposure is wrong for unfocused
         background).
+  \item Depth: skill saturates by $\sim$150\,ks; most real targets are
+        shallower (median 31\,ks), at the steep part of the curve
+        (Fig.~\ref{fig:xray_depth}).
+  \item \todo{Chip-gap filling leaves seams in some real images (bright
+        crosses in A399 and A119, a dark line in A401;
+        Fig.~\ref{fig:obs_examples}) that the mocks do not have. Check how
+        much the X-ray predictions for those clusters depend on them.}
 \end{itemize}
 \begin{figure}
   \centering
@@ -83,6 +98,16 @@
   (slope $0.08 \pm 0.32$).}
   \label{fig:lx}
 \end{figure*}
-\figplaceholder{X-ray accuracy vs exposure (1\,ks to 2\,Ms) with the real
-archive depth distribution overlaid (\texttt{summarize\_xray\_depth.py}).}
-{X-ray skill survives realistic Chandra depths.}
+\begin{figure}
+  \centering
+  \includegraphics[width=\columnwidth]{fig_xray_depth.pdf}
+  \caption{X-ray-only accuracy against exposure (mean and s.d.\ over 3
+  seeds, snapshot 99): every mock placed at a target redshift with sky and
+  particle backgrounds, the $L_X$ and absorption corrections, and the same
+  exposure throughout. Skill rises from $R^2 = 0.24$ at 5\,ks to 0.38 at
+  20\,ks and saturates near 0.48 by $\sim$150\,ks. Ticks: total ACIS-I
+  exposures of the 15 real targets (median 31\,ks); the band is the model
+  trained with each mock at its matching target's real exposure
+  ($0.36 \pm 0.03$).}
+  \label{fig:xray_depth}
+\end{figure}

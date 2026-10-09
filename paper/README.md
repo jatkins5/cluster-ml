@@ -46,19 +46,14 @@ older plots from the repo root, kept under their original names.
 | `fig_xray_gallery.pdf` | `make_figures.py xray_gallery` | `xray_placed_144.h5` |
 | `fig_relic.pdf` | `detect_relics_radio.py --dataset dataset_nh4_144_512.h5`, then `make_figures.py relic` | `relic_catalog_radio_nh4_144.h5` |
 | `fig_aug.pdf` | `submit_cnn_aug_oof_inner.sh`, then `make_figures.py aug` | `cnn_aug_oof_128_inner/` |
-| `lotss_A119.png`, `lotss_A2443.png` | `download_lotss_image.py` | raw cutouts, placeholder for a proper gallery |
+| `fig_obs_gallery.pdf` | `make_figures.py obs_gallery` | `injected_nh4_144_simflux.h5`, `xray_placed_144.h5` (obs groups) |
+| `fig_phase.pdf` | `extract_phase.py`, then `make_figures.py phase` | snapshot-99 cutouts -> `phase_cells_144.npz` |
+| `fig_labels.pdf`, `fig_baselines.pdf`, `fig_tsc_pred.pdf` | `make_figures.py labels baselines tsc_pred` | datasets, label files, saved CNN predictions |
+| `fig_pm_relation.pdf` | `make_figures.py pm_relation` | `dataset_nh4_144_512.h5`, `injected_nh4_144_simflux.h5` |
+| `fig_xray_depth.pdf` | `submit_fig_data.sh`, `submit_xray_depth.sh`, then `make_figures.py xray_depth` | `cnn_preds/xdepth_*` |
+| `fig_real_preds.pdf` | `make_figures.py real_preds` | `cnn_preds/s9991_{sfimg,x}_*` |
 | `camels_mass_tsc.png` | CAMELS label scripts | negative result |
 
-### Still to make (placeholders in `main.tex`)
-
-- emitting-gas phase diagram, before/after the density cut
-- label distribution and pseudo-TSC vs merger-catalogue TSC
-- scalar baselines vs CNN bar chart
-- true vs predicted merger time with residuals
-- X-ray accuracy vs exposure
-- simulated P150–M500 relation coloured by merger time
-- radio vs X-ray predictions for the real clusters
-- a uniform radio + X-ray gallery of real targets on the model grid
 
 Numbers quoted in the bullets come from `PAPER_CHECKLIST.md` and the commit
 log; several will move when the snapshot-91 data is added.

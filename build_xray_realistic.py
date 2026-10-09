@@ -370,6 +370,8 @@ def build_placed(args, rng, src, hid, tsc, bkg):
                 t = float(rng.choice(cand))
             else:
                 t = float(rng.choice(pool))
+            if args.fixed_ks:          # depth study: same exposure for all
+                t = args.fixed_ks
             t = min(t, T_MOCK_KS)
             p_t = t / T_MOCK_KS
             p_src = (p_t * distance_factor(z, z_mock) * args.lx_scale
@@ -457,6 +459,9 @@ def main():
                          "Chandra totals in --archive-csv")
     ap.add_argument("--archive-csv", default="lofar_xray_archive.csv")
     ap.add_argument("--realizations", type=int, default=3)
+    ap.add_argument("--fixed-ks", type=float, default=None,
+                    help="with --z-from: give every realization this exposure "
+                         "instead of its target's real one (depth study)")
     ap.add_argument("--stretch-scale", type=float, default=None,
                     help="fixed arcsinh scale (default: median nonzero rate)")
     ap.add_argument("--seed", type=int, default=0)

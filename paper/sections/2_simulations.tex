@@ -38,9 +38,22 @@
   \item Images: arcsinh-stretched projected weight, 128\,px over
         $\pm4$\,\rfive.
 \end{itemize}
-\figplaceholder{Emitting-gas phase diagram: temperature vs density of
-shock cells, coloured by radio weight, before/after the density cut
-(\texttt{check\_emitting\_gas.py} data).}{Where the radio weight sits.}
+\begin{figure*}
+  \centering
+  \includegraphics[width=\textwidth]{fig_phase.pdf}
+  \caption{Where the radio weight sits. Density--temperature distribution
+  of all shock cells (Mach $>1.3$) in the 352 snapshot-99 clusters, each
+  cluster normalised to unit total, by number (left) and by 144\,MHz radio
+  weight without any cut (right). Most shocks are in the diffuse ICM
+  ($n_{\rm H} \sim 10^{-5}$--$10^{-4}$\,cm$^{-3}$, $kT \sim 1$\,keV), but
+  a median 99 per cent of the weight (16--84 per cent: 96--100) is in cells
+  denser than $10^{-4}$\,cm$^{-3}$, much of it cold
+  ($kT \sim 10^{-3}$\,keV), strongly shocked stripped gas. The dashed line
+  is the cut we apply: it lowers the brightest cell's share of a cluster's
+  emission from 25 to 5 per cent and the weight-averaged Mach number from
+  62 to 4.8.}
+  \label{fig:phase}
+\end{figure*}
 
 \subsection{X-ray mocks}
 \begin{itemize}
@@ -76,5 +89,14 @@ shock cells, coloured by radio weight, before/after the density cut
         ($R^2$ 0.435 $\to$ 0.074): radio morphology reflects recent
         disturbance of any size.
 \end{itemize}
-\figplaceholder{Label distribution: pseudo-TSC histogram and pseudo-TSC
-vs merger-catalogue TSC scatter.}{The regression target.}
+\begin{figure*}
+  \centering
+  \includegraphics[width=0.75\textwidth]{fig_labels.pdf}
+  \caption{The regression target. Left: pseudo-TSC at $z = 0$ (snapshot 99)
+  and $z = 0.1$ (snapshot 91); medians 0.92 and 0.91\,Gyr, with 10 and
+  13 per cent of clusters at the 4\,Gyr cap (merger score never crosses
+  0.5 within the window). Right: pseudo-TSC against the merger-catalogue
+  time since collision at $z = 0$ (346 clusters with a recorded collision;
+  Spearman 0.961); the catalogue clock runs past the cap.}
+  \label{fig:labels}
+\end{figure*}

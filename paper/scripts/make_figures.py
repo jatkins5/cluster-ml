@@ -378,9 +378,368 @@ def aug():
               f"delta {dlt.mean():+.3f} +- {dlt.std(ddof=1) if n > 1 else np.nan:.3f}")
 
 
+# ---------------------------------------------------------------- phase diagram
+def phase():
+    """Where the shock cells sit in (n_H, T), by number and by radio weight
+    (extract_phase.py: 352 clusters, 144 MHz, no cut, each cluster weighted
+    equally)."""
+    d = np.load("phase_cells_144.npz")
+    ext = [d["nh_edges"][0], d["nh_edges"][-1], d["t_edges"][0], d["t_edges"][-1]]
+    fig, ax = plt.subplots(1, 2, figsize=(TEXT, TEXT * 0.36), sharey=True)
+    for a, H, title in [(ax[0], d["H_n"], "shock cells (by number)"),
+                        (ax[1], d["H_w"], "radio weight, 144 MHz")]:
+        with np.errstate(divide="ignore"):
+            im = a.imshow(np.log10(H.T), origin="lower", extent=ext, aspect="auto",
+                          cmap="viridis", vmin=np.log10(H[H > 0]).max() - 4)
+        a.axvline(np.log10(float(d["nh_cut"])), color="w", ls="--", lw=1)
+        a.set_title(title)
+        a.set_xlabel(r"log $n_{\rm H}$ [cm$^{-3}$]")
+        fig.colorbar(im, ax=a, pad=0.01, label="log fraction per bin")
+    ax[0].set_ylabel(r"log $kT$ [keV]")
+    fa = np.median(d["frac_above"])
+    ax[1].text(0.03, 0.97, f"{fa:.0%} of the weight\nat $n_{{\\rm H}} > 10^{{-4}}$",
+               transform=ax[1].transAxes, ha="left", va="top", color="k",
+               fontsize=7)
+    fig.tight_layout()
+    save(fig, "phase")
+    print(f"  weight above the cut: median {fa:.2f} (16-84% "
+          f"{np.percentile(d['frac_above'], 16):.2f}-{np.percentile(d['frac_above'], 84):.2f});"
+          f" top-cell share {np.median(d['top_all']):.3f} -> {np.nanmedian(d['top_cut']):.3f};"
+          f" weighted Mach {np.median(d['mach_all']):.1f} -> {np.nanmedian(d['mach_cut']):.1f}")
+    H = d["H_w"]
+    tc = 0.5 * (d["t_edges"][1:] + d["t_edges"][:-1])
+    nc = 0.5 * (d["nh_edges"][1:] + d["nh_edges"][:-1])
+    print(f"  weight-averaged log n_H {np.sum(H.sum(1) * nc) / H.sum():.2f}, "
+          f"log kT {np.sum(H.sum(0) * tc) / H.sum():.2f}")
+
+
+# ---------------------------------------------------------------- labels
+def labels():
+    with h5py.File("dataset_nh4_144_128.h5") as f:
+        p99, h99 = f["labels/pseudo_tsc"][:], f["meta/halo_id"][:]
+    with h5py.File("dataset_nh4_144_s91_128.h5") as f:
+        p91 = f["labels/pseudo_tsc"][:]
+    with h5py.File("TSC_Cutimages/TSC_eachhalo_snap99.hdf5") as f:
+        cat = dict(zip(f["halo_id"][:], f["tsc_gyr"][:]))
+    c99 = np.array([cat.get(h, np.nan) for h in h99])
+    fig, ax = plt.subplots(1, 2, figsize=(TEXT * 0.75, TEXT * 0.3))
+    bins = np.arange(0, 4.26, 0.25)
+    ax[0].hist(np.minimum(p99, 4.1), bins, histtype="step", color=C_SIM, lw=1.2,
+               label=f"$z = 0$ ({len(p99)})")
+    ax[0].hist(np.minimum(p91, 4.1), bins, histtype="step", color=C_OBS, lw=1.2,
+               ls="--", label=f"$z = 0.1$ ({len(p91)})")
+    ax[0].set_xlabel("pseudo-TSC [Gyr]")
+    ax[0].set_ylabel("clusters")
+    ax[0].legend()
+    m = np.isfinite(c99)
+    ax[1].scatter(c99[m], p99[m], s=4, alpha=0.5, color=C_SIM)
+    ax[1].plot([0, 4], [0, 4], "k:", lw=0.8)
+    ax[1].set_xlabel("merger-catalogue TSC [Gyr]")
+    ax[1].set_ylabel("pseudo-TSC [Gyr]")
+    rho = stats.spearmanr(c99[m], p99[m])[0]
+    ax[1].set_title(f"Spearman {rho:.3f}", fontsize=7)
+    fig.tight_layout()
+    save(fig, "labels")
+    print(f"  pseudo-TSC at cap (4 Gyr): z=0 {np.mean(p99 >= 4):.0%}, z=0.1 "
+          f"{np.mean(p91 >= 4):.0%}; medians {np.median(p99):.2f} / {np.median(p91):.2f}")
+    print(f"  pseudo vs catalogue (z=0): Spearman {rho:.3f}, n={m.sum()} "
+          f"({(~m).sum()} with no recorded collision)")
+
+
+# ---------------------------------------------------------------- baselines
+def _scalars():
+    with h5py.File("dataset_nh4_144_128.h5") as f:
+        hid, r500 = f["meta/halo_id"][:], f["meta/r500c_kpc"][:]
+        tsc = f["labels/pseudo_tsc"][:].astype(float)
+        imgs = f["images"][:]
+    with h5py.File("Radio_Data/TNG-Cluster_Catalog.hdf5") as f:
+        mm = dict(zip(f["haloID"][:], f["mhalo_500c"][:]))
+    logm = np.array([mm[h] for h in hid])
+    lin = np.log10(np.sinh(imgs.astype(float)).sum(axis=(1, 2, 3)) + 1)
+    X = np.column_stack([logm, np.log10(r500), lin, imgs.mean(axis=(1, 2, 3)),
+                         (imgs > 0).mean(axis=(1, 2, 3))])
+    return tsc, logm, lin, X
+
+
+def _ridge_oof(X, y):
+    from sklearn.linear_model import RidgeCV
+    from sklearn.model_selection import KFold, cross_val_predict
+    from sklearn.pipeline import make_pipeline
+    from sklearn.preprocessing import StandardScaler
+    X = X[:, None] if X.ndim == 1 else X
+    m = make_pipeline(StandardScaler(), RidgeCV(alphas=np.logspace(-3, 3, 13)))
+    return cross_val_predict(m, X, y, cv=KFold(5, shuffle=True, random_state=0))
+
+
+def _seed_preds(pattern, key="oof_pred"):
+    import glob
+    return np.array([np.load(p)[key] for p in sorted(glob.glob(pattern))])
+
+
+def baselines():
+    from sklearn.metrics import r2_score
+    tsc, logm, lin, X = _scalars()
+    cnn = _seed_preds("cnn_preds/pooled_nh4_144_inner_s*.npz")
+    shp = _seed_preds("cnn_preds/pooled_shape144_inner_s*.npz")
+    ens, sens = cnn.mean(0), shp.mean(0)
+    rows = [
+        ("mass", r2_score(tsc, _ridge_oof(logm, tsc)), None, "0.6"),
+        ("total flux", r2_score(tsc, _ridge_oof(lin, tsc)), None, "0.6"),
+        ("5 scalars", r2_score(tsc, _ridge_oof(X, tsc)), None, "0.6"),
+        ("morphology only", np.mean([r2_score(tsc, p) for p in shp]),
+         np.std([r2_score(tsc, p) for p in shp], ddof=1), C_OBS),
+        ("CNN", np.mean([r2_score(tsc, p) for p in cnn]),
+         np.std([r2_score(tsc, p) for p in cnn], ddof=1), C_SIM),
+        ("CNN, 5-seed mean", r2_score(tsc, ens), None, C_SIM),
+        ("5 scalars + CNN", r2_score(tsc, _ridge_oof(np.column_stack([X, ens]), tsc)),
+         None, "k"),
+    ]
+    fig, ax = plt.subplots(1, 2, figsize=(TEXT, TEXT * 0.32),
+                           gridspec_kw={"width_ratios": [1.3, 1]})
+    y = np.arange(len(rows))[::-1]
+    for yy, (lab, v, e, c) in zip(y, rows):
+        ax[0].barh(yy, v, xerr=e, color=c, capsize=2, height=0.7)
+        ax[0].text(v + (e or 0) + 0.01, yy, f"{v:.3f}", va="center", fontsize=6.5)
+    ax[0].set_yticks(y, [r[0] for r in rows])
+    ax[0].set_xlabel("out-of-fold $R^2$")
+    ax[0].set_xlim(0, 0.65)
+    q = np.quantile(logm, [1 / 3, 2 / 3])
+    bins = [logm <= q[0], (logm > q[0]) & (logm <= q[1]), logm > q[1]]
+    x = np.arange(3)
+    sc = _ridge_oof(X, tsc)
+    for off, pred, lab, c in [(-0.27, _ridge_oof(logm, tsc), "mass", "0.75"),
+                              (0.0, sc, "5 scalars", "0.45"),
+                              (0.27, ens, "CNN", C_SIM)]:
+        v = [r2_score(tsc[b], pred[b]) for b in bins]
+        ax[1].bar(x + off, v, 0.25, color=c, label=lab)
+        print(f"  terciles {lab:<10}" + " ".join(f"{u:+.3f}" for u in v))
+    ax[1].axhline(0, color="k", lw=0.6)
+    ax[1].set_xticks(x, ["low", "mid", "high"])
+    ax[1].set_xlabel(r"$M_{500}$ tercile")
+    ax[1].set_ylabel("$R^2$ within tercile")
+    ax[1].legend(fontsize=6)
+    fig.tight_layout()
+    save(fig, "baselines")
+    for lab, v, e, _ in rows:
+        print(f"  {lab:<18} {v:.3f}" + (f" +- {e:.3f}" if e is not None else ""))
+
+
+# ---------------------------------------------------------------- true vs predicted
+def tsc_pred():
+    import glob
+    from sklearn.metrics import r2_score
+    with h5py.File("dataset_nh4_144_128.h5") as f:
+        y_c = f["labels/pseudo_tsc"][:]
+    p_c = _seed_preds("cnn_preds/pooled_nh4_144_inner_s*.npz").mean(0)
+    js = [np.load(p) for p in sorted(glob.glob("cnn_preds/s9991_joint_s*_preds.npz"))]
+    m = js[0]["snap"] == 99
+    y_r = js[0]["tsc"][m]
+    p_r = np.mean([d["oof_cluster"] for d in js], 0)[m]
+    fig, ax = plt.subplots(1, 3, figsize=(TEXT, TEXT * 0.32))
+    for a, y, p, lab, c in [(ax[0], y_c, p_c, "clean radio (144 MHz)", C_SIM),
+                            (ax[1], y_r, p_r, "realistic radio + X-ray", C_OBS)]:
+        a.scatter(y, p, s=4, alpha=0.5, color=c)
+        a.plot([0, 4.2], [0, 4.2], "k:", lw=0.8)
+        a.set_xlim(-0.1, 4.2), a.set_ylim(-0.1, 4.2)
+        a.set_xlabel("true pseudo-TSC [Gyr]")
+        a.set_title(f"{lab}: $R^2$ = {r2_score(y, p):.2f}", fontsize=7)
+    ax[0].set_ylabel("predicted [Gyr]")
+    edges = np.array([0, 0.5, 1, 1.5, 2, 3, 4.01])
+    mid = 0.5 * (edges[1:] + edges[:-1])
+    for y, p, lab, c, dx in [(y_c, p_c, "clean", C_SIM, -0.04),
+                             (y_r, p_r, "realistic", C_OBS, 0.04)]:
+        r = p - y
+        idx = np.digitize(y, edges) - 1
+        med = np.array([np.median(r[idx == k]) for k in range(len(mid))])
+        lo = np.array([np.percentile(r[idx == k], 16) for k in range(len(mid))])
+        hi = np.array([np.percentile(r[idx == k], 84) for k in range(len(mid))])
+        ax[2].errorbar(mid + dx, med, yerr=[med - lo, hi - med], fmt="o-", ms=3,
+                       color=c, label=lab, capsize=2, lw=0.9)
+        print(f"  {lab}: median residual by bin " + " ".join(f"{v:+.2f}" for v in med))
+    ax[2].axhline(0, color="k", lw=0.6)
+    ax[2].set_xlabel("true pseudo-TSC [Gyr]")
+    ax[2].set_ylabel("predicted $-$ true [Gyr]")
+    ax[2].legend(fontsize=6)
+    fig.tight_layout()
+    save(fig, "tsc_pred")
+    print(f"  clean R2 {r2_score(y_c, p_c):.3f} (5-seed mean); realistic joint "
+          f"(99+91 training, snap-99 clusters) {r2_score(y_r, p_r):.3f}")
+
+
+# ---------------------------------------------------------------- X-ray depth
+def xray_depth():
+    import glob
+    from sklearn.metrics import r2_score
+    ks, mu, sd = [], [], []
+    for p in sorted(glob.glob("cnn_preds/xdepth_*ks_s42_preds.npz"),
+                    key=lambda s: float(re.search(r"xdepth_([\d.]+)ks", s).group(1))):
+        k = float(re.search(r"xdepth_([\d.]+)ks", p).group(1))
+        r = [r2_score(np.load(q)["tsc"], np.load(q)["oof_cluster"])
+             for q in glob.glob(f"cnn_preds/xdepth_{int(k)}ks_s*_preds.npz")]
+        ks.append(k), mu.append(np.mean(r)), sd.append(np.std(r))
+        print(f"  {k:>6.0f} ks: R2 {np.mean(r):.3f} +- {np.std(r):.3f} ({len(r)} seeds)")
+    real = [r2_score(np.load(q)["tsc"], np.load(q)["oof_cluster"])
+            for q in glob.glob("cnn_preds/x144_s*_preds.npz")]
+    with h5py.File("xray_placed_144.h5") as f:
+        texp = f["obs/exposure_ks"][:]
+    fig, ax = plt.subplots(figsize=(COL, COL * 0.75))
+    ax.errorbar(ks, mu, yerr=sd, fmt="o-", color=C_SIM, ms=4, capsize=2,
+                label="every mock at this exposure")
+    ax.axhspan(np.mean(real) - np.std(real), np.mean(real) + np.std(real),
+               color=C_OBS, alpha=0.2)
+    ax.axhline(np.mean(real), color=C_OBS, lw=1,
+               label="each mock at its target's real exposure")
+    for t in texp:
+        ax.axvline(t, ymin=0, ymax=0.06, color="k", lw=0.8)
+    ax.set_xscale("log")
+    ax.set_xlabel("Chandra ACIS-I exposure [ks]")
+    ax.set_ylabel("out-of-fold $R^2$")
+    ax.legend(fontsize=6, loc="upper left")
+    save(fig, "xray_depth")
+    print(f"  real-exposure reference {np.mean(real):.3f} +- {np.std(real):.3f}; "
+          f"15 targets' exposures {np.sort(texp).round(0)}")
+
+
+# ---------------------------------------------------------------- P-M relation
+def pm_relation():
+    """The simulation's own 150 MHz power against mass, two ways: total power
+    (all shock cells inside +-4 r500, the quantity radio-relic scaling
+    relations use) and the power inside the central Mpc (what the injected
+    mocks carry). Same global flux constant for both."""
+    with h5py.File("injected_nh4_144_simflux.h5") as f:
+        lp_c = np.nanmean(f["mock/logp150"][:], axis=(1, 2))
+        lm = f["mock/log_m500"][:]
+        tsc = f["mock/pseudo_tsc"][:]
+        hid = f["mock/halo_id"][:]
+        off = float(f.attrs["sim_flux_offset_dex"])
+    with h5py.File("dataset_nh4_144_512.h5") as f:
+        pos = {h: i for i, h in enumerate(f["meta/halo_id"][:])}
+        img = f["images"][:]
+    tot = np.sinh(img.astype(np.float64)).sum(axis=(2, 3)).mean(axis=1)
+    # zero point arbitrary: the flux constant was fixed on the central Mpc
+    lp_t = np.log10(tot[[pos[h] for h in hid]]) + off
+    fig, ax = plt.subplots(1, 3, figsize=(TEXT, TEXT * 0.3))
+    xx = np.linspace(lm.min(), lm.max(), 10)
+    out = []
+    for a, lp, lab in [(ax[0], lp_t, r"log total $P_{150}$ + const"),
+                       (ax[1], lp_c, r"log $P_{150}$, central Mpc [W Hz$^{-1}$]")]:
+        ok = np.isfinite(lp)
+        fit = stats.linregress(lm[ok], lp[ok])
+        res = lp - (fit.intercept + fit.slope * lm)
+        sc = a.scatter(lm, lp, c=np.minimum(tsc, 4), s=4, cmap="plasma_r")
+        x0, y0 = np.median(lm[ok]), np.median(lp[ok])
+        a.plot(xx, fit.intercept + fit.slope * xx, "k-", lw=1,
+               label=f"fit: {fit.slope:.2f}, {np.nanstd(res):.2f} dex")
+        a.plot(xx, y0 + 2.83 * (xx - x0), "k--", lw=0.8, label="relics: 2.83")
+        a.plot(xx, y0 + 3.55 * (xx - x0), "k:", lw=0.8, label="haloes: 3.55")
+        a.set_xlabel(r"log $M_{500}$ [M$_\odot$]")
+        a.set_ylabel(lab)
+        a.legend(fontsize=5.5, loc="upper left")
+        out.append((fit, res))
+    fig.colorbar(sc, ax=ax[1], pad=0.01, label="pseudo-TSC [Gyr]")
+    res = out[0][1]
+    ax[2].scatter(np.minimum(tsc, 4), res, s=4, alpha=0.5, color=C_SIM)
+    ax[2].axhline(0, color="k", lw=0.6)
+    ax[2].set_xlabel("pseudo-TSC [Gyr]")
+    ax[2].set_ylabel("total-power residual [dex]")
+    rho, p = stats.spearmanr(tsc, res)
+    ax[2].set_title(f"Spearman {rho:+.2f}", fontsize=7)
+    fig.tight_layout()
+    save(fig, "pm_relation")
+    for name, (fit, r) in zip(("total", "central Mpc"), out):
+        print(f"  {name:<12} slope {fit.slope:.2f} +- {fit.stderr:.2f}, scatter "
+              f"{np.nanstd(r):.2f} dex, residual vs TSC Spearman "
+              f"{stats.spearmanr(tsc, r, nan_policy='omit')[0]:+.2f}")
+
+
+# ---------------------------------------------------------------- real predictions
+def real_preds():
+    import glob
+    wl = pd.read_csv("lovoccs_wl_masses.csv").set_index("key")
+
+    def ens(pat):
+        ds = [np.load(p) for p in sorted(glob.glob(pat))]
+        names = [key(n) for n in ds[0]["obs_name"]]
+        P = np.array([d["obs_pred"] for d in ds])
+        return {n: (P[:, i].mean(), P[:, i].std()) for i, n in enumerate(names)}, \
+            dict(zip(names, ds[0]["obs_name"]))
+
+    r, nm = ens("cnn_preds/s9991_sfimg_s*_preds.npz")
+    x, _ = ens("cnn_preds/s9991_x_s*_preds.npz")
+    both = sorted(set(r) & set(x))
+    fig, ax = plt.subplots(figsize=(COL, COL * 0.9))
+    lmv = [wl.loc[k, "log_m500c"] if k in wl.index else np.nan for k in both]
+    vmin, vmax = np.nanmin(lmv), np.nanmax(lmv)
+    for k, m in zip(both, lmv):
+        c = plt.cm.viridis((m - vmin) / (vmax - vmin)) if np.isfinite(m) else "0.6"
+        ax.errorbar(r[k][0], x[k][0], xerr=r[k][1], yerr=x[k][1], fmt="o", ms=4,
+                    color=c, mec="k", mew=0.4, lw=0.7, capsize=0)
+        lab = str(nm[k]).replace("_", " ").replace("RXC J1217.6+0339", "RXC J1217")
+        ax.annotate(lab, (r[k][0], x[k][0]), fontsize=4.5, xytext=(3, -6 if k in
+                    ("A399", "A119", "A2033", "RXCJ1217.6+0339") else 2),
+                    textcoords="offset points")
+    lim = [0, max(max(v[0] for v in r.values()), max(v[0] for v in x.values())) + 0.3]
+    ax.plot(lim, lim, "k:", lw=0.8)
+    ax.set_xlim(lim), ax.set_ylim(lim)
+    ax.set_xlabel("radio prediction [Gyr]")
+    ax.set_ylabel("X-ray prediction [Gyr]")
+    sm = plt.cm.ScalarMappable(cmap="viridis", norm=plt.Normalize(vmin, vmax))
+    fig.colorbar(sm, ax=ax, pad=0.01, label=r"weak-lensing log $M_{500}$")
+    rho, p = stats.spearmanr([r[k][0] for k in both], [x[k][0] for k in both])
+    ax.set_title(f"{len(both)} LoVoCCS clusters, Spearman {rho:.2f}", fontsize=7)
+    save(fig, "real_preds")
+    dr = np.array([r[k][0] - x[k][0] for k in both])
+    print(f"  radio - X-ray: median {np.median(dr):+.2f} Gyr, {np.mean(dr > 0):.0%} positive; "
+          f"radio median {np.median([r[k][0] for k in both]):.2f}, X-ray median "
+          f"{np.median([x[k][0] for k in both]):.2f}")
+    print(f"  n={len(both)} rho={rho:.2f} p={p:.3f}; grey = no weak-lensing mass: "
+          f"{[str(nm[k]) for k, m in zip(both, lmv) if not np.isfinite(m)]}")
+
+
+# ---------------------------------------------------------------- observed gallery
+def obs_gallery():
+    """Real targets with both LoTSS and Chandra, on the models' own inputs:
+    radio arcsinh(S/rms) over 1 Mpc; X-ray arcsinh(rate/scale), cropped to
+    the same 1 Mpc (the X-ray grid is fixed in physical units)."""
+    from astropy.cosmology import Planck15
+    from build_xray_realistic import BLOCK, GRID
+    with h5py.File("injected_nh4_144_simflux.h5") as f:
+        rimg = f["obs/images"][:]
+        rk = [key(s.decode() if isinstance(s, bytes) else s) for s in f["obs/key"][:]]
+        rn = [s.decode() if isinstance(s, bytes) else str(s) for s in f["obs/name"][:]]
+        rz = f["obs/z"][:]
+    with h5py.File("xray_placed_144.h5") as f:
+        ximg = f["obs/images"][:]
+        xk = [key(s.decode() if isinstance(s, bytes) else s) for s in f["obs/key"][:]]
+        xt = f["obs/exposure_ks"][:]
+    kpc_block = BLOCK * 0.492 * Planck15.kpc_proper_per_arcmin(0.05).value / 60
+    h = int(round(500.0 / kpc_block))
+    s = np.s_[GRID // 2 - h:GRID // 2 + h, GRID // 2 - h:GRID // 2 + h]
+    want = ["A401", "A399", "A1650", "A2443", "A119", "A2033"]
+    pick = [k for k in want if k in rk and k in xk][:6]
+    fig, ax = plt.subplots(2, len(pick), figsize=(TEXT, TEXT * 0.36))
+    for c, k in enumerate(pick):
+        i, j = rk.index(k), xk.index(k)
+        ax[0, c].imshow(rimg[i], origin="lower", cmap="magma", vmin=-1,
+                        vmax=np.arcsinh(30))
+        ax[0, c].set_title(f"{rn[i]}, z = {rz[i]:.3f}", fontsize=6.5)
+        ax[1, c].imshow(ximg[j][s], origin="lower", cmap="magma", vmin=0,
+                        vmax=np.percentile(ximg[:, s[0], s[1]], 99.5))
+        ax[1, c].set_title(f"Chandra {xt[j]:.0f} ks", fontsize=6.5)
+    for a in ax.ravel():
+        a.set_xticks([]), a.set_yticks([])
+    ax[0, 0].set_ylabel("LoTSS 144 MHz")
+    ax[1, 0].set_ylabel("Chandra 0.1-2 keV")
+    fig.tight_layout(h_pad=1.2, w_pad=0.3)
+    save(fig, "obs_gallery")
+    print(f"  targets {pick}; X-ray crop +-{h} blocks of {kpc_block:.1f} kpc")
+
+
 FIGS = {"radio_gallery": radio_gallery, "radio_mf": radio_mf, "mf_tsc": mf_tsc,
         "lx_mass": lx_mass, "xray_gallery": xray_gallery, "relic": relic,
-        "aug": aug}
+        "aug": aug, "phase": phase, "labels": labels, "baselines": baselines,
+        "tsc_pred": tsc_pred, "xray_depth": xray_depth, "pm_relation": pm_relation,
+        "real_preds": real_preds, "obs_gallery": obs_gallery}
 
 if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)

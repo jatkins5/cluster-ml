@@ -32,12 +32,33 @@
   projections.}
   \label{fig:mf}
 \end{figure*}
-\figplaceholder{Bar chart: OOF $R^2$ of the scalar baselines, morphology
-only, CNN, ensemble (\texttt{analyze\_mass\_control.py},
-\texttt{compare\_shape.py}).}{The image against scalar baselines.}
-\figplaceholder{True vs predicted TSC, with residuals by age bin
-(\texttt{plot\_tsc\_predictions.py} on saved OOF predictions).}
-{Predicted against true merger time.}
+\begin{figure*}
+  \centering
+  \includegraphics[width=\textwidth]{fig_baselines.pdf}
+  \caption{What the radio image adds. Left: out-of-fold $R^2$ for
+  pseudo-TSC on the same 352 clusters and folds -- ridge regression on
+  halo mass, on total radio flux, and on five scalars (mass, \rfive, total
+  flux, mean and filling fraction of the stretched map); the pooled CNN on
+  flux-normalised maps (morphology only) and on full maps (mean and s.d.\
+  over 5 seeds); the mean of the 5 seeds' predictions; and the five scalars
+  plus that mean. Right: $R^2$ within terciles of \mfive, where a mass-only
+  model scores $\sim$0 by construction; the scalars fail in the high-mass
+  tercile, the CNN does not.}
+  \label{fig:baselines}
+\end{figure*}
+\begin{figure*}
+  \centering
+  \includegraphics[width=\textwidth]{fig_tsc_pred.pdf}
+  \caption{Predicted against true pseudo-TSC for the 352 snapshot-99
+  clusters, each the mean of 5 seeds' out-of-fold predictions (so $R^2$ is
+  above the per-seed values quoted in the text). Left: clean radio maps.
+  Middle: the realistic radio + X-ray model trained on snapshots 99 and 91.
+  Right: median and 16--84 per cent range of the residual in bins of true
+  TSC. Both models regress to the mean: the youngest mergers are
+  predicted $\sim$0.3\,Gyr too old, and clusters at the 4\,Gyr cap
+  $\sim$1.2--1.3\,Gyr too young.}
+  \label{fig:tsc_pred}
+\end{figure*}
 
 \subsection{X-ray, and radio with X-ray}
 \begin{itemize}
@@ -89,9 +110,22 @@ only, CNN, ensemble (\texttt{analyze\_mass\_control.py},
     \hline
   \end{tabular}
 \end{table}
-\figplaceholder{Simulated $P_{150}$--\mfive\ relation coloured by TSC,
-with the Cuciti et al.\ (2023) fit (\texttt{summarize\_b23.py} data).}
-{The simulation's own mass--power relation.}
+\begin{figure*}
+  \centering
+  \includegraphics[width=\textwidth]{fig_pm_relation.pdf}
+  \caption{The simulation's own 144\,MHz power against \mfive, coloured by
+  pseudo-TSC. Left: total power of the shock cells within $\pm4$\,\rfive\
+  (arbitrary zero point): slope $2.67 \pm 0.16$, scatter 0.78\,dex,
+  consistent with the radio-relic relation (slope 2.83, de Gasperin et
+  al.\ 2014) and shallower than the radio-halo one (3.55, Cuciti et al.\
+  2023); both reference slopes drawn through the median. Middle: power
+  inside the central Mpc, which is what the injected mocks carry (one
+  global constant puts it in W\,Hz$^{-1}$): slope 3.04, scatter 1.65\,dex.
+  Right: residuals from the total-power fit fall with merger age
+  (Spearman $-0.33$): recent mergers are over-luminous for their mass, the
+  sign seen in observed samples.}
+  \label{fig:pm}
+\end{figure*}
 
 \subsection{Application to LoVoCCS}
 \begin{itemize}
@@ -114,6 +148,18 @@ with the Cuciti et al.\ (2023) fit (\texttt{summarize\_b23.py} data).}
   \item Weak-lensing peak check: only 9 overlapping clusters,
         inconclusive.
 \end{itemize}
-\figplaceholder{Radio vs X-ray predictions for the 14 clusters with both,
-coloured by weak-lensing mass (\texttt{compare\_real\_preds.py}).}
-{Two independent observables on real clusters.}
+\begin{figure}
+  \centering
+  \includegraphics[width=\columnwidth]{fig_real_preds.pdf}
+  \caption{Radio against X-ray predictions for the 14 LoVoCCS clusters with
+  both, each the mean of 5 models trained on snapshots 99 + 91 (bars: seed
+  s.d.), coloured by weak-lensing \mfive\ (grey: no weak-lensing mass).
+  The ranks agree (Spearman 0.69, $p = 0.006$) but the scales do not:
+  every X-ray prediction is younger than the radio one, by a median
+  0.58\,Gyr (medians 0.62 and 1.14\,Gyr).
+  \todo{Explain before interpreting absolute ages. Candidate: real
+  clusters are 1.29$\times$ brighter in X-rays than mass-matched mocks
+  (Fig.~\ref{fig:lx}), and the X-ray model reads brightness as youth;
+  test by rescaling the real inputs by 1/1.29.}}
+  \label{fig:real}
+\end{figure}
