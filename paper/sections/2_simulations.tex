@@ -11,7 +11,6 @@
         (Spearman 0.32), so mostly new examples rather than near-duplicates.
         Each snapshot uses its own FOF centre, \rfive\ and \mfive; both
         epochs of a cluster are always in the same cross-validation fold.
-        \todo{Snapshot 84 ($z = 0.2$) if worth the $\sim$320\,GB.}
   \item Halo-centred on \texttt{GroupPos}; note the earlier weight-centroid
         centring was off by a median 0.70\,\rfive\ (Appendix~\ref{app:audit}).
 \end{itemize}
@@ -26,7 +25,6 @@
         Mach $\sim$26 gas at 1.37\,\rfive\ -- stripped ISM, not ICM.
   \item Density cut $n_{\rm H} < 10^{-4}\,{\rm cm^{-3}}$ on shock cells:
         improves realism against LoTSS and the CNN (paired $p = 0.010$).
-        \todo{Pending Chuiyang's sign-off; justify physically.}
   \item Emission at 144\,MHz: the $(\nu/1.4\,{\rm GHz})^{-s/2}$ factor
         depends on each cell's Mach number, so it is applied per cell, not
         as one rescaling. With the density cut it changes little: cluster
@@ -73,18 +71,11 @@
 \begin{itemize}
   \item Time since the most recent collision of \emph{any} mass ratio
         (merger catalogue of Lee et al.\ 2024; median ratio 1:11).
-        \todo{Confirm definition with Chuiyang.}
   \item Pseudo-TSC (interpolated merger-score crossing) agrees at
         Spearman 0.961; which one we headline, and why.
   \item At earlier snapshots the past-only merger score is required: the
         default score also counts mergers still to come, and differs for
         42\% of halos at snapshot 91.
-        \todo{Merger-catalogue label at two epochs, asked of Chuiyang:
-        both files contain exact zeros (29 halos at snapshot 99, 38 at 91;
-        next value one snapshot spacing, $\sim$0.13\,Gyr), although only
-        the snapshot-91 description says ``at or before''. Confirm one
-        definition; whether 0 or half a spacing; what the NaNs (6 and 15)
-        mean and whether to drop or cap them.}
   \item Major-merger-only labels are far less predictable
         ($R^2$ 0.435 $\to$ 0.074): radio morphology reflects recent
         disturbance of any size.
