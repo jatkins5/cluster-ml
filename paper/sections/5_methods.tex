@@ -12,3 +12,56 @@
   \item Mass conditioning: log\,\mfive\ as an input, blurred by the real
         weak-lensing errors.
 \end{itemize}
+
+We treated inference of the TSC as a supervised learning problem, with radio and X-ray observations as the input data and the pseudo-TSC label defined in section \ref{sec:sims}.
+Note that the pseudo-TSC is not a directly-measured time since pericentric passage; it instead measures the elapsed time since the merger score crosses a particular threshold.
+The generation procedure for the radio and X-ray mocks from simulated data is described in sections \ref{sec:sims} and \ref{sec:fwd}.
+
+We primarily trained a convolutional neural network (CNN), which has shown strong performance on similar astrophysical and cosmological inference problems.
+The CNN independently processed each of the three spatial projections of an input cluster using a shared encoder comprising four convolutional blocks, with 32, 64, 128, and 256 output channels.
+Each block of the CNN has two convolutional layers, with batch normalization and ReLU (Rectified Linear Unit) nonlinear activations, followed by spatial downsampling.
+We then used a global average pooling layer to calculate a 256-dimensional representation of each cluster projection.
+The three projection representations are averaged, which makes the prediction independent of projection ordering.
+This vector is then passed to a regression head, constructed from a 64-hidden-unit layer with dropout.
+In the joint radio and X-ray model, each modality has a separate encoder, with the encodings concatenated before the regression step.
+
+While training, we augmented our set of radio and X-ray projections with random reflections, and $90^\circ$, $180^\circ$, and $270^\circ$ rotations, applied consistently to both modalities.
+\todo{clean map experiments}
+Observationally forward-modelled data was preprocessed using the procedure described in section \ref{sec:fwd}.
+We used AdamW to optimize the the CNN for 60 epochs, with an initial learning rate of $3\times 10^{-4}$, weight decay of $10^{-3}$, a cosine learning-rate schedule, and a batch size of 32.
+We used a Huber loss \todo{Huber loss formula} with transition scale $0.5$ Gyr to reduce the influence of large residuals.
+
+To evaluate performance, we used five-fold cross validation, with data from each cluster (projections, noise realizations, and available snapshots) always being in the same fold to prevent data leakage.
+Within each outer training partition, 15\% of clusters were reserved for training checkpoint selection; we retained the checkpoint with the the lowest inner-validation squared error, and excluded the outer test partition from checkpoint selection.
+Repeating this procedure for each of the five outer folds produced an out-of-fold (OOF) prediction for each cluster.
+Overall, 68\% of clusters were used for training, 12\% were used for inner validation, and 20\% were used for OOF predictive testing.
+
+We measured performance using the coefficient of determination, $r^2$, with overall $r^2$ calculated from the combined OOF predictions, rather than by averaging the $r^2$ values of individual folds.
+Our primary experiments were repeated with five random seeds, with comparisons between conditions using shared seeds to reduce noise in comparisons.
+We measured scatter across seeds to estimate variation between runs, but this cannot be interpreted as a calibrated uncertainty interval for the TSC.
+
+To evaluate the increased predictive power from access to raw image data, we compared our CNN model with several scalar prediction baselines.
+A five-feature ridge regression model was fit from log(halo mass), log(halo radius), log(integrated emission), mean intensity in the arcsinh-stretched image, and the fraction of pixels with non-zero intensity.
+We standardized features over the training data, with ridge regularization strength selected within the training sample.
+These comparisons tested whether the raw image data provided extra predictive power over summary statistics of a cluster's scale, emission amplitude, and simple properties of the intensity distribution.
+
+We also compared the CNN performance to explicit image morphology descriptions.
+For radio maps, we constructed thresholded excursion sets at 12 intensity quantiles, forming a 48-dimensional feature vector containing their perimeter, Euler characteristic, and numbers of connected components and holes.
+This was supplied to an XGBoost regressor.
+All projections of a cluster remained grouped during cross-validation, with their predictions averaged for cross-cluster comparison.
+For X-ray data, we fit a ridge-regression model on aperture-based concentration, centroid variation, ellipticity, and integrated emission.
+These were defined relative to the image extent, also with features averaged across projections.
+\todo{should probably define some of these more clearly}
+
+Several complementary analyses considered the role of mass and emission amplitude.
+To test the contribution of explicit amplitude information, one analysis ran shape-normalization \todo{more detail}, with each projection then rescaled to a common integrated emission before applying the intensity arcsinh-stretch.
+Note that this normalization did not remove correlations between mass, morphology, and luminosity.
+We also considered predictive performance within mass bins, and calculated partial-rank correlations between predictions and labels after accounting for halo mass.
+
+For analyses in which we conditioned on cluster mass, we concatenated $\log_{10} (M_\text{500c})$ to the image representation before being fed into the regression head.
+To approximate uncertainty associated with weak-lensing masses, we perturbed simulated log-masses with Gaussian noise with widths sampled from the empirical distribution of weak-lensing fractional mass errors.
+We used the available fractional uncertainties on $M_\text{200c}$ estimates to approximate uncertainties in the converted $M_\text{500c}$ values.
+
+The experiments that have access to all three cluster projections provide a benchmark in which several views of the same cluster are available, which can be compared with the model performance on the realistic case individual observed images from a single viewing direction.
+The latter can be interpreted alongside the corresponding observationally forward-modelled tests.
+Because the observed clusters lack independent pseudo-TSC labels, agreement between radio and X-ray predictions provides a consistency check rather than a direct accuracy measurement.
