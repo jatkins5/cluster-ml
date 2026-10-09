@@ -5,7 +5,8 @@
 \begin{itemize}
   \item All at 144\,MHz, snapshot 99, 5 seeds, same folds. Pooled CNN
         $0.485 \pm 0.028$ (ensemble 0.530) vs total flux 0.440, mass 0.314,
-        five scalars 0.459; scalars + CNN 0.541, an increment of $+0.082$.
+        five scalars 0.459; scalars + CNN 0.541, an increment of $+0.082$ (exploratory: the stack is not nested inside an outer split,
+        so its optimism is unmeasured; a nested test is pending).
   \item Within mass terciles: CNN 0.33/0.33/0.24 while scalars fall to
         $-0.29$ in the high-mass bin; partial $\rho = 0.480$ at fixed mass.
   \item Morphology alone (flux-normalised maps): $0.414 \pm 0.040$, paired
@@ -16,7 +17,8 @@
   \item Minkowski functionals as an interpretable baseline: XGBoost on 48
         topology numbers reaches 0.42 (cluster mean of the three
         projections; 0.30 per projection); fragmentation rises with merger
-        age ($\rho = 0.62$ for the component count at the highest
+        age ($\rho = 0.62$ for the component count at the largest area
+        fraction, i.e. the lowest intensity
         threshold).
   \item The same analyses at 1.4\,GHz differ by at most 0.02 (the
         high-mass tercile, 0.22 there).
@@ -41,8 +43,8 @@
   flux, mean and filling fraction of the stretched map); the pooled CNN on
   flux-normalised maps (morphology only) and on full maps (mean and s.d.\
   over 5 seeds); the mean of the 5 seeds' predictions; and the five scalars
-  plus that mean. Right: $R^2$ within terciles of \mfive, where a mass-only
-  model scores $\sim$0 by construction; the scalars fail in the high-mass
+  plus that mean. Right: $R^2$ within terciles of \mfive; a mass-only
+  model scores 0.04, $-0.02$ and $-0.11$ there; the scalars fail in the high-mass
   tercile, the CNN does not.}
   \label{fig:baselines}
 \end{figure*}
@@ -63,7 +65,8 @@
 \subsection{X-ray, and radio with X-ray}
 \begin{itemize}
   \item The stretch bug and fix: X-ray 0.320 $\to$ 0.511 ($p = 0.0003$).
-  \item Joint model $0.537 \pm 0.016$: beats radio by $+0.050$ and X-ray by
+  \item Joint model $0.537 \pm 0.016$ (1.4\,GHz radio maps; 144\,MHz rerun in
+        progress, review F7): beats radio by $+0.050$ and X-ray by
         $+0.026$; gains on older mergers (RMSE $>2$\,Gyr 1.25 $\to$ 1.13).
 \end{itemize}
 
@@ -132,8 +135,9 @@
   \item Predictions for 25 (radio), 15 (X-ray), 14 (joint) clusters; all
         within the label range.
   \item Radio and X-ray agree (5-seed ensembles trained on snapshots
-        99 + 91, 14 clusters): $\rho = 0.69$ ($p = 0.006$), 0.69 at fixed
-        $z$; at fixed weak-lensing mass 0.48 ($n = 10$, $p = 0.16$).
+        99 + 91, 14 clusters): $\rho = 0.69$ ($p = 0.006$); partial at fixed
+        $z$ 0.69 (Freedman--Lane permutation $p = 0.010$); at fixed
+        weak-lensing mass 0.48 ($n = 10$, $p = 0.19$).
         Snapshot 99 alone gives 0.61 / 0.66 / 0.52.
   \item Adding snapshot 91 keeps the real clusters' rank order
         ($\rho = 0.86$--0.95 against the snapshot-99 models) but shifts them

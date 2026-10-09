@@ -7,7 +7,8 @@
         redshift.
   \item Noise must be beam-correlated: with white noise, real-cluster
         predictions ran to 10--27\,Gyr.
-  \item Field injection into 208 real LoTSS DR3 fields (Bruno et al.\ 2023
+  \item Field injection into real LoTSS DR3 fields (209 downloaded, 206
+        accepted at 40$'$; 202 at 80$'$) (Bruno et al.\ 2023
         precedent; Bottrell ``FullReal'' tier): real noise, sources and
         artefacts.
   \item Flux: the simulation's own predicted power, one global constant
@@ -46,7 +47,8 @@
 \label{sec:xray}
 \begin{itemize}
   \item Binomial thinning of photon counts is an exact shallower
-        observation; real archival depths (median 50\,ks all instruments,
+        observation for fully exposed pixels, approximate where the mocks'
+        exposure varies (chip gaps, dither edges; review F6); real archival depths (median 50\,ks all instruments,
         20\,ks ACIS-I).
   \item Sky backgrounds from soxs; particle background handled separately.
   \item Redshift placement: $1/D_L^2$ dimming, sky-area scaling of the
@@ -93,7 +95,7 @@
   seeds, snapshot 99): every mock placed at a target redshift with sky and
   particle backgrounds, the $L_X$ and absorption corrections, and the same
   exposure throughout. Skill rises from $R^2 = 0.24$ at 5\,ks to 0.38 at
-  20\,ks and saturates near 0.48 by $\sim$150\,ks. Ticks: total ACIS-I
+  20\,ks and saturates near 0.48 by $\sim$150\,ks. Ticks: Cycle-22-equivalent
   exposures of the 15 real targets (median 31\,ks); the band is the model
   trained with each mock at its matching target's real exposure
   ($0.36 \pm 0.03$).}

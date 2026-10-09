@@ -781,6 +781,14 @@ Trained with AdamW + cosine LR schedule + Huber loss. Best checkpoint per fold s
 
 ### Comparison
 
+> **Historical table.** Every number below predates the 2026-09-09 fix to
+> checkpoint selection (the best epoch was chosen on the test fold, worth
+> +0.04 R²), and most predate GroupPos centring, the density cut and 144 MHz
+> emission. The current headline is the pooled CNN at **0.485 ± 0.028**
+> (5 seeds; 0.530 averaged over seeds), 144 MHz, n_H < 1e-4, inner-split
+> selection: see `PAPER_CHECKLIST.md` and the paper. The 0.564 below was
+> one lucky seed under the old protocol.
+
 All results use 5-fold CV grouped by cluster. Label definitions:
 - **tau=1.0**: `label_score_all_tau1.0` — soft merger activity score in last 1 Gyr
 - **pseudo-TSC**: interpolated tau where score first crosses 0.5 — proxy for Gyr since last major merger (34/352 capped at 4.0 Gyr)
@@ -796,7 +804,7 @@ All results use 5-fold CV grouped by cluster. Label definitions:
 | Shallow CNN (images) | merger-TSC (TSC≤2 Gyr, 120ep) | 0.149 | 0.439 | 0.541 | 0.025 |
 | Shallow CNN (256px, 4×R500c) | merger-TSC (δ=2.0, 120ep) | 0.507 | 0.771 | 1.075 | 0.097 |
 | Shallow CNN (256px, 2×R500c) | merger-TSC (δ=2.0, 120ep) | 0.480 | 0.783 | 1.103 | 0.109 |
-| Pooled CNN | pseudo-TSC | **0.564** | — | — | — |
+| Pooled CNN | pseudo-TSC | 0.564 (old protocol, one seed) | — | — | — |
 | Pooled CNN | merger-TSC (δ=0.5) | 0.494 | 0.779 | 1.103 | 0.150 |
 | Pooled CNN | merger-TSC (δ=2.0) | 0.528 | 0.782 | 1.067 | 0.188 |
 | Pooled CNN | merger-TSC (δ=2.0, 120ep) | **0.544** | 0.778 | 1.047 | 0.196 |
