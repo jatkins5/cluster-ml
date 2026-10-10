@@ -127,6 +127,29 @@ def run_fold(tr_x, tr_y, sel_x, sel_y, epochs, batch_size, device, delta,
 
 
 @torch.no_grad()
+def group_folds(groups, n_splits):
+    """GroupKFold's balanced greedy assignment, made hardware-independent.
+
+    sklearn's GroupKFold orders groups with np.argsort on group sizes; with
+    the many ties here (3 or 6 samples per group) numpy's SIMD sort breaks
+    them differently on different CPU families, so the folds depended on
+    which GPU node a run landed on (found in review round 4). Here ties are
+    broken by group id with a stable lexsort, so every run, seed and node
+    gets the same partition."""
+    ug, inv, cnt = np.unique(groups, return_inverse=True, return_counts=True)
+    order = np.lexsort((ug, -cnt))                # size desc, then group id
+    load = np.zeros(n_splits)
+    fold_of_group = np.empty(len(ug), dtype=int)
+    for g in order:
+        f = int(np.argmin(load))
+        fold_of_group[g] = f
+        load[f] += cnt[g]
+    fold = fold_of_group[inv]
+    idx = np.arange(len(groups))
+    for f in range(n_splits):
+        yield idx[fold != f], idx[fold == f]
+
+
 def predict(model, x, device, scalars=None, batch_size=32, xray=None):
     if len(x) == 0:
         return np.zeros(0, dtype=np.float32)
@@ -169,6 +192,9 @@ def main():
                          "mass does not already explain (checklist B2).")
     ap.add_argument("--wl-masses", default="lovoccs_wl_masses.csv")
     ap.add_argument("--catalog", default="Radio_Data/TNG-Cluster_Catalog.hdf5")
+    ap.add_argument("--mass-seed", type=int, default=None,
+                    help="seed for the simulated mass-measurement noise, fixed "
+                         "across training seeds and comparison arms")
     ap.add_argument("--mass-noise", action="store_true",
                     help="perturb training masses by the per-cluster error "
                          "actually measured for the real sample (median 25%% "
@@ -287,6 +313,12 @@ def main():
     sim_s = obs_s = None
     n_scalar = 0
     rng = np.random.default_rng(args.seed)
+    # Review round 3: the simulated mass MEASUREMENT must not change with the
+    # training seed -- a real target has one measured mass shared by every
+    # ensemble member. --mass-seed fixes the measurement draw independently
+    # of model initialisation (legacy behaviour when unset).
+    mrng = (np.random.default_rng(args.mass_seed) if args.mass_seed is not None
+            else rng)
     if args.mass:
         n_scalar = 1
         sim_logm = logm.copy()
@@ -313,8 +345,8 @@ def main():
         if args.mass_noise:
             # One draw per cluster, fixed for the run: the point is to blur
             # the mass the model is given, not to augment it every epoch.
-            sig = rng.choice(err_dex, size=N)
-            sim_logm = sim_logm + rng.normal(0.0, sig)
+            sig = mrng.choice(err_dex, size=N)
+            sim_logm = sim_logm + mrng.normal(0.0, sig)
             print(f"  training masses blurred by {sig.mean():.3f} dex "
                   f"on average")
         sim_s = np.repeat(sim_logm, R)[:, None].astype(np.float32)
@@ -329,13 +361,12 @@ def main():
     # Review F3: the score real data actually get -- ONE projection, repeated
     # across the view axis exactly as a real cutout is -- for every held-out
     # sample and each projection, plus the outer fold of every sample, so
-    # equal-size held-out ensembles can be formed across seeds (GroupKFold
+    # equal-size held-out ensembles can be formed across seeds (group_folds
     # folds do not depend on the seed).
     oof_single = np.full((N * R, P), np.nan, dtype=np.float32)
     fold_of = np.full(N * R, -1, dtype=np.int16)
     obs_preds = []
-    gkf = GroupKFold(n_splits=args.folds)
-    for k, (tr, va) in enumerate(gkf.split(x, y, groups), 1):
+    for k, (tr, va) in enumerate(group_folds(groups, args.folds), 1):
         if args.select == "inner":
             # Grouped, so every realization of a cluster stays on one side.
             gss = GroupShuffleSplit(n_splits=1, test_size=args.inner_frac,
@@ -432,7 +463,8 @@ def main():
              obs_name=np.array(obs_name), obs_z=obs_z,
              select=args.select, seed=args.seed, dataset=args.dataset,
              mass=args.mass, no_image=args.no_image,
-             mass_noise=args.mass_noise,
+             mass_noise=args.mass_noise, mass_seed=-1 if args.mass_seed is None else args.mass_seed,
+             sim_logm_input=(sim_s[::R, 0] if sim_s is not None else np.zeros(0)),
              obs_logm=(obs_s[:, 0] if obs_s is not None else np.zeros(0)),
              sim_logm=logm)
     print(f"\nsaved -> {args.out_prefix}_preds.npz")

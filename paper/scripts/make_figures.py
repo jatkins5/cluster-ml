@@ -271,6 +271,7 @@ def xray_gallery():
         mtgt = (np.vectorize(lambda v: key(v.decode() if isinstance(v, bytes) else v))(
             f["mock/target"][:]) if "mock/target" in f else None)
         okey = [key(v.decode() if isinstance(v, bytes) else v) for v in f["obs/key"][:]]
+        mexp = f["mock/exposure_ks"][:] if "mock/exposure_ks" in f else None
         obs, oz, ot = f["obs/images"][:], f["obs/z"][:], f["obs/exposure_ks"][:]
         on = [s.decode() if isinstance(s, bytes) else str(s) for s in f["obs/name"][:]]
     targets = [t for t in ["A401", "A1650", "A119", "A2443", "A1307"] if t in on]
@@ -287,8 +288,18 @@ def xray_gallery():
         j = on.index(t)
         ax[r, 0].imshow(obs[j][s], origin="lower", cmap="magma", vmin=0, vmax=vmax)
         ax[r, 0].set_title(f"{t}, z = {oz[j]:.3f}, {ot[j]:.0f} ks", fontsize=6.5)
-        idx = (np.argwhere(mtgt == okey[j]) if mtgt is not None
-               else np.argwhere(np.abs(mz - oz[j]) < 0.005))
+        # review round 3 (M1): identity AND redshift -- a mock placed at a
+        # redshift with no Chandra target borrows a random target's identity
+        # and exposure but keeps its own redshift
+        zok = np.abs(mz - oz[j]) < 5e-4
+        idx = (np.argwhere((mtgt == okey[j]) & zok) if mtgt is not None
+               else np.argwhere(zok))
+        if len(idx) == 0:
+            raise SystemExit(f"xray_gallery: no mock matches {t} in identity and z")
+        if mexp is not None:
+            bad = [tuple(ix) for ix in idx if abs(mexp[tuple(ix)] - ot[j]) > 0.5]
+            if bad:
+                raise SystemExit(f"xray_gallery: {t} mocks with exposure != {ot[j]:.1f} ks")
         for c in (1, 2):
             i, rr_ = idx[rng.integers(len(idx))]
             ax[r, c].imshow(mock[i, rr_, 0][s], origin="lower", cmap="magma",
