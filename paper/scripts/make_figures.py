@@ -45,7 +45,8 @@ C_SIM, C_OBS = "#3b6ea8", "#c2455d"
 # Realistic inputs (review F1/F5 fixes). Set in one place so every figure
 # uses the same forward-model version.
 XRAY_H5 = "xray_fix.h5"
-RADIO_INJ = "injected_fix_phys_b1000.h5"
+RADIO_INJ = "injected_fix_phys_b3000.h5"   # adopted (best realism, R2)
+RADIO_INJ_1MPC = "injected_fix_phys_b1000.h5"  # same real cutouts at 1 Mpc
 key = lambda s: re.sub(r"[\s_]+", "", str(s)).upper()
 
 
@@ -554,7 +555,7 @@ def tsc_pred():
     with h5py.File("dataset_nh4_144_128.h5") as f:
         y_c = f["labels/pseudo_tsc"][:]
     p_c = _seed_preds("cnn_preds/pooled_nh4_144_inner_s*.npz").mean(0)
-    js = [np.load(p) for p in sorted(glob.glob("cnn_preds/s9991_joint_s*_preds.npz"))]
+    js = [np.load(p) for p in sorted(glob.glob("cnn_preds/fix_phys_b1000_joint_s*_preds.npz"))]
     m = js[0]["snap"] == 99
     y_r = js[0]["tsc"][m]
     p_r = np.mean([d["oof_cluster"] for d in js], 0)[m]
@@ -594,15 +595,15 @@ def xray_depth():
     import glob
     from sklearn.metrics import r2_score
     ks, mu, sd = [], [], []
-    for p in sorted(glob.glob("cnn_preds/xdepth_*ks_s42_preds.npz"),
-                    key=lambda s: float(re.search(r"xdepth_([\d.]+)ks", s).group(1))):
-        k = float(re.search(r"xdepth_([\d.]+)ks", p).group(1))
+    for p in sorted(glob.glob("cnn_preds/xdepthfix_*ks_s42_preds.npz"),
+                    key=lambda s: float(re.search(r"xdepthfix_([\d.]+)ks", s).group(1))):
+        k = float(re.search(r"xdepthfix_([\d.]+)ks", p).group(1))
         r = [r2_score(np.load(q)["tsc"], np.load(q)["oof_cluster"])
-             for q in glob.glob(f"cnn_preds/xdepth_{int(k)}ks_s*_preds.npz")]
+             for q in glob.glob(f"cnn_preds/xdepthfix_{int(k)}ks_s*_preds.npz")]
         ks.append(k), mu.append(np.mean(r)), sd.append(np.std(r))
         print(f"  {k:>6.0f} ks: R2 {np.mean(r):.3f} +- {np.std(r):.3f} ({len(r)} seeds)")
     real = [r2_score(np.load(q)["tsc"], np.load(q)["oof_cluster"])
-            for q in glob.glob("cnn_preds/x144_s*_preds.npz")]
+            for q in glob.glob("cnn_preds/xdepthfix_real_s*_preds.npz")]
     with h5py.File(XRAY_H5) as f:
         texp = f["obs/exposure_ks"][:]
     fig, ax = plt.subplots(figsize=(COL, COL * 0.75))
@@ -631,6 +632,7 @@ def pm_relation():
     mocks carry). Same global flux constant for both."""
     with h5py.File(RADIO_INJ) as f:
         lp_c = np.nanmean(f["mock/logp150"][:], axis=(1, 2))
+        box_mpc = float(f.attrs.get("box_kpc", 1000.0)) / 1000.0
         lm = f["mock/log_m500"][:]
         tsc = f["mock/pseudo_tsc"][:]
         hid = f["mock/halo_id"][:]
@@ -645,7 +647,7 @@ def pm_relation():
     xx = np.linspace(lm.min(), lm.max(), 10)
     out = []
     for a, lp, lab in [(ax[0], lp_t, r"log total $P_{150}$ + const"),
-                       (ax[1], lp_c, r"log $P_{150}$, central Mpc [W Hz$^{-1}$]")]:
+                       (ax[1], lp_c, rf"log $P_{{150}}$, {box_mpc:.0f} Mpc box [W Hz$^{{-1}}$]")]:
         ok = np.isfinite(lp)
         fit = stats.linregress(lm[ok], lp[ok])
         res = lp - (fit.intercept + fit.slope * lm)
@@ -687,8 +689,8 @@ def real_preds():
         return {n: (P[:, i].mean(), P[:, i].std()) for i, n in enumerate(names)}, \
             dict(zip(names, ds[0]["obs_name"]))
 
-    r, nm = ens("cnn_preds/s9991_sfimg_s*_preds.npz")
-    x, _ = ens("cnn_preds/s9991_x_s*_preds.npz")
+    r, nm = ens("cnn_preds/fix_phys_b3000_sfimg_s*_preds.npz")
+    x, _ = ens("cnn_preds/fix_x_s*_preds.npz")
     both = sorted(set(r) & set(x))
     fig, ax = plt.subplots(figsize=(COL, COL * 0.9))
     lmv = [wl.loc[k, "log_m500c"] if k in wl.index else np.nan for k in both]
@@ -726,7 +728,7 @@ def obs_gallery():
     the same 1 Mpc (the X-ray grid is fixed in physical units)."""
     from astropy.cosmology import Planck15
     from build_xray_realistic import BLOCK, GRID
-    with h5py.File(RADIO_INJ) as f:
+    with h5py.File(RADIO_INJ_1MPC) as f:
         rimg = f["obs/images"][:]
         rk = [key(s.decode() if isinstance(s, bytes) else s) for s in f["obs/key"][:]]
         rn = [s.decode() if isinstance(s, bytes) else str(s) for s in f["obs/name"][:]]

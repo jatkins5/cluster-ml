@@ -369,7 +369,9 @@ def build_placed_real(args, rng, src, hid, tsc, bkg):
                 row = next(tx.sample(1, random_state=int(rng.integers(2**31))).itertuples())
             Te, Tl = float(row.t_eq_ks), float(row.t_live_ks)
             if args.fixed_ks:
-                Tl, Te = args.fixed_ks, args.fixed_ks * float(row.eq_over_live)
+                # depth study: fix the Cycle-22-EQUIVALENT exposure (the axis
+                # the depth figure uses); livetime follows the target's ratio
+                Te, Tl = args.fixed_ks, args.fixed_ks / float(row.eq_over_live)
             f_sky = sky_area_factor(z)
             p_src = (Te / T_MOCK_KS * distance_factor(z, z_mock) * args.lx_scale
                      * nh_by_z.get(round(z, 4), 1.0))
