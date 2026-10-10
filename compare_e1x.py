@@ -14,7 +14,12 @@ per-view vector; the ONLY declared configuration switches are
 plus seed and output path. Before scoring it requires, for all runs of all
 arms: every seed present; identical shapes, sample identities and order,
 labels, outer folds and inner-selection halos; the expected manifest
-sha256; pooled training and single-view selection; the start-of-run source
+sha256; the REQUIRED common protocol in every run (review R10: noisy mass
+with --mass-seed 0, placement redshift, global columns exactly
+log_m500_noisy, z_placement; inner checkpoint selection; pooled training,
+single-view selection; the five view columns; hashes for exactly the
+dataset, catalogue, weak-lensing masses and optical features), so a control
+dropped consistently from every arm is rejected, not merely agreed upon; the start-of-run source
 AND input-file hashes (dataset, catalogue, masses, optical features)
 identical across runs and unchanged during each run; the saved seed equal
 to the filename's; identical global-scalar column order and raw values
@@ -50,6 +55,12 @@ ARMS = {  # name: (file pattern, no_image, view_mask config string)
 CONTRASTS = [("PRIMARY", "xctrlopt", "xctrl", "structure beyond X-ray + controls"),
              ("secondary", "ctrlopt", "ctrl", "structure beyond controls, no image"),
              ("secondary", "xctrl", "ctrl", "X-ray image beyond controls")]
+# review R10: the common protocol itself, not only agreement with run 0
+REQUIRED_CFG = dict(mass=True, mass_noise=True, mass_seed=0, redshift_scalar=True,
+                    select="inner", train_view="pooled", select_view="single",
+                    view_cols=",".join(VIEW_COLS))
+REQUIRED_GLOBAL = ["log_m500_noisy", "z_placement"]
+REQUIRED_INPUTS = {"dataset", "catalog", "wl_masses", "view_scalars"}
 SWITCHES = ("no_image", "view_mask")
 FREE = ("seed", "out_prefix")
 EQUAL_ARRAYS = ["global_scalar_raw", "view_scalar_raw", "fold_scalar_mu", "fold_scalar_sd",
@@ -120,11 +131,17 @@ def check(runs, expect_manifest, arms=ARMS):
                                  f"{prov.get('inputs_sha256')}")
             if "view_scalars" not in prov["inputs_sha256"]:
                 raise SystemExit(f"{tag}: optical feature file not hashed")
+            for k, v in REQUIRED_CFG.items():
+                if cfg.get(k) != v:
+                    raise SystemExit(f"{tag}: protocol requires {k}={v!r}, run has {cfg.get(k)!r}")
+            if list(d["global_cols"]) != REQUIRED_GLOBAL or int(d["n_scalar"]) != 2:
+                raise SystemExit(f"{tag}: global controls {list(d['global_cols'])} "
+                                 f"(n_scalar {int(d['n_scalar'])}) != required {REQUIRED_GLOBAL}")
+            if set(prov.get("inputs_sha256") or {}) != REQUIRED_INPUTS:
+                raise SystemExit(f"{tag}: hashed inputs {sorted(prov.get('inputs_sha256') or {})} "
+                                 f"!= required {sorted(REQUIRED_INPUTS)}")
             if int(cfg["seed"]) != s:
                 raise SystemExit(f"{tag}: file holds a run with seed {cfg['seed']}")
-            if cfg["train_view"] != "pooled" or cfg["select_view"] != "single":
-                raise SystemExit(f"{tag}: views {cfg['train_view']}/{cfg['select_view']} "
-                                 f"!= pooled/single")
             if bool(cfg["no_image"]) != no_image or cfg["view_mask"] != mask:
                 raise SystemExit(f"{tag}: switches no_image={cfg['no_image']} "
                                  f"view_mask={cfg['view_mask']!r} != declared "
