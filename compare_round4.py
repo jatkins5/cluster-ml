@@ -2,10 +2,12 @@
 
 0. Alignment: for every configuration, halo ids, snapshots, labels and
    saved outer folds must be identical across seeds before averaging.
-1. Image beyond mass, MATCHED: mass-only vs image+mass on identical halos,
-   folds, seeds and the same fixed blurred-mass measurement (--mass-seed 0).
-2. Joint vs X-ray on MATCHED placements (1 Mpc joint and X-ray-only both use
-   xray_fix_s9991.h5), single-view and pooled-view.
+1. Image beyond mass: mass-only vs image+mass on the same halos, seeds and
+   fixed blurred-mass measurement (--mass-seed 0). Reported as "matched"
+   only if every run of both arms used one fold partition, otherwise as
+   DESCRIPTIVE (the round-4 runs predate the persisted fold manifest).
+2. Joint vs X-ray on the same placements (1 Mpc joint and X-ray-only both
+   use xray_fix_s9991.h5), single-view and pooled-view; same labelling.
 3. View penalty at EQUAL ensemble size: pooled-view and single-view both as
    5-seed ensembles (and both as single models).
 Uncertainty: paired halo bootstrap, resampling whole z=0 clusters (all their
@@ -21,11 +23,12 @@ SEEDS = range(42, 47)
 rng = np.random.default_rng(0)
 NB = 4000
 PARTS = {}
+PRED_DIR = os.environ.get("PRED_DIR", "cnn_preds")
 
 
 def load(pat):
-    ds = {s: np.load(f"cnn_preds/{pat.format(s)}", allow_pickle=True)
-          for s in SEEDS if os.path.exists(f"cnn_preds/{pat.format(s)}")}
+    ds = {s: np.load(f"{PRED_DIR}/{pat.format(s)}", allow_pickle=True)
+          for s in SEEDS if os.path.exists(f"{PRED_DIR}/{pat.format(s)}")}
     if sorted(ds) != list(SEEDS):
         raise SystemExit(f"{pat}: expected seeds {list(SEEDS)}, found {sorted(ds)}")
     d0 = next(iter(ds.values()))
@@ -83,6 +86,11 @@ def r2_ens(Y, preds):
     return r2_score(Y, np.mean(preds, axis=0))
 
 
+def assert_same_mass(inputs):
+    if not all(np.array_equal(inputs[0], q) for q in inputs[1:]):
+        raise SystemExit("blurred mass inputs differ between runs: not a matched comparison")
+
+
 def partitions(ds):
     return {d["fold_of"].tobytes() for d in ds.values()}
 
@@ -112,41 +120,45 @@ def paired(lab, a, b, mode):
           f"per-seed single-model B-A {np.mean(sd):+.3f} ± {np.std(sd, ddof=1):.3f}  [{status}]")
 
 
-print("======== 0. alignment checks")
-cfg = {
-    "mass only (fixed measurement)": "r4_massonly_s{}_preds.npz",
-    "image+mass 3 Mpc (fixed measurement)": "r4_imgmass_b3000_s{}_preds.npz",
-    "X-ray, real count model": "fix_x_s{}_preds.npz",
-    "joint, physical 1 Mpc": "fix_phys_b1000_joint_s{}_preds.npz",
-    "radio, physical 3 Mpc": "fix_phys_b3000_sfimg_s{}_preds.npz",
-}
-L = {}
-for lab, pat in cfg.items():
-    L[lab] = load(pat)
-    print(f"  {lab:<40} {len(L[lab])} seeds aligned (halo, snap, label); all OOF; "
-          f"{PARTS[pat]} distinct fold partition(s)")
-# the matched arms must also share the fixed mass measurement
-mi = [d["sim_logm_input"] for d in L["mass only (fixed measurement)"].values()] + \
-     [d["sim_logm_input"] for d in L["image+mass 3 Mpc (fixed measurement)"].values()]
-if not all(np.array_equal(mi[0], q) for q in mi[1:]):
-    raise SystemExit("blurred mass inputs differ between runs: not a matched comparison")
-print("  blurred mass inputs identical across all 10 runs")
+def main():
+    print("======== 0. alignment checks")
+    cfg = {
+        "mass only (fixed measurement)": "r4_massonly_s{}_preds.npz",
+        "image+mass 3 Mpc (fixed measurement)": "r4_imgmass_b3000_s{}_preds.npz",
+        "X-ray, real count model": "fix_x_s{}_preds.npz",
+        "joint, physical 1 Mpc": "fix_phys_b1000_joint_s{}_preds.npz",
+        "radio, physical 3 Mpc": "fix_phys_b3000_sfimg_s{}_preds.npz",
+    }
+    L = {}
+    for lab, pat in cfg.items():
+        L[lab] = load(pat)
+        print(f"  {lab:<40} {len(L[lab])} seeds aligned (halo, snap, label); all OOF; "
+              f"{PARTS[pat]} distinct fold partition(s)")
+    # the matched arms must also share the fixed mass measurement
+    mi = [d["sim_logm_input"] for d in L["mass only (fixed measurement)"].values()] + \
+         [d["sim_logm_input"] for d in L["image+mass 3 Mpc (fixed measurement)"].values()]
+    assert_same_mass(mi)
+    print("  blurred mass inputs identical across all 10 runs")
 
-print("\n======== 1. image beyond mass (A = mass only, B = image + mass, matched)")
-for mode in ("1view-ens", "pool-ens"):
-    paired("3 Mpc physical radio", L["mass only (fixed measurement)"],
-           L["image+mass 3 Mpc (fixed measurement)"], mode)
+    print("\n======== 1. image beyond mass (A = mass only, B = image + mass)")
+    for mode in ("1view-ens", "pool-ens"):
+        paired("3 Mpc physical radio", L["mass only (fixed measurement)"],
+               L["image+mass 3 Mpc (fixed measurement)"], mode)
 
-print("\n======== 2. joint vs X-ray, matched placements (A = X-ray, B = joint 1 Mpc)")
-for mode in ("1view-ens", "pool-ens"):
-    paired("1 Mpc physical radio + X-ray", L["X-ray, real count model"],
-           L["joint, physical 1 Mpc"], mode)
+    print("\n======== 2. joint vs X-ray, same placements (A = X-ray, B = joint 1 Mpc)")
+    for mode in ("1view-ens", "pool-ens"):
+        paired("1 Mpc physical radio + X-ray", L["X-ray, real count model"],
+               L["joint, physical 1 Mpc"], mode)
 
-print("\n======== 3. view penalty at equal ensemble size")
-for lab in ("radio, physical 3 Mpc", "X-ray, real count model", "joint, physical 1 Mpc"):
-    out = []
-    for mode in ("pool-ens", "1view-ens"):
-        Y, G, p = sample_view(L[lab], mode)
-        out.append((r2_ens(Y, p), np.mean([r2_score(Y, q) for q in p])))
-    print(f"  {lab:<28} pooled-view: 5-model {out[0][0]:.3f}, 1-model {out[0][1]:.3f}  |  "
-          f"single-view: 5-model {out[1][0]:.3f}, 1-model {out[1][1]:.3f}")
+    print("\n======== 3. view penalty at equal ensemble size")
+    for lab in ("radio, physical 3 Mpc", "X-ray, real count model", "joint, physical 1 Mpc"):
+        out = []
+        for mode in ("pool-ens", "1view-ens"):
+            Y, G, p = sample_view(L[lab], mode)
+            out.append((r2_ens(Y, p), np.mean([r2_score(Y, q) for q in p])))
+        print(f"  {lab:<28} pooled-view: 5-model {out[0][0]:.3f}, 1-model {out[0][1]:.3f}  |  "
+              f"single-view: 5-model {out[1][0]:.3f}, 1-model {out[1][1]:.3f}")
+
+
+if __name__ == "__main__":
+    main()

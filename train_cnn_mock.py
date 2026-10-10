@@ -49,20 +49,74 @@ def _source_rev():
 SOURCE_REV = _source_rev()
 
 
-class MockDataset(Dataset):
-    """One item per (cluster, realization); each carries its 3 projections."""
+def provenance(args):
+    """JSON: git HEAD, porcelain status of the source files that define a
+    result, their sha256, the full configuration, and the fold manifest's
+    sha256 (review R5: a mutable path or an unstaged-only check is not
+    enough)."""
+    import hashlib
+    import json
+    import os
+    import subprocess
+    here = os.path.dirname(os.path.abspath(__file__))
+    files = ["train_cnn_mock.py", "train_cnn_pooled.py", "forward_model_lotss.py"]
+    sha = lambda p: hashlib.sha256(open(p, "rb").read()).hexdigest()
+    try:
+        status = subprocess.run(["git", "status", "--porcelain", "--"] + files, cwd=here,
+                                capture_output=True, text=True).stdout
+    except Exception:
+        status = "unknown"
+    return json.dumps(dict(
+        head=SOURCE_REV.split("+")[0], status=status,
+        sha256={f: sha(os.path.join(here, f)) for f in files},
+        config=vars(args),
+        manifest_sha256=sha(args.fold_manifest) if args.fold_manifest else None))
 
-    def __init__(self, images, labels, scalars=None, train=False, xray=None):
+
+class MockDataset(Dataset):
+    """One item per (cluster, realization); each carries its 3 projections.
+
+    view="single" (review E0) matches the real-data observation, one
+    projection:
+      - training: each item yields ONE randomly chosen projection with ONE
+        random rotation/flip, as a single view slot (the same projection and
+        transform for radio and X-ray in the joint model). The number of
+        items, hence optimiser updates per epoch, equals the pooled arm's.
+      - evaluation: the dataset is expanded to every (item, projection)
+        pair, each a single-slot observation, in a fixed order, so selection
+        scores individual observations rather than averaged views.
+    """
+
+    def __init__(self, images, labels, scalars=None, train=False, xray=None,
+                 view="pooled"):
         self.images = images          # (M, 3, H, W)
         self.labels = labels
         self.scalars = scalars        # (M, n_scalar) or None
         self.xray = xray              # (M, 3, H, W) or None: joint model
         self.train = train
+        self.view = view
+        self.P = images.shape[1]
+        self.expand = (view == "single" and not train)
 
     def __len__(self):
-        return len(self.images)
+        return len(self.images) * (self.P if self.expand else 1)
 
     def __getitem__(self, i):
+        if self.view == "single":
+            if self.expand:
+                i, p = divmod(i, self.P)
+                k = 0
+            else:
+                p, k = np.random.randint(self.P), np.random.randint(8)
+            imgs = augment(self.images[i, p], k)[None]
+            xr = (None if self.xray is None
+                  else augment(self.xray[i, p], k)[None])
+            s = (torch.zeros(0) if self.scalars is None
+                 else torch.tensor(self.scalars[i], dtype=torch.float32))
+            xt = (torch.zeros(0) if xr is None
+                  else torch.tensor(xr[:, None], dtype=torch.float32))
+            return (torch.tensor(imgs[:, None], dtype=torch.float32), xt, s,
+                    torch.tensor(self.labels[i], dtype=torch.float32))
         imgs = self.images[i].copy()
         xr = None if self.xray is None else self.xray[i].copy()
         if self.train:
@@ -82,7 +136,8 @@ class MockDataset(Dataset):
 
 
 def run_fold(tr_x, tr_y, sel_x, sel_y, epochs, batch_size, device, delta,
-             tr_s=None, sel_s=None, n_scalar=0, tr_xr=None, sel_xr=None):
+             tr_s=None, sel_s=None, n_scalar=0, tr_xr=None, sel_xr=None,
+             train_view="pooled", select_view="pooled"):
     """Train one fold; pick the checkpoint on `sel`, never on the outer fold.
 
     `sel` is a held-out slice of this fold's *training* clusters. Selecting
@@ -104,12 +159,18 @@ def run_fold(tr_x, tr_y, sel_x, sel_y, epochs, batch_size, device, delta,
     opt = torch.optim.AdamW(model.parameters(), lr=3e-4, weight_decay=1e-3)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=epochs)
     crit = nn.HuberLoss(delta=delta)
-    tl = DataLoader(MockDataset(tr_x, tr_y, tr_s, train=True, xray=tr_xr),
+    tl = DataLoader(MockDataset(tr_x, tr_y, tr_s, train=True, xray=tr_xr,
+                                view=train_view),
                     batch_size=batch_size,
                     shuffle=True, num_workers=2, drop_last=True)
     sl = (None if sel_x is None
-          else DataLoader(MockDataset(sel_x, sel_y, sel_s, xray=sel_xr),
+          else DataLoader(MockDataset(sel_x, sel_y, sel_s, xray=sel_xr,
+                                      view=select_view),
                           batch_size=batch_size))
+    # selection target in the order the selection dataset yields it
+    sel_target = (None if sel_x is None else
+                  np.repeat(sel_y, sel_x.shape[1]) if select_view == "single"
+                  else sel_y)
     best, best_state, best_ep = -np.inf, None, epochs
     for ep in range(epochs):
         model.train()
@@ -131,7 +192,7 @@ def run_fold(tr_x, tr_y, sel_x, sel_y, epochs, batch_size, device, delta,
                 sc = sc.to(device) if n_scalar else None
                 xr = xr.to(device) if joint else None
                 preds.append(fwd(imgs.to(device), xr, sc).cpu().numpy())
-        r2 = r2_score(sel_y, np.concatenate(preds))
+        r2 = r2_score(sel_target, np.concatenate(preds))
         if r2 > best:
             best, best_ep = r2, ep + 1
             best_state = {k: v.detach().clone()
@@ -210,6 +271,12 @@ def main():
                          "mass does not already explain (checklist B2).")
     ap.add_argument("--wl-masses", default="lovoccs_wl_masses.csv")
     ap.add_argument("--catalog", default="Radio_Data/TNG-Cluster_Catalog.hdf5")
+    ap.add_argument("--train-view", choices=["pooled", "single"], default="pooled",
+                    help="review E0: 'single' trains on one projection per item "
+                         "(one slot, one transform), as real data are observed")
+    ap.add_argument("--select-view", choices=["pooled", "single"], default="pooled",
+                    help="checkpoint selection on pooled items or on individual "
+                         "single-view observations (E0 uses single in both arms)")
     ap.add_argument("--fold-manifest", default=None,
                     help="npz from make_fold_manifest.py: fixed parent-halo outer "
                          "folds and inner-selection halos shared across arms")
@@ -337,12 +404,9 @@ def main():
     sim_s = obs_s = None
     n_scalar = 0
     rng = np.random.default_rng(args.seed)
-    # Review round 3: the simulated mass MEASUREMENT must not change with the
-    # training seed -- a real target has one measured mass shared by every
-    # ensemble member. --mass-seed fixes the measurement draw independently
-    # of model initialisation (legacy behaviour when unset).
-    mrng = (np.random.default_rng(args.mass_seed) if args.mass_seed is not None
-            else rng)
+    # Simulated mass measurements are drawn per object below, keyed by
+    # (--mass-seed, parent halo, snapshot): independent of the training seed.
+
     if args.mass:
         n_scalar = 1
         sim_logm = logm.copy()
@@ -369,8 +433,17 @@ def main():
         if args.mass_noise:
             # One draw per cluster, fixed for the run: the point is to blur
             # the mass the model is given, not to augment it every epoch.
-            sig = mrng.choice(err_dex, size=N)
-            sim_logm = sim_logm + mrng.normal(0.0, sig)
+            # Keyed by (measurement seed, parent halo, snapshot, measurement
+            # 0), so a retained object's measurement -- error scale included
+            # -- does not change with row order or subsetting (review R5).
+            sig = np.empty(N)
+            eps = np.empty(N)
+            for i_ in range(N):
+                r_ = np.random.default_rng([args.mass_seed, int(group_id[i_]),
+                                            int(snap[i_]), 0])
+                sig[i_] = r_.choice(err_dex)
+                eps[i_] = r_.normal(0.0, sig[i_])
+            sim_logm = sim_logm + eps
             print(f"  training masses blurred by {sig.mean():.3f} dex "
                   f"on average")
         sim_s = np.repeat(sim_logm, R)[:, None].astype(np.float32)
@@ -388,6 +461,7 @@ def main():
     # equal-size held-out ensembles can be formed across seeds (group_folds
     # folds do not depend on the seed).
     oof_single = np.full((N * R, P), np.nan, dtype=np.float32)
+    sel_groups = []
     fold_of = np.full(N * R, -1, dtype=np.int16)
     obs_preds = []
     manifest = None
@@ -420,6 +494,9 @@ def main():
             fit, sel = tr[rel_fit], tr[rel_sel]
         else:
             fit, sel = tr, None
+        if len(fit) == 0 or len(va) == 0 or (args.select == "inner" and len(sel) == 0):
+            raise SystemExit(f"fold {k}: empty fit/selection/test partition")
+        sel_groups.append(np.unique(groups[sel]) if sel is not None else np.zeros(0))
         print(f"  fold {k}/{args.folds}: train {len(fit)}, "
               f"sel {0 if sel is None else len(sel)}, val {len(va)}")
         # Standardize the scalar on the training fold only, and put the real
@@ -437,7 +514,8 @@ def main():
             None if sel is None else y[sel], args.epochs, args.batch_size,
             device, args.huber_delta, tr_s=f_s, sel_s=s_s, n_scalar=n_scalar,
             tr_xr=None if xr_all is None else xr_all[fit],
-            sel_xr=None if (xr_all is None or sel is None) else xr_all[sel])
+            sel_xr=None if (xr_all is None or sel is None) else xr_all[sel],
+            train_view=args.train_view, select_view=args.select_view)
         oof[va] = predict(model, x[va], device, scalars=v_s,
                           xray=None if xr_all is None else xr_all[va])
         fold_of[va] = k - 1
@@ -510,6 +588,13 @@ def main():
              mass=args.mass, no_image=args.no_image,
              mass_noise=args.mass_noise, mass_seed=-1 if args.mass_seed is None else args.mass_seed,
              fold_manifest=str(args.fold_manifest or ""), source_rev=SOURCE_REV,
+             provenance=provenance(args),
+             sample_halo=np.repeat(halo, R), sample_group=np.repeat(group_id, R),
+             sample_snap=np.repeat(snap, R), sample_realization=np.tile(np.arange(R), N),
+             sel_groups_flat=np.concatenate(sel_groups) if sel_groups else np.zeros(0),
+             sel_groups_fold=np.concatenate([np.full(len(g), k) for k, g in
+                                             enumerate(sel_groups)]) if sel_groups else np.zeros(0),
+             train_view=args.train_view, select_view=args.select_view,
              sim_logm_input=(sim_s[::R, 0] if sim_s is not None else np.zeros(0)),
              obs_logm=(obs_s[:, 0] if obs_s is not None else np.zeros(0)),
              sim_logm=logm)
