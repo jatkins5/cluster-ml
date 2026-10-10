@@ -12,10 +12,11 @@
   \item Forward modelling to LOFAR (field injection, flux-conserving,
         3\,Mpc box) and Chandra (real count model, backgrounds, redshift
         placement), training on two epochs ($z = 0$ and 0.1). Per single
-        real-like observation: X-ray $R^2 = 0.41$, radio 0.20; the radio
-        image adds $\sim$0.1 beyond a noisy mass measurement; adding radio to
-        X-ray shows no demonstrated gain. Correcting the radio forward model
-        removed most of the radio skill reported earlier.
+        real-like observation: X-ray $R^2 = 0.41$, radio 0.20; in an
+        exploratory comparison (fold partitions not matched) the radio image
+        adds $\sim$0.1 beyond a noisy mass measurement; adding radio to X-ray
+        shows no demonstrated gain. Replacing the legacy forward model
+        substantially reduces radio predictive performance.
   \item Applied to LoVoCCS (26 radio, 15 X-ray clusters): radio and X-ray
         rank the clusters consistently ($\rho = 0.61$, $n = 15$) but differ
         in absolute age by $\sim$0.4\,Gyr; no ground truth, so framed as a

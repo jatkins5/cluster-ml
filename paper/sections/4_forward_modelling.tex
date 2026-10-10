@@ -117,10 +117,15 @@
   seeds, snapshot 99): every mock placed at a target redshift with sky and
   particle backgrounds, the $L_X$ and absorption corrections, and the same
   Cycle-22-equivalent exposure throughout, with the real count model.
-  Skill rises from $R^2 \approx 0.35$ at 5--20\,ks to 0.41 at 50\,ks,
-  0.43 at 150\,ks and 0.50 at 500\,ks, without saturating in this range.
+  Skill rises from $R^2 = 0.31$ at 5\,ks to 0.37 at 20\,ks and 0.45 at
+  50\,ks, then flattens (0.48 at 150\,ks, 0.50 at 500\,ks).
   Ticks: Cycle-22-equivalent exposures of the 15 real targets;
   the band is the model trained with each mock at its matching target's
-  real exposure ($0.375 \pm 0.002$).}
+  real exposure ($0.416 \pm 0.021$). Estimator: per-seed cluster-level $R^2$
+  (projections pooled, realizations averaged), trained and scored on
+  snapshot 99 only -- not the single-observation, 5-model, snapshot
+  99 + 91 estimator of Table~\ref{tab:realistic}. Targets, backgrounds and
+  the particle-subtraction error draw are identical across depths; the
+  error's size scales with livetime; only photon sampling differs.}
   \label{fig:xray_depth}
 \end{figure}
