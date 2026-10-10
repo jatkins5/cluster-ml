@@ -137,6 +137,8 @@ def features_one(dpos, mr, gr, r500, xc):
         f["reason"] = "fewer than two members within 0.5 r500"
     if inner.sum() >= 3 and inr.sum() >= 3:
         f["asym"] = np.hypot(*(dpos[inner].mean(axis=0) - dpos[inr].mean(axis=0))) / r500
+    elif not f["reason"]:
+        f["reason"] = "fewer than three members for asymmetry"
     members = np.column_stack([mr[inr], gr[inr], R[inr]])
     return f, members
 

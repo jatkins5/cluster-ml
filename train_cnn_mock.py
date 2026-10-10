@@ -79,6 +79,34 @@ def provenance(args):
         manifest_sha256=sha(args.fold_manifest) if args.fold_manifest else None))
 
 
+class ViewScalarCNN(nn.Module):
+    """PooledCNN with PER-VIEW scalars (review R8, X-ray + optical structure).
+
+    Optical features differ by projection, so each projection's embedding is
+    joined with that projection's own scalar vector and passed through a
+    shared fusion layer BEFORE the views are mean-pooled; per-observation
+    global scalars (noisy mass, placement redshift) join after pooling, as in
+    PooledCNN. A single-view observation therefore only ever sees its own
+    image and its own view scalars."""
+
+    def __init__(self, n_view, n_global=0, embed_dim=256):
+        super().__init__()
+        base = PooledCNN(embed_dim=embed_dim, n_scalar=n_global)
+        self.encoder, self.pool, self.head = base.encoder, base.pool, base.head
+        self.n_scalar = n_global
+        self.fuse = nn.Sequential(nn.Linear(embed_dim + n_view, embed_dim),
+                                  nn.ReLU(inplace=True))
+
+    def forward(self, x, vs, s=None):
+        B, P = x.shape[:2]
+        z = self.pool(self.encoder(x.reshape(B * P, *x.shape[2:]))).flatten(1)
+        z = self.fuse(torch.cat([z, vs.reshape(B * P, -1)], dim=1))
+        z = z.reshape(B, P, -1).mean(dim=1)
+        if self.n_scalar:
+            z = torch.cat([z, s], dim=1)
+        return self.head(z).squeeze(1)
+
+
 class MockDataset(Dataset):
     """One item per (cluster, realization); each carries its 3 projections.
 
@@ -94,7 +122,8 @@ class MockDataset(Dataset):
     """
 
     def __init__(self, images, labels, scalars=None, train=False, xray=None,
-                 view="pooled"):
+                 view="pooled", view_scalars=None):
+        self.view_scalars = view_scalars   # (M, 3, n_view) or None
         self.images = images          # (M, 3, H, W)
         self.labels = labels
         self.scalars = scalars        # (M, n_scalar) or None
@@ -121,7 +150,9 @@ class MockDataset(Dataset):
                  else torch.tensor(self.scalars[i], dtype=torch.float32))
             xt = (torch.zeros(0) if xr is None
                   else torch.tensor(xr[:, None], dtype=torch.float32))
-            return (torch.tensor(imgs[:, None], dtype=torch.float32), xt, s,
+            vs = (torch.zeros(0) if self.view_scalars is None   # this view's only
+                  else torch.tensor(self.view_scalars[i, p][None], dtype=torch.float32))
+            return (torch.tensor(imgs[:, None], dtype=torch.float32), xt, s, vs,
                     torch.tensor(self.labels[i], dtype=torch.float32))
         imgs = self.images[i].copy()
         xr = None if self.xray is None else self.xray[i].copy()
@@ -137,13 +168,17 @@ class MockDataset(Dataset):
              else torch.tensor(self.scalars[i], dtype=torch.float32))
         xt = (torch.zeros(0) if xr is None
               else torch.tensor(xr[:, None], dtype=torch.float32))
-        return (torch.tensor(imgs[:, None], dtype=torch.float32), xt, s,
+        # view scalars are invariant to the rotations/flips applied above
+        vs = (torch.zeros(0) if self.view_scalars is None
+              else torch.tensor(self.view_scalars[i], dtype=torch.float32))
+        return (torch.tensor(imgs[:, None], dtype=torch.float32), xt, s, vs,
                 torch.tensor(self.labels[i], dtype=torch.float32))
 
 
 def run_fold(tr_x, tr_y, sel_x, sel_y, epochs, batch_size, device, delta,
              tr_s=None, sel_s=None, n_scalar=0, tr_xr=None, sel_xr=None,
-             train_view="pooled", select_view="pooled"):
+             train_view="pooled", select_view="pooled", tr_vs=None, sel_vs=None,
+             n_view=0):
     """Train one fold; pick the checkpoint on `sel`, never on the outer fold.
 
     `sel` is a held-out slice of this fold's *training* clusters. Selecting
@@ -158,20 +193,24 @@ def run_fold(tr_x, tr_y, sel_x, sel_y, epochs, batch_size, device, delta,
     joint = tr_xr is not None
     if joint and n_scalar:
         raise ValueError("joint radio+X-ray model does not take scalars")
+    if joint and n_view:
+        raise ValueError("per-view scalars are not implemented for the joint model")
     model = (JointPooledCNN() if joint
+             else ViewScalarCNN(n_view, n_scalar) if n_view
              else PooledCNN(n_scalar=n_scalar)).to(device)
-    fwd = (lambda im, xr, sc: model(im, xr)) if joint else \
-          (lambda im, xr, sc: model(im, sc))
+    fwd = ((lambda im, xr, sc, vs: model(im, xr)) if joint else
+           (lambda im, xr, sc, vs: model(im, vs, sc)) if n_view else
+           (lambda im, xr, sc, vs: model(im, sc)))
     opt = torch.optim.AdamW(model.parameters(), lr=3e-4, weight_decay=1e-3)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=epochs)
     crit = nn.HuberLoss(delta=delta)
     tl = DataLoader(MockDataset(tr_x, tr_y, tr_s, train=True, xray=tr_xr,
-                                view=train_view),
+                                view=train_view, view_scalars=tr_vs),
                     batch_size=batch_size,
                     shuffle=True, num_workers=2, drop_last=True)
     sl = (None if sel_x is None
           else DataLoader(MockDataset(sel_x, sel_y, sel_s, xray=sel_xr,
-                                      view=select_view),
+                                      view=select_view, view_scalars=sel_vs),
                           batch_size=batch_size))
     # selection target in the order the selection dataset yields it
     sel_target = (None if sel_x is None else
@@ -180,12 +219,13 @@ def run_fold(tr_x, tr_y, sel_x, sel_y, epochs, batch_size, device, delta,
     best, best_state, best_ep = -np.inf, None, epochs
     for ep in range(epochs):
         model.train()
-        for imgs, xr, sc, y in tl:
+        for imgs, xr, sc, vs, y in tl:
             imgs, y = imgs.to(device), y.to(device)
             sc = sc.to(device) if n_scalar else None
             xr = xr.to(device) if joint else None
+            vs = vs.to(device) if n_view else None
             opt.zero_grad()
-            loss = crit(fwd(imgs, xr, sc), y)
+            loss = crit(fwd(imgs, xr, sc, vs), y)
             loss.backward()
             opt.step()
         sched.step()
@@ -194,10 +234,11 @@ def run_fold(tr_x, tr_y, sel_x, sel_y, epochs, batch_size, device, delta,
         model.eval()
         preds = []
         with torch.no_grad():
-            for imgs, xr, sc, _ in sl:
+            for imgs, xr, sc, vs, _ in sl:
                 sc = sc.to(device) if n_scalar else None
                 xr = xr.to(device) if joint else None
-                preds.append(fwd(imgs.to(device), xr, sc).cpu().numpy())
+                vs = vs.to(device) if n_view else None
+                preds.append(fwd(imgs.to(device), xr, sc, vs).cpu().numpy())
         r2 = r2_score(sel_target, np.concatenate(preds))
         if r2 > best:
             best, best_ep = r2, ep + 1
@@ -235,7 +276,8 @@ def group_folds(groups, n_splits):
 
 
 @torch.no_grad()
-def predict(model, x, device, scalars=None, batch_size=32, xray=None):
+def predict(model, x, device, scalars=None, batch_size=32, xray=None,
+            view_scalars=None):
     if len(x) == 0:
         return np.zeros(0, dtype=np.float32)
     model.eval()
@@ -246,6 +288,11 @@ def predict(model, x, device, scalars=None, batch_size=32, xray=None):
         s = (None if scalars is None else
              torch.tensor(scalars[i:i + batch_size],
                           dtype=torch.float32).to(device))
+        if view_scalars is not None:
+            vs = torch.tensor(view_scalars[i:i + batch_size],
+                              dtype=torch.float32).to(device)
+            out.append(model(b, vs, s).cpu().numpy())
+            continue
         if xray is not None:
             xb = torch.tensor(xray[i:i + batch_size][:, :, None],
                               dtype=torch.float32).to(device)
@@ -277,6 +324,13 @@ def main():
                          "mass does not already explain (checklist B2).")
     ap.add_argument("--wl-masses", default="lovoccs_wl_masses.csv")
     ap.add_argument("--catalog", default="Radio_Data/TNG-Cluster_Catalog.hdf5")
+    ap.add_argument("--view-scalars", default=None,
+                    help="CSV of per-(group_id, snap, proj) features to fuse with "
+                         "each projection's embedding before pooling (review R8)")
+    ap.add_argument("--view-cols", default="gap12,off_bcg_x,off_bcg_gal,asym",
+                    help="comma-separated columns of --view-scalars")
+    ap.add_argument("--redshift-scalar", action="store_true",
+                    help="add each realization's placement redshift as a global scalar")
     ap.add_argument("--train-view", choices=["pooled", "single"], default="pooled",
                     help="review E0: 'single' trains on one projection per item "
                          "(one slot, one transform), as real data are observed")
@@ -458,6 +512,43 @@ def main():
         sim_s = np.repeat(sim_logm, R)[:, None].astype(np.float32)
         obs_s = obs_logm[:, None].astype(np.float32)
 
+    # ---- placement redshift as a global scalar (review R8) ----
+    if args.redshift_scalar:
+        with h5py.File(args.dataset, "r") as f:
+            zr = f["mock/z"][:].astype(np.float32)                # (N, R)
+        zcol = zr.reshape(N * R, 1)
+        sim_s = zcol if sim_s is None else np.hstack([sim_s, zcol])
+        oz = np.asarray(obs_z, dtype=np.float32)[:, None]
+        obs_s = oz if obs_s is None else np.hstack([obs_s, oz])
+        n_scalar += 1
+        print("  global scalar: placement redshift of each realization")
+
+    # ---- per-view scalars, e.g. optical structure (review R8) ----
+    vsc_all, n_view, view_cols = None, 0, []
+    if args.view_scalars:
+        if xr_all is not None:
+            raise SystemExit("--view-scalars is not implemented with --xray-dataset")
+        view_cols = args.view_cols.split(",")
+        vt = pd.read_csv(args.view_scalars)
+        keys = list(zip(vt.group_id.astype(int), vt.snap.astype(int), vt.proj.astype(int)))
+        if len(set(keys)) != len(keys):
+            raise SystemExit(f"{args.view_scalars}: duplicate (parent, snapshot, projection) keys")
+        vmap = dict(zip(keys, vt[view_cols].to_numpy(float)))
+        vs_cl = np.empty((N, P, len(view_cols)))
+        for i in range(N):
+            for pj in range(P):
+                kk = (int(group_id[i]), int(snap[i]), pj)
+                if kk not in vmap:
+                    raise SystemExit(f"no view scalars for {kk}")
+                vs_cl[i, pj] = vmap[kk]
+        vsc_all = np.repeat(vs_cl, R, axis=0)                     # row i*R + r
+        n_view = len(view_cols)
+        # real targets have no matching (idealised) view scalars
+        obs_x, obs_name, obs_z, obs_key = obs_x[:0], [], obs_z[:0], []
+        obs_s = None if obs_s is None else obs_s[:0]
+        print(f"  per-view scalars {view_cols} from {args.view_scalars}; "
+              f"real-target predictions disabled (no matching features)")
+
     if args.no_image:
         x[...] = 0.0
         obs_x = np.zeros_like(obs_x)
@@ -512,27 +603,45 @@ def main():
         # masses on that same scale -- a shift between the two would show up
         # as a systematic offset in the real predictions.
         if n_scalar:
-            mu, sd = sim_s[fit].mean(), sim_s[fit].std() + 1e-8
+            # per-column mean/std on the fitting halos (identical to the old
+            # single-scalar case when there is one column)
+            mu, sd = sim_s[fit].mean(axis=0), sim_s[fit].std(axis=0) + 1e-8
             f_s, v_s = (sim_s[fit] - mu) / sd, (sim_s[va] - mu) / sd
             s_s = None if sel is None else (sim_s[sel] - mu) / sd
             o_s = (obs_s - mu) / sd
         else:
             f_s = v_s = s_s = o_s = None
+        vsn = None
+        if n_view:
+            # per-feature median imputation and mean/std, fitting halos only
+            fv = vsc_all[fit].reshape(-1, n_view)
+            med = np.nanmedian(fv, axis=0)
+            vimp = np.where(np.isnan(vsc_all), med, vsc_all)
+            vmu = vimp[fit].reshape(-1, n_view).mean(axis=0)
+            vsd = vimp[fit].reshape(-1, n_view).std(axis=0) + 1e-8
+            vsn = ((vimp - vmu) / vsd).astype(np.float32)
         model, best, best_ep = run_fold(
             x[fit], y[fit], None if sel is None else x[sel],
             None if sel is None else y[sel], args.epochs, args.batch_size,
             device, args.huber_delta, tr_s=f_s, sel_s=s_s, n_scalar=n_scalar,
             tr_xr=None if xr_all is None else xr_all[fit],
             sel_xr=None if (xr_all is None or sel is None) else xr_all[sel],
-            train_view=args.train_view, select_view=args.select_view)
+            train_view=args.train_view, select_view=args.select_view,
+            tr_vs=None if vsn is None else vsn[fit],
+            sel_vs=None if (vsn is None or sel is None) else vsn[sel], n_view=n_view)
         oof[va] = predict(model, x[va], device, scalars=v_s,
-                          xray=None if xr_all is None else xr_all[va])
+                          xray=None if xr_all is None else xr_all[va],
+                          view_scalars=None if vsn is None else vsn[va])
         fold_of[va] = k - 1
         for pj in range(P):
             xs = np.repeat(x[va][:, pj:pj + 1], P, axis=1)
             xrs = (None if xr_all is None
                    else np.repeat(xr_all[va][:, pj:pj + 1], P, axis=1))
-            oof_single[va, pj] = predict(model, xs, device, scalars=v_s, xray=xrs)
+            # this observation's own view scalars only
+            vss = (None if vsn is None
+                   else np.repeat(vsn[va][:, pj:pj + 1], P, axis=1))
+            oof_single[va, pj] = predict(model, xs, device, scalars=v_s, xray=xrs,
+                                         view_scalars=vss)
         obs_preds.append(predict(model, obs_x, device, scalars=o_s,
                                  xray=obs_xr if xr_all is not None else None))
         print(f"  fold {k}: checkpoint epoch {best_ep}/{args.epochs}, "
@@ -606,6 +715,7 @@ def main():
              sel_groups_fold=np.concatenate([np.full(len(g), k) for k, g in
                                              enumerate(sel_groups)]) if sel_groups else np.zeros(0),
              train_view=args.train_view, select_view=args.select_view,
+             view_cols=np.array(view_cols), n_view=n_view, n_scalar=n_scalar,
              sim_logm_input=(sim_s[::R, 0] if sim_s is not None else np.zeros(0)),
              obs_logm=(obs_s[:, 0] if obs_s is not None else np.zeros(0)),
              sim_logm=logm)
