@@ -42,6 +42,10 @@ plt.rcParams.update({
     "ytick.labelsize": 7, "savefig.bbox": "tight", "savefig.dpi": 200,
 })
 C_SIM, C_OBS = "#3b6ea8", "#c2455d"
+# Realistic inputs (review F1/F5 fixes). Set in one place so every figure
+# uses the same forward-model version.
+XRAY_H5 = "xray_fix.h5"
+RADIO_INJ = "injected_fix_phys_b1000.h5"
 key = lambda s: re.sub(r"[\s_]+", "", str(s)).upper()
 
 
@@ -54,7 +58,7 @@ def save(fig, name):
 
 # ---------------------------------------------------------------- radio gallery
 def radio_gallery():
-    with h5py.File("injected_nh4_144_simflux.h5") as f:
+    with h5py.File(RADIO_INJ) as f:
         mock = f["mock/images"][:, 0, 0]           # realization 0, projection xy
         mh = f["mock/halo_id"][:]
         tsc = f["mock/pseudo_tsc"][:]
@@ -105,7 +109,7 @@ def radio_gallery():
 def radio_mf():
     from minkowski_functionals import binary_mfs
     ks = np.geomspace(1.0, 20.0, 10)
-    with h5py.File("injected_nh4_144_simflux.h5") as f:
+    with h5py.File(RADIO_INJ) as f:
         mock = f["mock/images"][:]
         obs = f["obs/images"][:]
     mock = mock.reshape(-1, *mock.shape[-2:])
@@ -199,7 +203,7 @@ def lx_mass():
 
     # mass-matched X-ray brightness, real vs corrected mocks
     from build_xray_realistic import GRID, aperture_blocks
-    with h5py.File("xray_placed_144.h5") as f:
+    with h5py.File(XRAY_H5) as f:
         a = float(f.attrs["stretch_scale"])
         mimg, mz = f["mock/images"][:], f["mock/z"][:]
         mh = f["mock/halo_id"][:]
@@ -260,8 +264,13 @@ def lx_mass():
 
 # ---------------------------------------------------------------- X-ray gallery
 def xray_gallery():
-    with h5py.File("xray_placed_144.h5") as f:
+    with h5py.File(XRAY_H5) as f:
         mock, mz, tsc = f["mock/images"][:], f["mock/z"][:], f["mock/pseudo_tsc"][:]
+        # review M1: match mocks to a real target by its stored identity
+        # (which fixes both redshift and exposure), not by a redshift window
+        mtgt = (np.vectorize(lambda v: key(v.decode() if isinstance(v, bytes) else v))(
+            f["mock/target"][:]) if "mock/target" in f else None)
+        okey = [key(v.decode() if isinstance(v, bytes) else v) for v in f["obs/key"][:]]
         obs, oz, ot = f["obs/images"][:], f["obs/z"][:], f["obs/exposure_ks"][:]
         on = [s.decode() if isinstance(s, bytes) else str(s) for s in f["obs/name"][:]]
     targets = [t for t in ["A401", "A1650", "A119", "A2443", "A1307"] if t in on]
@@ -278,7 +287,8 @@ def xray_gallery():
         j = on.index(t)
         ax[r, 0].imshow(obs[j][s], origin="lower", cmap="magma", vmin=0, vmax=vmax)
         ax[r, 0].set_title(f"{t}, z = {oz[j]:.3f}, {ot[j]:.0f} ks", fontsize=6.5)
-        idx = np.argwhere(np.abs(mz - oz[j]) < 0.005)
+        idx = (np.argwhere(mtgt == okey[j]) if mtgt is not None
+               else np.argwhere(np.abs(mz - oz[j]) < 0.005))
         for c in (1, 2):
             i, rr_ = idx[rng.integers(len(idx))]
             ax[r, c].imshow(mock[i, rr_, 0][s], origin="lower", cmap="magma",
@@ -580,7 +590,7 @@ def xray_depth():
         print(f"  {k:>6.0f} ks: R2 {np.mean(r):.3f} +- {np.std(r):.3f} ({len(r)} seeds)")
     real = [r2_score(np.load(q)["tsc"], np.load(q)["oof_cluster"])
             for q in glob.glob("cnn_preds/x144_s*_preds.npz")]
-    with h5py.File("xray_placed_144.h5") as f:
+    with h5py.File(XRAY_H5) as f:
         texp = f["obs/exposure_ks"][:]
     fig, ax = plt.subplots(figsize=(COL, COL * 0.75))
     ax.errorbar(ks, mu, yerr=sd, fmt="o-", color=C_SIM, ms=4, capsize=2,
@@ -606,7 +616,7 @@ def pm_relation():
     (all shock cells inside +-4 r500, the quantity radio-relic scaling
     relations use) and the power inside the central Mpc (what the injected
     mocks carry). Same global flux constant for both."""
-    with h5py.File("injected_nh4_144_simflux.h5") as f:
+    with h5py.File(RADIO_INJ) as f:
         lp_c = np.nanmean(f["mock/logp150"][:], axis=(1, 2))
         lm = f["mock/log_m500"][:]
         tsc = f["mock/pseudo_tsc"][:]
@@ -703,12 +713,12 @@ def obs_gallery():
     the same 1 Mpc (the X-ray grid is fixed in physical units)."""
     from astropy.cosmology import Planck15
     from build_xray_realistic import BLOCK, GRID
-    with h5py.File("injected_nh4_144_simflux.h5") as f:
+    with h5py.File(RADIO_INJ) as f:
         rimg = f["obs/images"][:]
         rk = [key(s.decode() if isinstance(s, bytes) else s) for s in f["obs/key"][:]]
         rn = [s.decode() if isinstance(s, bytes) else str(s) for s in f["obs/name"][:]]
         rz = f["obs/z"][:]
-    with h5py.File("xray_placed_144.h5") as f:
+    with h5py.File(XRAY_H5) as f:
         ximg = f["obs/images"][:]
         xk = [key(s.decode() if isinstance(s, bytes) else s) for s in f["obs/key"][:]]
         xt = f["obs/exposure_ks"][:]

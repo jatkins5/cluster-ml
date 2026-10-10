@@ -99,6 +99,8 @@ for B in (2000, 3000):
                      f"b{B}_sfimg_s{{}}_preds.npz")
     compare(f"radio + mass, {B // 1000} Mpc box", "s9991_sfimgmassn_s{}_preds.npz",
             f"b{B}_sfimgmassn_s{{}}_preds.npz")
+    compare(f"joint (X-ray 0.358), {B // 1000} Mpc box", "lxcal_joint_s{}_preds.npz",
+            f"b{B}_joint_lxcal_s{{}}_preds.npz")
     for xlab, xd in (("X-ray 0.278", xold), ("X-ray 0.358", xnew)):
         if img and xd:
             offset(f"{B // 1000} Mpc radio vs {xlab}", img, xd)

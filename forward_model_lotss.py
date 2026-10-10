@@ -106,6 +106,31 @@ def sigma_clipped_rms(img, nsig=3.0, iters=5):
     return x.std()
 
 
+def overlap_matrix(n_in, lo, hi, n_out):
+    """(n_out, n_in) matrix: overlap length of input pixel j ([j, j+1] in
+    pixel-edge units) with output bin i, the bins tiling [lo, hi]."""
+    e = np.linspace(lo, hi, n_out + 1)
+    j = np.arange(n_in)
+    left = np.maximum(e[:-1, None], j[None, :])
+    right = np.minimum(e[1:, None], j[None, :] + 1)
+    return np.clip(right - left, 0.0, None)
+
+
+def rebin_flux(img, half_px, grid=GRID):
+    """Flux-conserving crop + rebin of an INTEGRATED map (each pixel holds a
+    flux, not a surface brightness): the output pixel gets the summed flux of
+    the area it covers, with fractional input pixels split by area, so
+    out.sum() equals the flux inside the box exactly. Review F1: the old path
+    interpolated (zoom) a stretched map, which neither conserves flux nor
+    has the right pixel-area scaling."""
+    H, W = img.shape
+    if half_px < 4 or half_px > H / 2 or half_px > W / 2:
+        return None
+    wy = overlap_matrix(H, H / 2 - half_px, H / 2 + half_px, grid)
+    wx = overlap_matrix(W, W / 2 - half_px, W / 2 + half_px, grid)
+    return wy @ img @ wx.T
+
+
 def crop_resample(img, half_px, grid=GRID):
     c0, c1 = img.shape[0] // 2, img.shape[1] // 2
     half_px = int(round(half_px))

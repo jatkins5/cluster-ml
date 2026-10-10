@@ -31,7 +31,7 @@ from astropy.io import fits
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from forward_model_lotss import (BEAM_FWHM_ARCSEC, GRID, OBS_PIX_ARCSEC,
                                  P150_LOGM_PIVOT, P150_LOGP0, P150_SLOPE,
-                                 crop_resample, flux_from_logp,
+                                 crop_resample, flux_from_logp, rebin_flux,
                                  kpc_per_arcsec, load_obs, mask_compact,
                                  sigma_clipped_rms, sim_logp, total_flux_jy)
 from scipy import ndimage
@@ -57,7 +57,7 @@ def load_backgrounds(field_dir):
 
 def inject(sim_map, sim_px_kpc, log_m500, z, bg, box_kpc, rng,
            scatter=True, mask=True, max_beams=10.0, mask_rng=None,
-           sim_flux_offset=None):
+           sim_flux_offset=None, recipe="physical", control=False):
     """Beam-convolve and flux-anchor the sim map, then add it to real sky.
 
     Two ways to set the total flux. The default anchors it to the observed
@@ -70,19 +70,44 @@ def inject(sim_map, sim_px_kpc, log_m500, z, bg, box_kpc, rng,
     something to test the mocks against.
     """
     half_px = box_kpc / 2.0 / sim_px_kpc
-    cut = crop_resample(sim_map.astype(np.float64), half_px)
-    if cut is None or cut.sum() <= 0:
-        return None
     px_kpc = box_kpc / GRID
-    if sim_flux_offset is None:
-        s_tot = total_flux_jy(log_m500, z, rng if scatter else None)
-        logp = None
-    else:
-        logp = sim_logp(cut, sim_flux_offset)
-        if logp is None:
+    if recipe == "legacy":
+        # pre-review path, kept only to reproduce old files: interpolates the
+        # arcsinh map and takes power from sinh(clip(., 40)) of the result
+        cut = crop_resample(sim_map.astype(np.float64), half_px)
+        if cut is None or cut.sum() <= 0:
             return None
-        s_tot = flux_from_logp(logp, z)
-    cut *= s_tot / cut.sum()                       # Jy per grid pixel
+        if sim_flux_offset is None:
+            s_tot = total_flux_jy(log_m500, z, rng if scatter else None)
+            logp = None
+        else:
+            logp = sim_logp(cut, sim_flux_offset)
+            if logp is None:
+                return None
+            s_tot = flux_from_logp(logp, z)
+    else:
+        # Review F1. The stored map is arcsinh(summed weight per pixel); its
+        # sinh is the linear emission, which is rebinned flux-conservingly so
+        # the box keeps exactly the emission inside it. Power = that sum.
+        lin = np.sinh(sim_map.astype(np.float64))
+        lin_cut = rebin_flux(lin, half_px)
+        if lin_cut is None or lin_cut.sum() <= 0:
+            return None
+        if sim_flux_offset is None:
+            s_tot = total_flux_jy(log_m500, z, rng if scatter else None)
+            logp = None
+        else:
+            logp = float(np.log10(lin_cut.sum())) + sim_flux_offset
+            s_tot = flux_from_logp(logp, z)
+        if recipe == "arcsinh":
+            # phenomenological sensitivity arm: arcsinh-compressed morphology
+            # (area-weighted), but carrying the physical total flux
+            cut = rebin_flux(np.clip(sim_map.astype(np.float64), 0, None), half_px)
+        else:
+            cut = lin_cut
+        if control:
+            s_tot = 0.0                            # background-only control
+    cut = cut * (s_tot / cut.sum())                # Jy per grid pixel
 
     kpas = kpc_per_arcsec(z)
     fwhm_px = BEAM_FWHM_ARCSEC * kpas / px_kpc
@@ -125,6 +150,15 @@ def main():
                          "observed Cuciti P150-M500 relation; 'sim' uses the "
                          "simulation's own predicted power and fixes only "
                          "the overall normalisation from the sample median")
+    ap.add_argument("--recipe", choices=["physical", "arcsinh", "legacy"],
+                    default="physical",
+                    help="physical: linear emission, flux-conserving rebin, "
+                         "power = linear sum in the box, flux constant fixed on "
+                         "total power (review F1). arcsinh: same flux, "
+                         "arcsinh-compressed morphology (labelled sensitivity "
+                         "arm). legacy: the pre-review recipe")
+    ap.add_argument("--control", action="store_true",
+                    help="background-only control: no emission injected")
     ap.add_argument("--sim-offset", type=float, default=None,
                     help="with --flux-mode sim, use this offset [dex] instead "
                          "of fitting it to the sample median (pass the z=0 "
@@ -179,10 +213,16 @@ def main():
             px_kpc_i = 8.0 * r500_kpc[i] / H
             half_px = args.box_kpc / 2.0 / px_kpc_i
             for p in range(P):
-                cut = crop_resample(images[i, p].astype(np.float64), half_px)
-                if cut is None:
-                    continue
-                t = np.sinh(np.clip(cut, 0.0, 40.0)).sum()
+                if args.recipe == "legacy":
+                    cut = crop_resample(images[i, p].astype(np.float64), half_px)
+                    if cut is None:
+                        continue
+                    t = np.sinh(np.clip(cut, 0.0, 40.0)).sum()
+                else:
+                    # Review F1: one constant for every box size, fixed on each
+                    # cluster's TOTAL linear power (whole +-4 r500 map), so a
+                    # smaller box simply carries less of the same emission
+                    t = np.sinh(images[i, p].astype(np.float64)).sum()
                 if np.isfinite(t) and t > 0:
                     raw.append(np.log10(t))
             ref.append(P150_LOGP0 + P150_SLOPE
@@ -214,7 +254,8 @@ def main():
                 got = inject(images[i, p], px_kpc, m500[halo_ids[i]], z, bg,
                              args.box_kpc, rng, mask=True,
                              max_beams=args.mask_max_beams, mask_rng=mask_rng,
-                             sim_flux_offset=sim_offset)
+                             sim_flux_offset=sim_offset, recipe=args.recipe,
+                             control=args.control)
                 if got is None:
                     keep[i] = False
                     continue
@@ -234,6 +275,9 @@ def main():
         f.attrs["realism"] = "injected into real LoTSS DR3 fields"
         f.attrs["n_backgrounds"] = len(bgs)
         f.attrs["flux_mode"] = args.flux_mode
+        f.attrs["recipe"] = args.recipe
+        f.attrs["control"] = bool(args.control)
+        f.attrs["box_kpc"] = args.box_kpc
         f.attrs["snapshot"] = snapshot
         if sim_offset is not None:
             f.attrs["sim_flux_offset_dex"] = sim_offset

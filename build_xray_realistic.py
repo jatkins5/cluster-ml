@@ -252,6 +252,8 @@ def stage_build(args):
     N, P = src.shape[:2]
     R = args.realizations
 
+    if args.z_from and args.count_model == "real":
+        return build_placed_real(args, rng, src, hid, tsc, bkg)
     if args.z_from:
         return build_placed(args, rng, src, hid, tsc, bkg)
 
@@ -291,6 +293,146 @@ def stage_build(args):
         g.attrs["preprocessing"] = "arcsinh(counts per ks per 38x38 block / scale)"
         g.attrs["realism"] = ("Chandra ACIS-I, Poisson-thinned from 2 Ms, "
                               "plus soxs sky background; z fixed at 0.05")
+    print(f"wrote {args.output}: mock {img.shape}")
+
+
+def build_placed_real(args, rng, src, hid, tsc, bkg):
+    """Redshift placement with the real observations' count model (review F5).
+
+    The real images (process_chandra.py) are, per block,
+        R = (C - P_hat) / T_eq + p_mock * f_sky,
+    with C the 0.1-2 keV counts, T_eq the Cycle-22-equivalent exposure the
+    focused photons are normalised by, and P_hat the particle counts
+    estimated from the 9.5-12 keV band over the LIVETIME. So the mocks are
+    generated as
+        C = Bin(src, p_src) + Bin(sky, p_sky) + Bin(part, p_top)
+        p_src = T_eq / 2 Ms * D_L(z_mock)^2/D_L(z)^2 * lx * nh
+        p_sky = T_eq / 2 Ms * f_sky
+        p_top = max(T_live / 2 Ms * f_sky - p_src * f_mock, 0)
+    and processed the same way, with P_hat = (expected particle counts actually
+    present in C) * (1 + eps), eps ~ N(0, 1/sqrt(n_hard)) of the target --
+    one coherent error per realization, as in the real subtraction. Particle
+    photons baked into the 2 Ms mocks are thinned with the source; where that
+    keeps more than T_live implies, the excess cannot be removed. Its
+    expectation is subtracted (so E[R] is right) and its extra Poisson noise
+    is reported against the total, as a bound.
+
+    Each realization takes the exposure of a real ACIS-I target: the one at
+    its redshift if there is one, otherwise a random one. The target is
+    stored (review M1).
+    """
+    import pandas as pd
+    from process_chandra import mock_particle_rate
+    with h5py.File(args.counts_h5, "r") as f:
+        z_mock = float(f.attrs.get("z_mock", Z_MOCK))
+    f_mock = sky_area_factor(z_mock)
+    with h5py.File(args.pbkg_h5, "r") as f:
+        pbkg = f["counts"][:]
+    pbar = pbkg.mean(axis=0).astype(np.float64)          # 2 Ms, z=0.05 block
+    p_mock = mock_particle_rate(args.pbkg_h5)
+    with h5py.File(args.z_from, "r") as f:
+        rz = f["mock/z"][:]
+        rh = f["mock/halo_id"][:]
+        rlogm = f["mock/log_m500"][:] if "mock/log_m500" in f else None
+    pos = {h: i for i, h in enumerate(hid)}
+    order = np.array([pos[h] for h in rh])
+    src, hid, tsc = src[order], hid[order], tsc[order]
+    N, P = src.shape[:2]
+    R = min(args.realizations, rz.shape[1])
+    nh_by_z = {}
+    if args.nh_csv:
+        nh = pd.read_csv(args.nh_csv).dropna(subset=["ratio_kT5"])
+        for z, grp in nh.groupby(nh["z"].round(4)):
+            nh_by_z[z] = float(grp["ratio_kT5"].mean())
+    tx = pd.read_csv(args.exposures_csv)
+    by_z = {}
+    for r in tx.itertuples():
+        by_z.setdefault(round(float(r.z), 4), []).append(r)
+    print(f"mock observed at z = {z_mock:.4f}; {len(tx)} ACIS-I targets: "
+          f"T_eq {tx.t_eq_ks.min():.0f}-{tx.t_eq_ks.max():.0f} ks, "
+          f"T_eq/T_live {tx.eq_over_live.min():.2f}-{tx.eq_over_live.max():.2f}; "
+          f"L_X scale {args.lx_scale}; flat particle add-back {p_mock:.4f}/ks/block")
+
+    rate = np.zeros((N, R, P, GRID, GRID), dtype=np.float64)
+    t_eq = np.zeros((N, R)); t_live = np.zeros((N, R)); z_used = np.zeros((N, R))
+    tgt = np.empty((N, R), dtype=object)
+    matched = capped = 0
+    excess_frac = []
+    for i in range(N):
+        for r in range(R):
+            z = float(rz[i, r])
+            cand = by_z.get(round(z, 4))
+            if cand:
+                matched += 1
+                row = cand[rng.integers(len(cand))]
+            else:
+                row = next(tx.sample(1, random_state=int(rng.integers(2**31))).itertuples())
+            Te, Tl = float(row.t_eq_ks), float(row.t_live_ks)
+            if args.fixed_ks:
+                Tl, Te = args.fixed_ks, args.fixed_ks * float(row.eq_over_live)
+            f_sky = sky_area_factor(z)
+            p_src = (Te / T_MOCK_KS * distance_factor(z, z_mock) * args.lx_scale
+                     * nh_by_z.get(round(z, 4), 1.0))
+            if p_src > 1.0:
+                capped += 1
+                p_src = 1.0
+            p_sky = Te / T_MOCK_KS * f_sky
+            want_part = Tl / T_MOCK_KS * f_sky
+            p_top = max(want_part - p_src * f_mock, 0.0)
+            present = pbar * (p_src * f_mock + p_top)        # expected particles
+            eps = rng.normal(0.0, float(row.particle_frac_err))
+            b = bkg[rng.integers(len(bkg))]
+            pb = pbkg[rng.integers(len(pbkg))]
+            m = aperture_mask(z)
+            for j in range(P):
+                c = (rng.binomial(src[i, j], p_src) + rng.binomial(b, p_sky)
+                     + rng.binomial(pb, p_top))
+                rr = (c - present * (1.0 + eps)) / Te + p_mock * f_sky
+                rate[i, r, j] = np.where(m, rr, 0.0)
+                # per-block bound: variance from over-kept particle photons
+                # as a fraction of the block's total count variance
+                exc = pbar * max(p_src * f_mock - want_part, 0.0)
+                ok = m & (c > 0)
+                if exc.any() and ok.any():
+                    excess_frac.append(exc[ok] / c[ok])
+                else:
+                    excess_frac.append(np.zeros(1))
+            t_eq[i, r], t_live[i, r], z_used[i, r], tgt[i, r] = Te, Tl, z, row.key
+    pos_rate = rate[rate > 0]
+    a = (float(args.stretch_scale) if args.stretch_scale
+         else float(np.median(pos_rate)))
+    img = np.arcsinh(rate / a).astype(np.float32)
+    ef = np.concatenate(excess_frac)
+    print(f"placed at {z_used.min():.3f}-{z_used.max():.3f}; exposure of the "
+          f"target at that redshift for {matched}/{N * R}; p_src capped {capped}")
+    print(f"over-kept particle photons, per block, variance share of the total: "
+          f"median {np.median(ef):.4f}, 99th pct {np.percentile(ef, 99):.4f}, "
+          f"99.9th {np.percentile(ef, 99.9):.4f}, max {ef.max():.4f}; blocks above "
+          f"10%: {(ef > 0.1).mean():.3%} (over {ef.size} occupied aperture blocks)")
+    print(f"stretch scale {a:.4g}; negative-rate blocks after subtraction "
+          f"{(rate < 0).mean():.2%}")
+    with h5py.File(args.output, "w") as g:
+        mg = g.create_group("mock")
+        mg.create_dataset("images", data=img, compression="gzip", compression_opts=4)
+        mg.create_dataset("halo_id", data=hid)
+        mg.create_dataset("pseudo_tsc", data=tsc)
+        mg.create_dataset("exposure_ks", data=t_eq.astype(np.float32))
+        mg.create_dataset("livetime_ks", data=t_live.astype(np.float32))
+        mg.create_dataset("z", data=z_used.astype(np.float32))
+        mg.create_dataset("target", data=tgt.astype(str).astype(h5py.string_dtype()))
+        if rlogm is not None:
+            mg.create_dataset("log_m500", data=rlogm)
+        g.attrs["depth"] = "real ACIS-I target: T_eq for focused photons, livetime for particles"
+        g.attrs["count_model"] = "real"
+        g.attrs["lx_scale"] = args.lx_scale
+        g.attrs["nh_corrected"] = bool(args.nh_csv)
+        g.attrs["stretch_scale"] = a
+        g.attrs["aperture_arcmin_at_z005"] = APERTURE_ARCMIN
+        g.attrs["z_mock"] = z_mock
+        with h5py.File(args.counts_h5, "r") as f:
+            g.attrs["snapshot"] = int(f.attrs.get("snapshot", 99))
+        g.attrs["preprocessing"] = ("arcsinh(R / scale), R = (C - P_hat)/T_eq + "
+                                    "p_mock f_sky as in process_chandra.py")
     print(f"wrote {args.output}: mock {img.shape}")
 
 
@@ -459,6 +601,11 @@ def main():
                          "Chandra totals in --archive-csv")
     ap.add_argument("--archive-csv", default="lofar_xray_archive.csv")
     ap.add_argument("--realizations", type=int, default=3)
+    ap.add_argument("--count-model", choices=["legacy", "real"], default="legacy",
+                    help="real: the processed-rate model of the real data "
+                         "(T_eq for focused photons, livetime for particles, "
+                         "particle subtraction with its noise); review F5")
+    ap.add_argument("--exposures-csv", default="xray_target_exposures.csv")
     ap.add_argument("--fixed-ks", type=float, default=None,
                     help="with --z-from: give every realization this exposure "
                          "instead of its target's real one (depth study)")

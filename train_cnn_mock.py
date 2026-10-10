@@ -326,6 +326,13 @@ def main():
         print("  images zeroed: this is the mass-only baseline")
 
     oof = np.full(N * R, np.nan, dtype=np.float32)
+    # Review F3: the score real data actually get -- ONE projection, repeated
+    # across the view axis exactly as a real cutout is -- for every held-out
+    # sample and each projection, plus the outer fold of every sample, so
+    # equal-size held-out ensembles can be formed across seeds (GroupKFold
+    # folds do not depend on the seed).
+    oof_single = np.full((N * R, P), np.nan, dtype=np.float32)
+    fold_of = np.full(N * R, -1, dtype=np.int16)
     obs_preds = []
     gkf = GroupKFold(n_splits=args.folds)
     for k, (tr, va) in enumerate(gkf.split(x, y, groups), 1):
@@ -357,6 +364,12 @@ def main():
             sel_xr=None if (xr_all is None or sel is None) else xr_all[sel])
         oof[va] = predict(model, x[va], device, scalars=v_s,
                           xray=None if xr_all is None else xr_all[va])
+        fold_of[va] = k - 1
+        for pj in range(P):
+            xs = np.repeat(x[va][:, pj:pj + 1], P, axis=1)
+            xrs = (None if xr_all is None
+                   else np.repeat(xr_all[va][:, pj:pj + 1], P, axis=1))
+            oof_single[va, pj] = predict(model, xs, device, scalars=v_s, xray=xrs)
         obs_preds.append(predict(model, obs_x, device, scalars=o_s,
                                  xray=obs_xr if xr_all is not None else None))
         print(f"  fold {k}: checkpoint epoch {best_ep}/{args.epochs}, "
@@ -369,6 +382,9 @@ def main():
     r2 = r2_score(tsc, oof_cluster)
     mae = mean_absolute_error(tsc, oof_cluster)
     print(f"\nmock OOF R2 (per realization): {r2_score(y, oof):+.3f}")
+    ys = np.repeat(y[:, None], P, axis=1)
+    print(f"mock OOF R2 (ONE view, one realization -- as real data): "
+          f"{r2_score(ys.ravel(), oof_single.ravel()):+.3f}")
     print(f"mock OOF R2 (cluster-mean)  : {r2:+.3f}   MAE {mae:.3f} Gyr")
     if len(np.unique(snap)) > 1:
         for s in np.unique(snap):
@@ -410,6 +426,8 @@ def main():
 
     np.savez(f"{args.out_prefix}_preds.npz", oof_cluster=oof_cluster,
              tsc=tsc, halo_id=halo, group_id=group_id, snap=snap,
+             oof_sample=oof, oof_single=oof_single, fold_of=fold_of,
+             y_sample=y, obs_pred_folds=np.array(obs_preds),
              obs_pred=obs_pred,
              obs_name=np.array(obs_name), obs_z=obs_z,
              select=args.select, seed=args.seed, dataset=args.dataset,
