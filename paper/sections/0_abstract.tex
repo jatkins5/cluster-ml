@@ -3,17 +3,22 @@
   \item Merger timing (time since last collision) from images; TNG-Cluster
         (352 clusters), radio (DSA shock emission) and X-ray (Chandra mocks).
   \item Clean-image skill: pooled CNN $R^2 = 0.485 \pm 0.028$ (radio,
-        144\,MHz); X-ray $0.511$; joint $0.537$ (1.4\,GHz, rerun pending). The CNN
+        144\,MHz); X-ray $0.511$; joint $0.545$. The CNN
         beats five scalar baselines (0.459) and holds skill within mass bins;
         the stacked increment ($+0.082$) is exploratory until nested (F2).
   \item Physics: the model's radio emission is carried by cold, overdense
         gas rather than the diffuse ICM (origin untraced); a density cut,
         motivated by the DSA model's own ICM-shock assumptions, removes it.
-  \item Forward modelling to LOFAR (field injection) and Chandra (real
-        depths, backgrounds, redshift placement); realistic joint
-        $R^2 = 0.49$ when trained on two epochs ($z = 0$ and 0.1).
-  \item Applied to 25 LoVoCCS clusters; radio and X-ray predictions agree
-        ($\rho = 0.69$, $n = 14$); no ground truth, so framed as a
+  \item Forward modelling to LOFAR (field injection, flux-conserving,
+        3\,Mpc box) and Chandra (real count model, backgrounds, redshift
+        placement), training on two epochs ($z = 0$ and 0.1). Per single
+        real-like observation: X-ray $R^2 = 0.41$, radio 0.20; the radio
+        image adds $\sim$0.1 beyond a noisy mass measurement; adding radio to
+        X-ray shows no demonstrated gain. Correcting the radio forward model
+        removed most of the radio skill reported earlier.
+  \item Applied to LoVoCCS (26 radio, 15 X-ray clusters): radio and X-ray
+        rank the clusters consistently ($\rho = 0.61$, $n = 15$) but differ
+        in absolute age by $\sim$0.4\,Gyr; no ground truth, so framed as a
         demonstration.
 \end{itemize}
 \end{abstract}

@@ -616,7 +616,7 @@ def xray_depth():
     for t in texp:
         ax.axvline(t, ymin=0, ymax=0.06, color="k", lw=0.8)
     ax.set_xscale("log")
-    ax.set_xlabel("Chandra ACIS-I exposure [ks]")
+    ax.set_xlabel("Cycle-22-equivalent ACIS-I exposure [ks]")
     ax.set_ylabel("out-of-fold $R^2$")
     ax.legend(fontsize=6, loc="upper left")
     save(fig, "xray_depth")

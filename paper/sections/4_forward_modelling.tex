@@ -3,75 +3,95 @@
 
 \subsection{Radio: from simulated maps to LoTSS}
 \begin{itemize}
-  \item Beam convolution, 1\,Mpc/128\,px common grid at each target's
-        redshift.
+  \item The simulated map is linear emission (summed DSA weight per pixel).
+        It is cropped and rebinned flux-conservingly to a 128-pixel grid
+        covering a 3\,Mpc box at each target's redshift (1\,Mpc holds a
+        median 4 per cent of a cluster's shock emission, 3\,Mpc 65 per cent),
+        then beam-convolved.
+  \item Flux: the box's own linear emission times one global constant,
+        fixed so the sample-median \emph{total} power matches the median of
+        the Cuciti et al.\ (2023) relation; the constant is the same for
+        every box size and for snapshot 91, and no per-cluster mass relation
+        is imposed. An earlier recipe interpolated the arcsinh-stretched map
+        and clipped it before summing; that distorted the fluxes (losing a
+        median 53 per cent of the power in a 1\,Mpc box, with an added
+        trend with \rfive) and is superseded.
   \item Noise must be beam-correlated: with white noise, real-cluster
         predictions ran to 10--27\,Gyr.
   \item Field injection into real LoTSS DR3 fields (209 downloaded, 206
-        accepted at 40$'$; 202 at 80$'$) (Bruno et al.\ 2023
+        accepted at 40$'$; 202 at 80$'$, used here) (Bruno et al.\ 2023
         precedent; Bottrell ``FullReal'' tier): real noise, sources and
         artefacts.
-  \item Flux: the simulation's own predicted power, one global constant
-        -- \emph{not} an observed $P_{150}$--\mfive\ anchor
-        (Section~\ref{sec:flux}).
-  \item Realism: image statistics vs LoTSS as separations in mock
-        standard deviations (KS $p$ values inflate with sample size).
-
+  \item Realism, with the metric fixed before the comparison: median
+        $|$separation$|$ of four Minkowski functionals over 1--20$\sigma$,
+        in mock standard deviations, against real cutouts of the same box
+        size. 3\,Mpc linear emission 0.095; 3\,Mpc with arcsinh-compressed
+        morphology 0.158; 1\,Mpc linear 0.403; background-only fields 0.64
+        (3\,Mpc) and 1.47 (1\,Mpc).
 \end{itemize}
 \begin{figure*}
   \centering
   \includegraphics[width=\textwidth]{fig_radio_gallery.pdf}
   \caption{Top: simulated 144\,MHz maps (GroupPos-centred, $n_{\rm H} <
   10^{-4}$\,cm$^{-3}$ shock cells, $\pm2\,r_{500}$) for four clusters
-  spanning merger time. Middle: the same clusters forward-modelled at a
-  LoVoCCS redshift and injected into a real LoTSS DR3 field with the
-  simulation's own flux. Bottom: real LoTSS targets on the same grid; the
-  circular regions are masked compact sources.}
+  spanning merger time. Middle: the same clusters forward-modelled over a
+  3\,Mpc box at a LoVoCCS redshift and injected into a real LoTSS DR3
+  field with the simulation's own flux. Bottom: real LoTSS targets over the
+  same box; the circular regions are masked compact sources.}
   \label{fig:radio_gallery}
 \end{figure*}
 
 \begin{figure*}
   \centering
   \includegraphics[width=\textwidth]{fig_radio_mf.pdf}
-  \caption{Minkowski functionals of the 3168 injected mocks (band: 16--84
-  per cent) against the 25 LoTSS targets (points: median and 16--84 per
-  cent), at thresholds 1--20$\sigma$ of each map's noise. Bottom: the
-  median offset of the real maps in units of the mock scatter. Every
-  offset is at most 0.5 mock standard deviations; the largest are the
-  component count and Euler characteristic at $\gtrsim$10$\sigma$, where
-  compact AGN dominate.}
+  \caption{Minkowski functionals of the 3168 injected mocks (3\,Mpc box;
+  band: 16--84 per cent) against the 26 LoTSS targets over the same box
+  (points: median and 16--84 per cent), at thresholds 1--20$\sigma$ of each
+  map's noise. Bottom: the median offset of the real maps in units of the
+  mock scatter. Above 3$\sigma$ every offset is within 0.2 mock
+  standard deviations; at 1--2$\sigma$ the real maps have fewer connected
+  components and shorter perimeters than the mocks (offsets up to 0.73).}
   \label{fig:radio_mf}
 \end{figure*}
 
 \subsection{X-ray: from 2\,Ms mocks to real Chandra depths}
 \label{sec:xray}
 \begin{itemize}
-  \item Binomial thinning of photon counts is an exact shallower
-        observation for fully exposed pixels, approximate where the mocks'
-        exposure varies (chip gaps, dither edges; review F6); real archival depths (median 50\,ks all instruments,
-        20\,ks ACIS-I).
-  \item Sky backgrounds from soxs; particle background handled separately.
-  \item Redshift placement: $1/D_L^2$ dimming, sky-area scaling of the
-        background per (physically fixed) pixel, common aperture.
-  \item TNG over-luminosity: mocks $\sim$3$\times$ brighter than real
-        clusters (0.32 measured on Chandra; 0.28 from catalogue $L_X$);
-        corrected with the catalogue value.
+  \item Mocks: 2\,Ms ACIS-I (Cycle 22) photon counts, placed at a real
+        target's redshift ($1/D_L^2$ dimming, sky-area scaling of the
+        backgrounds per physically fixed pixel, common aperture) and taken to
+        that target's depth with the real data's own count model:
+        focused photons (source and sky) thinned to its Cycle-22-equivalent
+        exposure $T_{\rm eq}$, particle background at its livetime, and the
+        particle subtraction of the real processing applied with the noise
+        of its 9.5--12\,keV estimate. $T_{\rm eq}/T_{\rm live}$ is 0.85--1.83
+        for these targets; an earlier version thinned to raw time and so gave
+        the mocks too few photons.
+  \item Status of this model: the exposure-convention defect is corrected,
+        with an explicitly approximate scalar background treatment and
+        incomplete end-to-end validation. Thinning is exact for fully exposed
+        pixels and approximate where the mocks' own exposure varies (chip
+        gaps, dither edges); the mocks do not yet carry each real
+        observation's roll, gaps and dither footprint.
+  \item On the real targets, the robust outer-aperture noise relative to
+        the mean rate, real/mock, is 1.12 (16--84 per cent 0.81--1.20;
+        the earlier model gave 0.71). One target, A763 (6\,ks), is far
+        smoother than its mocks (0.07), possibly from gap filling; not
+        explained.
+  \item TNG over-luminosity: L$_X$ scale 0.358, from the catalogue offset
+        (0.278) times the mass-matched real/mock ratio measured on Chandra
+        (1.29); a single global factor fixed without labels.
   \item Galactic absorption per target (small: median 2\%).
-  \item Fig.~\ref{fig:lx}: the luminosity offset seen in catalogue $L_X$.
-  \item Real-data processing and the particle-background normalisation
-        lesson (effective-area-scaled exposure is wrong for unfocused
-        background).
-  \item Depth: skill saturates by $\sim$150\,ks; most real targets are
-        shallower (median 31\,ks), at the steep part of the curve
-        (Fig.~\ref{fig:xray_depth}).
-
+  \item Real-data processing: CIAO exposure maps, particle background from
+        9.5--12\,keV, Cycle-22-equivalent exposure, chip gaps filled.
 \end{itemize}
 \begin{figure}
   \centering
   \includegraphics[width=\columnwidth]{fig_xray_gallery.pdf}
   \caption{Real Chandra ACIS-I inputs (left; particle-background
-  corrected, Cycle-22-equivalent exposure) beside two mocks placed at the
-  same redshift and depth, with the $L_X$ and absorption corrections.
+  corrected, Cycle-22-equivalent exposure) beside two mocks carrying the
+  same target's identity, redshift and exposure, with the $L_X$ and
+  absorption corrections and the real count model.
   Pixels outside the common 8$'$ (at $z = 0.05$) aperture are zero.}
   \label{fig:xray_gallery}
 \end{figure}
@@ -84,8 +104,10 @@
   against LoVoCCS weak-lensing masses. Right: for the 11 Chandra targets
   with a weak-lensing mass, real X-ray count rate in the common aperture
   divided by the median of mass-matched ($\pm0.15$\,dex) mocks at the same
-  redshift, after the $L_X$ correction: median 1.29, no trend with mass
-  (slope $0.08 \pm 0.32$).}
+  redshift, with the corrected L$_X$ scale (0.358): median 1.07, no
+  trend with mass (slope $0.03 \pm 0.32$). The scale was set from this
+  comparison (the ratio was 1.29 at the catalogue scale 0.278), so a
+  median near 1 is by construction; the absence of a mass trend is not.}
   \label{fig:lx}
 \end{figure*}
 \begin{figure}
@@ -94,10 +116,11 @@
   \caption{X-ray-only accuracy against exposure (mean and s.d.\ over 3
   seeds, snapshot 99): every mock placed at a target redshift with sky and
   particle backgrounds, the $L_X$ and absorption corrections, and the same
-  exposure throughout. Skill rises from $R^2 = 0.24$ at 5\,ks to 0.38 at
-  20\,ks and saturates near 0.48 by $\sim$150\,ks. Ticks: Cycle-22-equivalent
-  exposures of the 15 real targets (median 31\,ks); the band is the model
-  trained with each mock at its matching target's real exposure
-  ($0.36 \pm 0.03$).}
+  Cycle-22-equivalent exposure throughout, with the real count model.
+  Skill rises from $R^2 \approx 0.35$ at 5--20\,ks to 0.41 at 50\,ks,
+  0.43 at 150\,ks and 0.50 at 500\,ks, without saturating in this range.
+  Ticks: Cycle-22-equivalent exposures of the 15 real targets;
+  the band is the model trained with each mock at its matching target's
+  real exposure ($0.375 \pm 0.002$).}
   \label{fig:xray_depth}
 \end{figure}
