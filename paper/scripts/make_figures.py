@@ -266,10 +266,14 @@ def lx_mass():
 def xray_gallery():
     with h5py.File(XRAY_H5) as f:
         mock, mz, tsc = f["mock/images"][:], f["mock/z"][:], f["mock/pseudo_tsc"][:]
-        # review M1: match mocks to a real target by its stored identity
-        # (which fixes both redshift and exposure), not by a redshift window
-        mtgt = (np.vectorize(lambda v: key(v.decode() if isinstance(v, bytes) else v))(
-            f["mock/target"][:]) if "mock/target" in f else None)
+        # review M1: match mocks to a real target by stored identity, redshift
+        # and exposure (identity alone does NOT fix redshift: placements with
+        # no Chandra counterpart borrow a target's identity and exposure)
+        if "mock/target" not in f or "mock/exposure_ks" not in f:
+            raise SystemExit("xray_gallery needs mock/target and mock/exposure_ks "
+                             "(count-model 'real' products); legacy inputs unsupported")
+        mtgt = np.vectorize(lambda v: key(v.decode() if isinstance(v, bytes) else v))(
+            f["mock/target"][:])
         okey = [key(v.decode() if isinstance(v, bytes) else v) for v in f["obs/key"][:]]
         mexp = f["mock/exposure_ks"][:] if "mock/exposure_ks" in f else None
         obs, oz, ot = f["obs/images"][:], f["obs/z"][:], f["obs/exposure_ks"][:]
@@ -292,14 +296,12 @@ def xray_gallery():
         # redshift with no Chandra target borrows a random target's identity
         # and exposure but keeps its own redshift
         zok = np.abs(mz - oz[j]) < 5e-4
-        idx = (np.argwhere((mtgt == okey[j]) & zok) if mtgt is not None
-               else np.argwhere(zok))
+        idx = np.argwhere((mtgt == okey[j]) & zok)
         if len(idx) == 0:
             raise SystemExit(f"xray_gallery: no mock matches {t} in identity and z")
-        if mexp is not None:
-            bad = [tuple(ix) for ix in idx if abs(mexp[tuple(ix)] - ot[j]) > 0.5]
-            if bad:
-                raise SystemExit(f"xray_gallery: {t} mocks with exposure != {ot[j]:.1f} ks")
+        bad = [tuple(ix) for ix in idx if abs(mexp[tuple(ix)] - ot[j]) > 0.5]
+        if bad:
+            raise SystemExit(f"xray_gallery: {t} mocks with exposure != {ot[j]:.1f} ks")
         for c in (1, 2):
             i, rr_ = idx[rng.integers(len(idx))]
             ax[r, c].imshow(mock[i, rr_, 0][s], origin="lower", cmap="magma",

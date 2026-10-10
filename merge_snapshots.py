@@ -15,8 +15,11 @@ X-ray training files. Per-row arrays (first dimension = number of rows) are
 concatenated; everything else (tau grid, the real "obs" group) is taken from
 the first file, and must agree across files where it matters (checked for
 the X-ray stretch scale). Snapshot-99 rows come first, in their original
-order, so the trainers' cluster-level folds for them match the
-single-snapshot runs.
+order. That alone does NOT make folds match the single-snapshot runs:
+train_cnn_pooled's KFold over groups happens to preserve them, but
+train_cnn_mock assigns folds from group sizes, which differ once snapshot-91
+rows are added (review R4-B). For comparisons across datasets use a
+persisted parent-halo manifest (make_fold_manifest.py, --fold-manifest).
 """
 import argparse
 

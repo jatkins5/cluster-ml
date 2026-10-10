@@ -30,6 +30,24 @@ from torch.utils.data import DataLoader, Dataset
 from forward_model_lotss import target_key
 from train_cnn_pooled import JointPooledCNN, PooledCNN, augment
 
+# Provenance (review R4-A): the code revision that produced each result,
+# marked "+dirty" if this file differs from that commit.
+def _source_rev():
+    import os
+    import subprocess
+    here = os.path.dirname(os.path.abspath(__file__))
+    try:
+        rev = subprocess.run(["git", "rev-parse", "HEAD"], cwd=here,
+                             capture_output=True, text=True).stdout.strip()
+        dirty = subprocess.run(["git", "diff", "--quiet", "--", "train_cnn_mock.py"],
+                               cwd=here).returncode != 0
+        return rev + ("+dirty" if dirty else "")
+    except Exception:
+        return "unknown"
+
+
+SOURCE_REV = _source_rev()
+
 
 class MockDataset(Dataset):
     """One item per (cluster, realization); each carries its 3 projections."""
@@ -126,7 +144,6 @@ def run_fold(tr_x, tr_y, sel_x, sel_y, epochs, batch_size, device, delta,
     return model, best, best_ep
 
 
-@torch.no_grad()
 def group_folds(groups, n_splits):
     """GroupKFold's balanced greedy assignment, made hardware-independent.
 
@@ -150,6 +167,7 @@ def group_folds(groups, n_splits):
         yield idx[fold != f], idx[fold == f]
 
 
+@torch.no_grad()
 def predict(model, x, device, scalars=None, batch_size=32, xray=None):
     if len(x) == 0:
         return np.zeros(0, dtype=np.float32)
@@ -192,6 +210,9 @@ def main():
                          "mass does not already explain (checklist B2).")
     ap.add_argument("--wl-masses", default="lovoccs_wl_masses.csv")
     ap.add_argument("--catalog", default="Radio_Data/TNG-Cluster_Catalog.hdf5")
+    ap.add_argument("--fold-manifest", default=None,
+                    help="npz from make_fold_manifest.py: fixed parent-halo outer "
+                         "folds and inner-selection halos shared across arms")
     ap.add_argument("--mass-seed", type=int, default=None,
                     help="seed for the simulated mass-measurement noise, fixed "
                          "across training seeds and comparison arms")
@@ -209,6 +230,9 @@ def main():
     args = ap.parse_args()
     if args.xray_dataset and (args.mass or args.no_image):
         raise SystemExit("--xray-dataset does not combine with --mass/--no-image")
+    if args.mass_noise and args.mass_seed is None:
+        raise SystemExit("--mass-noise needs --mass-seed: the simulated mass "
+                         "measurement must be fixed across seeds and arms")
     if args.no_image and not args.mass:
         raise SystemExit("--no-image without --mass leaves no input at all")
 
@@ -366,8 +390,29 @@ def main():
     oof_single = np.full((N * R, P), np.nan, dtype=np.float32)
     fold_of = np.full(N * R, -1, dtype=np.int16)
     obs_preds = []
-    for k, (tr, va) in enumerate(group_folds(groups, args.folds), 1):
-        if args.select == "inner":
+    manifest = None
+    if args.fold_manifest:
+        # review R4-B: persisted parent-halo folds AND inner-selection halos,
+        # so arms on different datasets hold out the same halos
+        mf = np.load(args.fold_manifest)
+        mpos = {h: i for i, h in enumerate(mf["group_id"])}
+        missing = sorted(set(np.unique(groups)) - set(mpos))
+        if missing:
+            raise SystemExit(f"{len(missing)} parent halos not in {args.fold_manifest}")
+        if int(mf["folds"]) != args.folds:
+            raise SystemExit(f"manifest has {int(mf['folds'])} folds, run asks {args.folds}")
+        gi = np.array([mpos[g] for g in groups])
+        manifest = (mf["fold"][gi], mf["inner_sel"][:, gi])
+        idx_all = np.arange(len(groups))
+        splits = [(idx_all[manifest[0] != f], idx_all[manifest[0] == f])
+                  for f in range(args.folds)]
+    else:
+        splits = list(group_folds(groups, args.folds))
+    for k, (tr, va) in enumerate(splits, 1):
+        if args.select == "inner" and manifest is not None:
+            is_sel = manifest[1][k - 1][tr]
+            fit, sel = tr[~is_sel], tr[is_sel]
+        elif args.select == "inner":
             # Grouped, so every realization of a cluster stays on one side.
             gss = GroupShuffleSplit(n_splits=1, test_size=args.inner_frac,
                                     random_state=args.seed + k)
@@ -464,6 +509,7 @@ def main():
              select=args.select, seed=args.seed, dataset=args.dataset,
              mass=args.mass, no_image=args.no_image,
              mass_noise=args.mass_noise, mass_seed=-1 if args.mass_seed is None else args.mass_seed,
+             fold_manifest=str(args.fold_manifest or ""), source_rev=SOURCE_REV,
              sim_logm_input=(sim_s[::R, 0] if sim_s is not None else np.zeros(0)),
              obs_logm=(obs_s[:, 0] if obs_s is not None else np.zeros(0)),
              sim_logm=logm)

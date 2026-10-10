@@ -26,16 +26,28 @@ PARTS = {}
 def load(pat):
     ds = {s: np.load(f"cnn_preds/{pat.format(s)}", allow_pickle=True)
           for s in SEEDS if os.path.exists(f"cnn_preds/{pat.format(s)}")}
-    if not ds:
-        raise SystemExit(f"no runs for {pat}")
+    if sorted(ds) != list(SEEDS):
+        raise SystemExit(f"{pat}: expected seeds {list(SEEDS)}, found {sorted(ds)}")
     d0 = next(iter(ds.values()))
     for s, d in ds.items():
         for k in ("halo_id", "snap", "tsc", "y_sample", "group_id"):
             if k in d0 and not np.array_equal(d[k], d0[k]):
                 raise SystemExit(f"{pat}: seed {s} differs in {k}")
         # validity of averaging: every sample predicted out-of-fold in every run
-        if (d["fold_of"] < 0).any() or np.isnan(d["oof_single"]).any():
-            raise SystemExit(f"{pat}: seed {s} has samples without an OOF prediction")
+        if (d["fold_of"] < 0).any():
+            raise SystemExit(f"{pat}: seed {s} has samples without an outer fold")
+        for k in ("oof_sample", "oof_single", "oof_cluster"):
+            if not np.isfinite(d[k]).all():
+                raise SystemExit(f"{pat}: seed {s} has non-finite {k}")
+        # no parent halo may be split across outer folds
+        R = len(d["oof_sample"]) // len(d["tsc"])
+        g = np.repeat(d["group_id"], R)
+        nf = {}
+        for gg, ff in zip(g, d["fold_of"]):
+            nf.setdefault(gg, set()).add(int(ff))
+        split = [gg for gg, v in nf.items() if len(v) > 1]
+        if split:
+            raise SystemExit(f"{pat}: seed {s} splits {len(split)} halos across folds")
     # Folds of runs before the group_folds fix depended on the GPU node's CPU
     # (numpy SIMD sort tie-breaking). Each run's predictions are still OOF
     # under its own partition, so seed averages never use a model that saw
@@ -71,7 +83,15 @@ def r2_ens(Y, preds):
     return r2_score(Y, np.mean(preds, axis=0))
 
 
+def partitions(ds):
+    return {d["fold_of"].tobytes() for d in ds.values()}
+
+
 def paired(lab, a, b, mode):
+    # a comparison is MATCHED only if every run of both arms used one
+    # partition; otherwise it is reported, labelled descriptive
+    status = ("matched" if len(partitions(a) | partitions(b)) == 1
+              else "DESCRIPTIVE: arms/seeds used different fold partitions")
     Ya, Ga, pa = sample_view(a, mode)
     Yb, Gb, pb = sample_view(b, mode)
     assert np.array_equal(Ya, Yb) and np.array_equal(Ga, Gb), "arms not aligned"
@@ -89,7 +109,7 @@ def paired(lab, a, b, mode):
     sd = [r2_score(Yb, pb[kb.index(t)]) - r2_score(Ya, pa[ka.index(t)]) for t in seeds]
     print(f"  {lab:<44} {mode:<10} A {r2_score(Ya, ea):.3f}  B {r2_score(Yb, eb):.3f}  "
           f"B-A {d:+.3f}  halo-bootstrap 95% [{lo:+.3f}, {hi:+.3f}]  "
-          f"per-seed single-model B-A {np.mean(sd):+.3f} ± {np.std(sd, ddof=1):.3f}")
+          f"per-seed single-model B-A {np.mean(sd):+.3f} ± {np.std(sd, ddof=1):.3f}  [{status}]")
 
 
 print("======== 0. alignment checks")
@@ -108,8 +128,9 @@ for lab, pat in cfg.items():
 # the matched arms must also share the fixed mass measurement
 mi = [d["sim_logm_input"] for d in L["mass only (fixed measurement)"].values()] + \
      [d["sim_logm_input"] for d in L["image+mass 3 Mpc (fixed measurement)"].values()]
-print(f"  blurred mass inputs identical across all 10 runs: "
-      f"{all(np.array_equal(mi[0], q) for q in mi[1:])}")
+if not all(np.array_equal(mi[0], q) for q in mi[1:]):
+    raise SystemExit("blurred mass inputs differ between runs: not a matched comparison")
+print("  blurred mass inputs identical across all 10 runs")
 
 print("\n======== 1. image beyond mass (A = mass only, B = image + mass, matched)")
 for mode in ("1view-ens", "pool-ens"):
