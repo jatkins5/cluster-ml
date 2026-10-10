@@ -49,6 +49,12 @@ def _source_rev():
 SOURCE_REV = _source_rev()
 
 
+def _prov_hashes(prov_json):
+    import json
+    d = json.loads(prov_json)
+    return d["sha256"], d["manifest_sha256"]
+
+
 def provenance(args):
     """JSON: git HEAD, porcelain status of the source files that define a
     result, their sha256, the full configuration, and the fold manifest's
@@ -295,6 +301,9 @@ def main():
                     help="realistic X-ray mocks (build_xray_realistic.py) to "
                          "pair with the radio mocks in a joint model")
     args = ap.parse_args()
+    # Review R6: provenance is captured BEFORE any input is read or model
+    # trained, and saved as-is; an end-of-run recheck only flags changes.
+    prov_start = provenance(args)
     if args.xray_dataset and (args.mass or args.no_image):
         raise SystemExit("--xray-dataset does not combine with --mass/--no-image")
     if args.mass_noise and args.mass_seed is None:
@@ -588,7 +597,9 @@ def main():
              mass=args.mass, no_image=args.no_image,
              mass_noise=args.mass_noise, mass_seed=-1 if args.mass_seed is None else args.mass_seed,
              fold_manifest=str(args.fold_manifest or ""), source_rev=SOURCE_REV,
-             provenance=provenance(args),
+             provenance=prov_start,
+             provenance_changed_during_run=(
+                 _prov_hashes(provenance(args)) != _prov_hashes(prov_start)),
              sample_halo=np.repeat(halo, R), sample_group=np.repeat(group_id, R),
              sample_snap=np.repeat(snap, R), sample_realization=np.tile(np.arange(R), N),
              sel_groups_flat=np.concatenate(sel_groups) if sel_groups else np.zeros(0),

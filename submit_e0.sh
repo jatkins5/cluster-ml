@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --partition=gpu --gres=gpu:1 -N 1 -n 1 -c 4 --mem=48G -t 04:00:00
 #SBATCH -J e0
-#SBATCH --array=0-9
+#SBATCH --array=0-9%2
 #SBATCH --exclude=gpu3001,gpu2504
 #SBATCH -o logs/e0_%A_%a.out
 # Review experiment E0 (CODEX_CLAUDE_REVIEW.md rounds 4-5): does training on
@@ -14,7 +14,7 @@
 # Extensions prepared, NOT part of this array (submit separately if wanted):
 #   radio 3 Mpc: --dataset injected_fix_phys_b3000_s9991.h5
 #   joint 1 Mpc: --dataset injected_fix_phys_b1000_s9991.h5 --xray-dataset xray_fix_s9991.h5
-# Estimate: ~6-8 min per run on one GPU, ~1 h wall at the 2-GPU limit,
+# Estimate: ~6-8 min per run on one GPU, ~1 h wall; at most 2 tasks run at once (%2),
 # <50 MB of prediction files (no checkpoints are saved).
 set -euo pipefail
 cd /oscar/data/idellant/cluster-ml

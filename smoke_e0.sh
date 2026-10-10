@@ -25,7 +25,7 @@ import compare_round4 as c
 c.PRED_DIR = "smoke_e0_tmp"
 N, R, P = 6, 2, 3
 def write(tag, seeds, nan=False, split=False):
-    tsc, ys = np.random.rand(N), np.random.rand(N * R)   # shared by all seeds
+    tsc = np.random.rand(N); ys = np.repeat(tsc, R)     # trainer's label contract
     for s in seeds:
         g = np.arange(N); fold = np.repeat(g % 3, R)
         if split:
@@ -88,7 +88,10 @@ for tag in ("x_single", "x_pooled", "joint_single", "mass_9991", "mass_99only"):
         want -= set(mf["group_id"][mf["fold"] == k].tolist())
         assert got == want, (tag, k)
     prov = json.loads(str(d["provenance"]))
-    assert prov["manifest_sha256"] and prov["sha256"]["train_cnn_mock.py"], tag
+    import hashlib
+    assert prov["manifest_sha256"] == hashlib.sha256(open("folds_e0.npz", "rb").read()).hexdigest(), tag
+    assert prov["sha256"]["train_cnn_mock.py"], tag
+    assert not bool(d["provenance_changed_during_run"]), tag
     print(f"  {tag:<13} views {d['train_view']}/{d['select_view']}  folds+inner match manifest, "
           f"finite, provenance head {prov['head'][:8]} status {prov['status'].strip() or 'clean'!r}")
 # keyed mass draws: snapshot-99 objects get the same measurement in both datasets
@@ -99,4 +102,27 @@ common = set(ma) & set(mb)
 assert common and all(ma[k] == mb[k] for k in common), "mass draws depend on dataset rows"
 print(f"  keyed mass draws identical for {len(common)} snapshot-99 objects across 99-only and 99+91")
 EOF
+echo "======== 4. E0 driver on 1-epoch arms (5 seeds each) and its rejections"
+for S in 42 43 44 45 46; do
+  for V in pooled single; do
+    $PY train_cnn_mock.py --dataset xray_fix_s9991.h5 --fold-manifest folds_e0.npz \
+        --train-view $V --select-view single --epochs 1 --seed $S \
+        --out-prefix $T/e0d_${V}_s$S > /dev/null
+  done
+done
+SHA=$(sha256sum folds_e0.npz | cut -d' ' -f1)
+$PY compare_e0.py --pred-dir $T --a "e0d_pooled_s{}_preds.npz" --b "e0d_single_s{}_preds.npz" \
+    --expect-manifest $SHA --boot 200
+if $PY compare_e0.py --pred-dir $T --a "e0d_pooled_s{}_preds.npz" --b "e0d_single_s{}_preds.npz" \
+    --expect-manifest 0000 --boot 10 > $T/wrong_sha.txt 2>&1; then
+  echo "FAILED: wrong manifest hash accepted"; exit 1
+else
+  echo "  wrong manifest hash rejected: $(tail -1 $T/wrong_sha.txt)"
+fi
+if $PY compare_e0.py --pred-dir $T --a "e0d_pooled_s{}_preds.npz" --b "e0d_pooled_s{}_preds.npz" \
+    --expect-manifest $SHA --boot 10 > $T/same_view.txt 2>&1; then
+  echo "FAILED: arms with the same training view accepted"; exit 1
+else
+  echo "  same-view arms rejected: $(tail -1 $T/same_view.txt)"
+fi
 echo "ALL E0 SMOKE CHECKS PASSED"
