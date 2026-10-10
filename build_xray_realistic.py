@@ -358,20 +358,32 @@ def build_placed_real(args, rng, src, hid, tsc, bkg):
     tgt = np.empty((N, R), dtype=object)
     matched = capped = 0
     excess_frac = []
+    assign = np.zeros((N, R, 2), dtype=np.int16)
+    eps_used = np.zeros((N, R))
     for i in range(N):
         for r in range(R):
             z = float(rz[i, r])
+            # Review R7: target, background and subtraction-error draws come
+            # from their own stream keyed by (seed, cluster, realization), so
+            # every depth of a depth study shares identical assignments and
+            # only the photon sampling (rng) differs. Files built before this
+            # change (xray_fix*) used one shared stream.
+            arng = np.random.default_rng([args.seed, 7, i, r])
             cand = by_z.get(round(z, 4))
             if cand:
                 matched += 1
-                row = cand[rng.integers(len(cand))]
+                row = cand[arng.integers(len(cand))]
             else:
-                row = next(tx.sample(1, random_state=int(rng.integers(2**31))).itertuples())
+                row = next(tx.iloc[[int(arng.integers(len(tx)))]].itertuples())
             Te, Tl = float(row.t_eq_ks), float(row.t_live_ks)
             if args.fixed_ks:
                 # depth study: fix the Cycle-22-EQUIVALENT exposure (the axis
                 # the depth figure uses); livetime follows the target's ratio
                 Te, Tl = args.fixed_ks, args.fixed_ks / float(row.eq_over_live)
+            # The hard-band estimate's error is Poisson in its counts, which
+            # scale with livetime: sigma = sigma_target * sqrt(T_live,target /
+            # T_live). At the target's own exposure this is sigma_target.
+            sig_eps = float(row.particle_frac_err) * np.sqrt(float(row.t_live_ks) / Tl)
             f_sky = sky_area_factor(z)
             p_src = (Te / T_MOCK_KS * distance_factor(z, z_mock) * args.lx_scale
                      * nh_by_z.get(round(z, 4), 1.0))
@@ -382,9 +394,11 @@ def build_placed_real(args, rng, src, hid, tsc, bkg):
             want_part = Tl / T_MOCK_KS * f_sky
             p_top = max(want_part - p_src * f_mock, 0.0)
             present = pbar * (p_src * f_mock + p_top)        # expected particles
-            eps = rng.normal(0.0, float(row.particle_frac_err))
-            b = bkg[rng.integers(len(bkg))]
-            pb = pbkg[rng.integers(len(pbkg))]
+            eps = sig_eps * arng.standard_normal()
+            b_i, pb_i = int(arng.integers(len(bkg))), int(arng.integers(len(pbkg)))
+            b, pb = bkg[b_i], pbkg[pb_i]
+            assign[i, r] = (b_i, pb_i)
+            eps_used[i, r] = eps
             m = aperture_mask(z)
             for j in range(P):
                 c = (rng.binomial(src[i, j], p_src) + rng.binomial(b, p_sky)
@@ -422,6 +436,9 @@ def build_placed_real(args, rng, src, hid, tsc, bkg):
         mg.create_dataset("livetime_ks", data=t_live.astype(np.float32))
         mg.create_dataset("z", data=z_used.astype(np.float32))
         mg.create_dataset("target", data=tgt.astype(str).astype(h5py.string_dtype()))
+        mg.create_dataset("bkg_index", data=assign)        # sky, particle
+        mg.create_dataset("particle_eps", data=eps_used.astype(np.float32))
+        g.attrs["keyed_assignments"] = True
         if rlogm is not None:
             mg.create_dataset("log_m500", data=rlogm)
         g.attrs["depth"] = "real ACIS-I target: T_eq for focused photons, livetime for particles"

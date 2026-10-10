@@ -595,15 +595,15 @@ def xray_depth():
     import glob
     from sklearn.metrics import r2_score
     ks, mu, sd = [], [], []
-    for p in sorted(glob.glob("cnn_preds/xdepthfix_*ks_s42_preds.npz"),
-                    key=lambda s: float(re.search(r"xdepthfix_([\d.]+)ks", s).group(1))):
-        k = float(re.search(r"xdepthfix_([\d.]+)ks", p).group(1))
+    for p in sorted(glob.glob("cnn_preds/xdepthfix2_*ks_s42_preds.npz"),
+                    key=lambda s: float(re.search(r"xdepthfix2_([\d.]+)ks", s).group(1))):
+        k = float(re.search(r"xdepthfix2_([\d.]+)ks", p).group(1))
         r = [r2_score(np.load(q)["tsc"], np.load(q)["oof_cluster"])
-             for q in glob.glob(f"cnn_preds/xdepthfix_{int(k)}ks_s*_preds.npz")]
+             for q in glob.glob(f"cnn_preds/xdepthfix2_{int(k)}ks_s*_preds.npz")]
         ks.append(k), mu.append(np.mean(r)), sd.append(np.std(r))
         print(f"  {k:>6.0f} ks: R2 {np.mean(r):.3f} +- {np.std(r):.3f} ({len(r)} seeds)")
     real = [r2_score(np.load(q)["tsc"], np.load(q)["oof_cluster"])
-            for q in glob.glob("cnn_preds/xdepthfix_real_s*_preds.npz")]
+            for q in glob.glob("cnn_preds/xdepthfix2_real_s*_preds.npz")]
     with h5py.File(XRAY_H5) as f:
         texp = f["obs/exposure_ks"][:]
     fig, ax = plt.subplots(figsize=(COL, COL * 0.75))

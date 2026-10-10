@@ -64,8 +64,18 @@ def check(arms, expect_manifest):
             if prov["manifest_sha256"] != expect_manifest:
                 raise SystemExit(f"{name} seed {s}: manifest {prov['manifest_sha256']} "
                                  f"!= expected {expect_manifest}")
-            if bool(d.get("provenance_changed_during_run", False)):
+            if "provenance_changed_during_run" not in d:
+                raise SystemExit(f"{name} seed {s}: no provenance_changed_during_run flag")
+            if bool(d["provenance_changed_during_run"]):
                 raise SystemExit(f"{name} seed {s}: sources/manifest changed during the run")
+            # identical defining-source CONTENT across all runs (HEADs may
+            # differ through unrelated commits; hashes may not)
+            if prov["sha256"] != json.loads(str(ref["provenance"]))["sha256"]:
+                raise SystemExit(f"{name} seed {s}: defining-source hashes differ between runs")
+            # the saved seed must be the one the filename claims
+            if int(prov["config"]["seed"]) != s:
+                raise SystemExit(f"{name} file for seed {s} holds a run with seed "
+                                 f"{prov['config']['seed']}")
             if "sim_logm_input" in d and d["sim_logm_input"].size:
                 if not np.array_equal(d["sim_logm_input"], ref["sim_logm_input"]):
                     raise SystemExit(f"{name} seed {s}: mass measurements differ")
