@@ -52,14 +52,15 @@ SOURCE_REV = _source_rev()
 def _prov_hashes(prov_json):
     import json
     d = json.loads(prov_json)
-    return d["sha256"], d["manifest_sha256"]
+    return d["sha256"], d["manifest_sha256"], d.get("inputs_sha256")
 
 
 def provenance(args):
     """JSON: git HEAD, porcelain status of the source files that define a
     result, their sha256, the full configuration, and the fold manifest's
     sha256 (review R5: a mutable path or an unstaged-only check is not
-    enough)."""
+    enough), plus the sha256 of every data/scalar input file the run reads
+    (review R9)."""
     import hashlib
     import json
     import os
@@ -76,7 +77,47 @@ def provenance(args):
         head=SOURCE_REV.split("+")[0], status=status,
         sha256={f: sha(os.path.join(here, f)) for f in files},
         config=vars(args),
-        manifest_sha256=sha(args.fold_manifest) if args.fold_manifest else None))
+        manifest_sha256=sha(args.fold_manifest) if args.fold_manifest else None,
+        inputs_sha256={k: sha(v) for k, v in input_files(args).items()}))
+
+
+def input_files(args):
+    """The data/scalar files that define a run's inputs (review R9)."""
+    out = {"dataset": args.dataset, "catalog": args.catalog}
+    if args.mass:
+        out["wl_masses"] = args.wl_masses
+    if args.view_scalars:
+        out["view_scalars"] = args.view_scalars
+    if args.xray_dataset:
+        out["xray_dataset"] = args.xray_dataset
+    return out
+
+
+def prep_view_scalars(vsc_all, fit, view_mask, view_cols):
+    """Per-view scalar preprocessing for one fold (review R8/R9).
+
+    vsc_all (rows, P, n_view) raw values, NaN where missing. Per-feature
+    median imputation and mean/std, from the fitting rows only; masked
+    features are then set to a constant 0, so the tensor and architecture are
+    unchanged but the information is withheld. Policy: an UNMASKED feature
+    with no finite fitting value is an error; a masked feature's statistics
+    are never used and are set neutral. Returns (normalised float32, median,
+    mean, std)."""
+    n_view = vsc_all.shape[-1]
+    fv = vsc_all[fit].reshape(-1, n_view)
+    empty = ~np.isfinite(fv).any(axis=0)
+    if (empty & ~view_mask).any():
+        raise ValueError(f"no finite fitting values for "
+                         f"{[c for c, e in zip(view_cols, empty & ~view_mask) if e]}")
+    med = np.where(empty, 0.0, np.nanmedian(np.where(empty, 0.0, fv), axis=0))
+    vimp = np.where(np.isfinite(vsc_all), vsc_all, med)
+    vmu = vimp[fit].reshape(-1, n_view).mean(axis=0)
+    vsd = vimp[fit].reshape(-1, n_view).std(axis=0) + 1e-8
+    vsn = ((vimp - vmu) / vsd).astype(np.float32)
+    vsn[..., view_mask] = 0.0
+    if not np.isfinite(vsn).all():
+        raise ValueError("non-finite normalised view scalars")
+    return vsn, med, vmu, vsd
 
 
 class ViewScalarCNN(nn.Module):
@@ -327,8 +368,12 @@ def main():
     ap.add_argument("--view-scalars", default=None,
                     help="CSV of per-(group_id, snap, proj) features to fuse with "
                          "each projection's embedding before pooling (review R8)")
-    ap.add_argument("--view-cols", default="gap12,off_bcg_x,off_bcg_gal,asym",
+    ap.add_argument("--view-cols", default="richness,gap12,off_bcg_x,off_bcg_gal,asym",
                     help="comma-separated columns of --view-scalars")
+    ap.add_argument("--view-mask", default="",
+                    help="comma-separated --view-cols set to a constant 0 AFTER "
+                         "normalisation: same tensor and architecture, the "
+                         "information withheld (review R9 matched controls)")
     ap.add_argument("--redshift-scalar", action="store_true",
                     help="add each realization's placement redshift as a global scalar")
     ap.add_argument("--train-view", choices=["pooled", "single"], default="pooled",
@@ -470,8 +515,10 @@ def main():
     # Simulated mass measurements are drawn per object below, keyed by
     # (--mass-seed, parent halo, snapshot): independent of the training seed.
 
+    global_cols = []
     if args.mass:
         n_scalar = 1
+        global_cols.append("log_m500_noisy" if args.mass_noise else "log_m500")
         sim_logm = logm.copy()
 
         wl = pd.read_csv(args.wl_masses)
@@ -521,10 +568,14 @@ def main():
         oz = np.asarray(obs_z, dtype=np.float32)[:, None]
         obs_s = oz if obs_s is None else np.hstack([obs_s, oz])
         n_scalar += 1
+        global_cols.append("z_placement")
         print("  global scalar: placement redshift of each realization")
 
     # ---- per-view scalars, e.g. optical structure (review R8) ----
-    vsc_all, n_view, view_cols = None, 0, []
+    vsc_all, n_view, view_cols, view_mask = None, 0, [], np.zeros(0, bool)
+    vs_cl = np.zeros((N, P, 0))
+    if args.view_mask and not args.view_scalars:
+        raise SystemExit("--view-mask needs --view-scalars")
     if args.view_scalars:
         if xr_all is not None:
             raise SystemExit("--view-scalars is not implemented with --xray-dataset")
@@ -543,11 +594,19 @@ def main():
                 vs_cl[i, pj] = vmap[kk]
         vsc_all = np.repeat(vs_cl, R, axis=0)                     # row i*R + r
         n_view = len(view_cols)
+        masked = [c for c in args.view_mask.split(",") if c]
+        unknown = set(masked) - set(view_cols)
+        if unknown:
+            raise SystemExit(f"--view-mask columns not in --view-cols: {sorted(unknown)}")
+        view_mask = np.array([c in masked for c in view_cols])
         # real targets have no matching (idealised) view scalars
         obs_x, obs_name, obs_z, obs_key = obs_x[:0], [], obs_z[:0], []
         obs_s = None if obs_s is None else obs_s[:0]
         print(f"  per-view scalars {view_cols} from {args.view_scalars}; "
               f"real-target predictions disabled (no matching features)")
+        if view_mask.any():
+            print(f"  masked to constant 0 after normalisation: "
+                  f"{[c for c, m in zip(view_cols, view_mask) if m]}")
 
     if args.no_image:
         x[...] = 0.0
@@ -564,6 +623,8 @@ def main():
     sel_groups = []
     fold_of = np.full(N * R, -1, dtype=np.int16)
     obs_preds = []
+    fold_prep = {k: [] for k in ("scalar_mu", "scalar_sd", "view_median",
+                                 "view_mu", "view_sd")}
     manifest = None
     if args.fold_manifest:
         # review R4-B: persisted parent-halo folds AND inner-selection halos,
@@ -609,17 +670,22 @@ def main():
             f_s, v_s = (sim_s[fit] - mu) / sd, (sim_s[va] - mu) / sd
             s_s = None if sel is None else (sim_s[sel] - mu) / sd
             o_s = (obs_s - mu) / sd
+            fold_prep["scalar_mu"].append(mu)
+            fold_prep["scalar_sd"].append(sd)
+            if not (np.isfinite(f_s).all() and np.isfinite(v_s).all()
+                    and (s_s is None or np.isfinite(s_s).all())):
+                raise SystemExit(f"fold {k}: non-finite normalised global scalars")
         else:
             f_s = v_s = s_s = o_s = None
         vsn = None
         if n_view:
-            # per-feature median imputation and mean/std, fitting halos only
-            fv = vsc_all[fit].reshape(-1, n_view)
-            med = np.nanmedian(fv, axis=0)
-            vimp = np.where(np.isnan(vsc_all), med, vsc_all)
-            vmu = vimp[fit].reshape(-1, n_view).mean(axis=0)
-            vsd = vimp[fit].reshape(-1, n_view).std(axis=0) + 1e-8
-            vsn = ((vimp - vmu) / vsd).astype(np.float32)
+            try:
+                vsn, med, vmu, vsd = prep_view_scalars(vsc_all, fit, view_mask, view_cols)
+            except ValueError as e:
+                raise SystemExit(f"fold {k}: {e}")
+            fold_prep["view_median"].append(med)
+            fold_prep["view_mu"].append(vmu)
+            fold_prep["view_sd"].append(vsd)
         model, best, best_ep = run_fold(
             x[fit], y[fit], None if sel is None else x[sel],
             None if sel is None else y[sel], args.epochs, args.batch_size,
@@ -716,6 +782,13 @@ def main():
                                              enumerate(sel_groups)]) if sel_groups else np.zeros(0),
              train_view=args.train_view, select_view=args.select_view,
              view_cols=np.array(view_cols), n_view=n_view, n_scalar=n_scalar,
+             view_mask=view_mask, global_cols=np.array(global_cols),
+             # review R9: the raw scalar inputs as actually used (per sample
+             # row i*R + r; view inputs per cluster row and projection) and
+             # each fold's fitted preprocessing
+             global_scalar_raw=(sim_s if sim_s is not None else np.zeros((N * R, 0))),
+             view_scalar_raw=vs_cl,
+             **{f"fold_{k_}": np.array(v_) for k_, v_ in fold_prep.items()},
              sim_logm_input=(sim_s[::R, 0] if sim_s is not None else np.zeros(0)),
              obs_logm=(obs_s[:, 0] if obs_s is not None else np.zeros(0)),
              sim_logm=logm)

@@ -165,6 +165,8 @@ assert np.allclose(np.sort(mixed[:, 1]), np.sort(toy[:, 1]))
 for b in np.unique(np.floor(Mr / 0.5)):
     s_ = np.floor(Mr / 0.5) == b
     assert np.allclose(np.sort(mixed[s_, 1]), np.sort(toy[s_, 1]))
+# the statistic must actually change (a no-op shuffle would pass the above)
+assert abs(trend(mixed)) < 0.5 * abs(trend(toy)), f"radial trend not removed: {trend(mixed):+.3f}"
 print(f"radial-mixing control check: toy radial trend {trend(toy):+.3f} -> "
       f"{trend(mixed):+.3f}; colour-magnitude distribution preserved")
 
