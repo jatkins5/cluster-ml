@@ -1,18 +1,5 @@
 \section{Methods}
 \label{sec:methods}
-\begin{itemize}
-  \item Pooled CNN: shared encoder over three projections, mean-pooled;
-        joint model with separate radio and X-ray encoders.
-  \item Cross-validation: 5-fold, split by cluster; checkpoint chosen on an
-        inner split of the training folds (selecting on the test fold
-        inflated $R^2$ by 0.04--0.32; Appendix~\ref{app:audit}).
-  \item Five seeds for headline numbers; paired tests across conditions.
-  \item Baselines: halo mass, total flux, five-scalar ridge,
-        Minkowski-functional XGBoost, X-ray morphology scalars.
-  \item Mass conditioning: log\,\mfive\ as an input, blurred by the real
-        weak-lensing errors.
-\end{itemize}
-
 We treated inference of the TSC as a supervised learning problem, with radio and X-ray observations as the input data and the pseudo-TSC label defined in section \ref{sec:sims}.
 Note that the pseudo-TSC is not a directly-measured time since pericentric passage; it instead measures the elapsed time since the merger score crosses a particular threshold.
 The generation procedure for the radio and X-ray mocks from simulated data is described in sections \ref{sec:sims} and \ref{sec:fwd}.
