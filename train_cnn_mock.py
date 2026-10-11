@@ -231,7 +231,8 @@ def contrastive_batches(parent_of_unit, batch_size, rng):
             raise ValueError(f"contrastive layer {j} has {len(layer)} unit(s): no negatives")
         bs = [layer[i:i + batch_size] for i in range(0, len(layer), batch_size)]
         if len(bs) > 1 and len(bs[-1]) == 1:
-            bs[-2] = bs[-2] + bs.pop()
+            last = bs.pop()
+            bs[-1] = bs[-1] + last
         out.extend(bs)
     for b in out:
         if len(set(parent_of_unit[b])) != len(b):
@@ -288,7 +289,7 @@ def pretrain_encoder(units_x, parent_of_unit, epochs, temp, batch_size, device, 
             loss.backward()
             opt.step()
             sched.step()
-            losses.append(float(loss))
+            losses.append(float(loss.detach()))
             n_upd += 1
             n_pairs += len(b)
         curve.append(float(np.mean(losses)))

@@ -286,8 +286,16 @@ bad_case("unnormalised probabilities",
 bad_case("probability shape", lambda d: d.__setitem__("oof_prob", d["oof_prob"][:, :6]))
 bad_case("points disagree with decoder",
          lambda d: d.__setitem__("oof_single", d["oof_single"] + 0.1))
-bad_case("representatives differ across seeds",
-         lambda d: d.__setitem__("fold_class_reps", d["fold_class_reps"] + 0.001))
+def reps_shift(d):
+    r_ = d["fold_class_reps"].copy(); r_[:, 1:6] += 0.001    # still valid, but different
+    d["fold_class_reps"] = r_
+    if str(d["loss"]) == "class7":                          # keep its decoder consistent
+        fo = d["fold_of"].astype(int)
+        d["oof_sample"] = np.einsum("ik,ik->i", d["oof_prob"], r_[fo]).astype(np.float32)
+        d["oof_single"] = np.einsum("ipk,ik->ip", d["oof_single_prob"], r_[fo]).astype(np.float32)
+
+
+bad_case("representatives differ across seeds", reps_shift)
 bad_case("label-curve hash missing", drop_hash, arm="h")
 bad_case("class index -1", neg_class, all_runs=True)
 bad_case("two-fold statistics under a five-fold protocol", two_folds, all_runs=True)
