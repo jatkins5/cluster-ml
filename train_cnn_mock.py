@@ -90,7 +90,117 @@ def input_files(args):
         out["view_scalars"] = args.view_scalars
     if args.xray_dataset:
         out["xray_dataset"] = args.xray_dataset
+    if args.label_curves:
+        out["label_curves"] = args.label_curves
     return out
+
+
+# ---- E5 (review rounds 15-16): loss arms and the seven-class head ----
+# Fixed for this exploratory experiment (label quantiles had been inspected):
+# C0 first-tau crossing (y = 0.1); C1-C5 crossings with right-closed
+# y-intervals (0.1,0.25] (0.25,0.5] (0.5,1] (1,2] (2,4]; C6 NO crossing of
+# the selected curve (y = 4.0 by the cap). A crossing first at tau = 4.0
+# is C5, never C6: C0/C6 are curve states, not values.
+CLASS_EDGES = np.array([0.1, 0.25, 0.5, 1.0, 2.0, 4.0])
+N_CLASS = 7
+TAU_FIRST, TAU_LAST = 0.1, 4.0
+
+
+def make_criterion(loss, delta):
+    """The training loss of each E5 arm; 'huber' is the legacy default."""
+    if loss == "huber":
+        return nn.HuberLoss(delta=delta)
+    if loss == "mse":
+        return nn.MSELoss()
+    if loss == "class7":
+        return nn.CrossEntropyLoss()
+    raise ValueError(loss)
+
+
+def pseudo_tsc_from_curve(curve, tau):
+    """build_dataset.py's pseudo-TSC rule, reproduced for the identity check
+    (first crossing of 0.5, linear interpolation, tau[0] floor, tau[-1] cap)."""
+    c = curve >= 0.5
+    if not c.any():
+        return float(tau[-1])
+    i = int(np.argmax(c))
+    if i == 0:
+        return float(tau[0])
+    t0, t1, s0, s1 = tau[i - 1], tau[i], curve[i - 1], curve[i]
+    return float(t0 + (0.5 - s0) * (t1 - t0) / (s1 - s0))
+
+
+def classify(curve, y):
+    """Class of one (snapshot, halo) row from its selected curve and label."""
+    c = curve >= 0.5
+    if not c.any():
+        return 6
+    if c[0]:
+        return 0
+    if not (TAU_FIRST < y <= TAU_LAST):
+        raise ValueError(f"crossing label {y} outside (0.1, 4.0]")
+    return 1 + int(np.searchsorted(CLASS_EDGES[1:], y, side="left"))
+
+
+def load_label_classes(path, snap, halo, group_id, tsc):
+    """Identity-checked, read-only join of the label curves (review R16).
+
+    Joins on (snapshot, halo_id); requires unique, complete keys, matching
+    group ids, a finite strictly increasing tau grid from 0.1 to 4.0, finite
+    curves, the stored pseudo-TSC reproduced from the selected curve
+    ('all' at snapshot 99, 'pre' otherwise), and no-crossing => y = 4.0.
+    Returns (class per row, no-crossing flag per row)."""
+    with h5py.File(path, "r") as f:
+        tau = f["labels/tau_gyr"][:].astype(np.float64)
+        s_all = f["labels/label_score_all"][:].astype(np.float64)
+        s_pre = f["labels/label_score_pre"][:].astype(np.float64)
+        ps = f["labels/pseudo_tsc"][:]
+        ks, kh, kg = f["meta/snap"][:], f["meta/halo_id"][:], f["meta/group_id"][:]
+    if not (np.isfinite(tau).all() and (np.diff(tau) > 0).all()
+            and np.isclose(tau[0], TAU_FIRST) and np.isclose(tau[-1], TAU_LAST)):
+        raise ValueError("tau grid must be finite, strictly increasing, 0.1 to 4.0")
+    keys = list(zip(ks.astype(int), kh.astype(int)))
+    if len(set(keys)) != len(keys):
+        raise ValueError(f"{path}: duplicate (snapshot, halo_id) keys")
+    pos = dict(zip(keys, range(len(keys))))
+    cls = np.empty(len(halo), dtype=np.int64)
+    nocross = np.empty(len(halo), dtype=bool)
+    for i, (s_, h_) in enumerate(zip(snap.astype(int), halo.astype(int))):
+        j = pos.get((s_, h_))
+        if j is None:
+            raise ValueError(f"no label curve for (snap {s_}, halo {h_})")
+        if int(kg[j]) != int(group_id[i]):
+            raise ValueError(f"group mismatch for (snap {s_}, halo {h_})")
+        curve = s_all[j] if s_ == 99 else s_pre[j]
+        if not np.isfinite(curve).all():
+            raise ValueError(f"non-finite curve for (snap {s_}, halo {h_})")
+        if not np.isclose(pseudo_tsc_from_curve(curve, tau), tsc[i], atol=1e-5) \
+                or not np.isclose(ps[j], tsc[i], atol=1e-6):
+            raise ValueError(f"pseudo-TSC not reproduced for (snap {s_}, halo {h_})")
+        cls[i] = classify(curve, float(tsc[i]))
+        nocross[i] = cls[i] == 6
+        if nocross[i] and not np.isclose(tsc[i], TAU_LAST):
+            raise ValueError(f"no crossing but y = {tsc[i]} for (snap {s_}, halo {h_})")
+    return cls, nocross
+
+
+def class_reps(y_row, cls_row, fit_rows):
+    """Fitting-halo class representatives and climatology, counting each
+    (snapshot, halo) label row ONCE (review R16): mean label per class, with
+    C0 = 0.1 and C6 = 4.0 exactly; an empty class fails the fold."""
+    yc, cc = y_row[fit_rows], cls_row[fit_rows]
+    counts = np.bincount(cc, minlength=N_CLASS)
+    if (counts == 0).any():
+        raise ValueError(f"empty fitting class(es) {np.where(counts == 0)[0].tolist()}")
+    reps = np.array([yc[cc == k].mean() for k in range(N_CLASS)], dtype=np.float64)
+    reps[0], reps[6] = TAU_FIRST, TAU_LAST
+    return reps, counts, counts / counts.sum()
+
+
+def softmax_np(z):
+    z = z - z.max(axis=-1, keepdims=True)
+    e = np.exp(z)
+    return e / e.sum(axis=-1, keepdims=True)
 
 
 def prep_view_scalars(vsc_all, fit, view_mask, view_cols):
@@ -219,7 +329,7 @@ class MockDataset(Dataset):
 def run_fold(tr_x, tr_y, sel_x, sel_y, epochs, batch_size, device, delta,
              tr_s=None, sel_s=None, n_scalar=0, tr_xr=None, sel_xr=None,
              train_view="pooled", select_view="pooled", tr_vs=None, sel_vs=None,
-             n_view=0):
+             n_view=0, loss="huber", tr_cls=None, reps=None):
     """Train one fold; pick the checkpoint on `sel`, never on the outer fold.
 
     `sel` is a held-out slice of this fold's *training* clusters. Selecting
@@ -230,22 +340,34 @@ def run_fold(tr_x, tr_y, sel_x, sel_y, epochs, batch_size, device, delta,
     epoch and "best" simply picked the top of the swing. The optimizer now
     matches train_cnn_pooled.py (AdamW 3e-4 + cosine), which is most of why
     the curve settles down. Pass sel_x=None to take the final epoch.
+
+    E5: loss "huber" (legacy default), "mse", or "class7" -- a seven-class
+    head trained on tr_cls with cross-entropy, selected on the inner R2 of
+    the decoded point sum_k p_k reps_k (fold-specific fitting representatives).
     """
     joint = tr_xr is not None
     if joint and n_scalar:
         raise ValueError("joint radio+X-ray model does not take scalars")
     if joint and n_view:
         raise ValueError("per-view scalars are not implemented for the joint model")
+    if loss == "class7" and (joint or n_view or tr_cls is None or reps is None):
+        raise ValueError("class7 needs the image-only/scalar PooledCNN, tr_cls and reps")
     model = (JointPooledCNN() if joint
              else ViewScalarCNN(n_view, n_scalar) if n_view
-             else PooledCNN(n_scalar=n_scalar)).to(device)
+             else PooledCNN(n_scalar=n_scalar))
+    if loss == "class7":
+        model.head[-1] = nn.Linear(model.head[-1].in_features, N_CLASS)
+    model = model.to(device)
+    decode = ((lambda o: softmax_np(o.astype(np.float64)) @ reps)
+              if loss == "class7" else (lambda o: o))
     fwd = ((lambda im, xr, sc, vs: model(im, xr)) if joint else
            (lambda im, xr, sc, vs: model(im, vs, sc)) if n_view else
            (lambda im, xr, sc, vs: model(im, sc)))
     opt = torch.optim.AdamW(model.parameters(), lr=3e-4, weight_decay=1e-3)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=epochs)
-    crit = nn.HuberLoss(delta=delta)
-    tl = DataLoader(MockDataset(tr_x, tr_y, tr_s, train=True, xray=tr_xr,
+    crit = make_criterion(loss, delta)
+    tl = DataLoader(MockDataset(tr_x, tr_cls if loss == "class7" else tr_y,
+                                tr_s, train=True, xray=tr_xr,
                                 view=train_view, view_scalars=tr_vs),
                     batch_size=batch_size,
                     shuffle=True, num_workers=2, drop_last=True)
@@ -266,8 +388,9 @@ def run_fold(tr_x, tr_y, sel_x, sel_y, epochs, batch_size, device, delta,
             xr = xr.to(device) if joint else None
             vs = vs.to(device) if n_view else None
             opt.zero_grad()
-            loss = crit(fwd(imgs, xr, sc, vs), y)
-            loss.backward()
+            out = fwd(imgs, xr, sc, vs)
+            batch_loss = crit(out, y.long() if loss == "class7" else y)
+            batch_loss.backward()
             opt.step()
         sched.step()
         if sl is None:
@@ -280,7 +403,7 @@ def run_fold(tr_x, tr_y, sel_x, sel_y, epochs, batch_size, device, delta,
                 xr = xr.to(device) if joint else None
                 vs = vs.to(device) if n_view else None
                 preds.append(fwd(imgs.to(device), xr, sc, vs).cpu().numpy())
-        r2 = r2_score(sel_target, np.concatenate(preds))
+        r2 = r2_score(sel_target, decode(np.concatenate(preds)))
         if r2 > best:
             best, best_ep = r2, ep + 1
             best_state = {k: v.detach().clone()
@@ -396,6 +519,13 @@ def main():
     ap.add_argument("--no-image", action="store_true",
                     help="zero the images: the mass-only baseline, on the "
                          "same folds, protocol and architecture.")
+    ap.add_argument("--loss", choices=["huber", "mse", "class7"], default="huber",
+                    help="E5: training loss/head; huber (--huber-delta) is the "
+                         "legacy default, class7 the seven-class head")
+    ap.add_argument("--label-curves", default=None,
+                    help="dataset with labels/label_score_{all,pre} and meta/ "
+                         "(snap, halo_id, group_id), joined read-only for the "
+                         "E5 classes; identity metadata, not a predictor input")
     ap.add_argument("--xray-dataset", default=None,
                     help="realistic X-ray mocks (build_xray_realistic.py) to "
                          "pair with the radio mocks in a joint model")
@@ -410,6 +540,11 @@ def main():
                          "measurement must be fixed across seeds and arms")
     if args.no_image and not args.mass:
         raise SystemExit("--no-image without --mass leaves no input at all")
+    if args.loss == "class7" and not args.label_curves:
+        raise SystemExit("--loss class7 needs --label-curves")
+    if args.loss == "class7" and (args.xray_dataset or args.view_scalars):
+        raise SystemExit("--loss class7 is implemented for the single-modality "
+                         "PooledCNN only")
 
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
@@ -456,6 +591,17 @@ def main():
         print("  snapshots: " + ", ".join(f"{s}: {(snap == s).sum()} rows"
                                          for s in np.unique(snap))
               + f"; {len(np.unique(group_id))} distinct clusters")
+
+    # E5: classes from the label curves (identity-checked; rows = (snap, halo))
+    cls_row = nocross_row = None
+    if args.label_curves:
+        try:
+            cls_row, nocross_row = load_label_classes(args.label_curves, snap, halo,
+                                                      group_id, tsc)
+        except ValueError as e:
+            raise SystemExit(f"--label-curves: {e}")
+        print(f"  label curves joined: classes {np.bincount(cls_row, minlength=N_CLASS).tolist()}"
+              f" (C0..C6), {int(nocross_row.sum())} without a crossing")
 
     # Flatten realizations into samples, keeping cluster identity for grouping
     # so no cluster is split across folds.
@@ -624,7 +770,12 @@ def main():
     fold_of = np.full(N * R, -1, dtype=np.int16)
     obs_preds = []
     fold_prep = {k: [] for k in ("scalar_mu", "scalar_sd", "view_median",
-                                 "view_mu", "view_sd")}
+                                 "view_mu", "view_sd", "class_reps",
+                                 "class_counts", "climatology")}
+    is_cls = args.loss == "class7"
+    oof_prob = np.full((N * R, N_CLASS) if is_cls else (0, N_CLASS), np.nan, np.float32)
+    oof_single_prob = np.full((N * R, P, N_CLASS) if is_cls else (0, P, N_CLASS),
+                              np.nan, np.float32)
     manifest = None
     if args.fold_manifest:
         # review R4-B: persisted parent-halo folds AND inner-selection halos,
@@ -686,6 +837,19 @@ def main():
             fold_prep["view_median"].append(med)
             fold_prep["view_mu"].append(vmu)
             fold_prep["view_sd"].append(vsd)
+        reps = None
+        if cls_row is not None:
+            # fitting (snapshot, halo) rows, each counted once
+            try:
+                reps, ccount, clim = class_reps(tsc.astype(np.float64), cls_row,
+                                                np.unique(fit // R))
+            except ValueError as e:
+                raise SystemExit(f"fold {k}: {e}")
+            fold_prep["class_reps"].append(reps)
+            fold_prep["class_counts"].append(ccount)
+            fold_prep["climatology"].append(clim)
+        tr_cls = (None if cls_row is None
+                  else np.repeat(cls_row, R)[fit].astype(np.float32))
         model, best, best_ep = run_fold(
             x[fit], y[fit], None if sel is None else x[sel],
             None if sel is None else y[sel], args.epochs, args.batch_size,
@@ -694,10 +858,20 @@ def main():
             sel_xr=None if (xr_all is None or sel is None) else xr_all[sel],
             train_view=args.train_view, select_view=args.select_view,
             tr_vs=None if vsn is None else vsn[fit],
-            sel_vs=None if (vsn is None or sel is None) else vsn[sel], n_view=n_view)
-        oof[va] = predict(model, x[va], device, scalars=v_s,
-                          xray=None if xr_all is None else xr_all[va],
-                          view_scalars=None if vsn is None else vsn[va])
+            sel_vs=None if (vsn is None or sel is None) else vsn[sel], n_view=n_view,
+            loss=args.loss, tr_cls=tr_cls, reps=reps)
+        def point(o, store=None, at=None):
+            """Decode raw outputs; for class7 keep the probabilities."""
+            if not is_cls:
+                return o
+            pr = softmax_np(o.astype(np.float64))
+            if store is not None:
+                store[at] = pr
+            return pr @ reps
+        oof[va] = point(predict(model, x[va], device, scalars=v_s,
+                                xray=None if xr_all is None else xr_all[va],
+                                view_scalars=None if vsn is None else vsn[va]),
+                        oof_prob, va)
         fold_of[va] = k - 1
         for pj in range(P):
             xs = np.repeat(x[va][:, pj:pj + 1], P, axis=1)
@@ -706,10 +880,16 @@ def main():
             # this observation's own view scalars only
             vss = (None if vsn is None
                    else np.repeat(vsn[va][:, pj:pj + 1], P, axis=1))
-            oof_single[va, pj] = predict(model, xs, device, scalars=v_s, xray=xrs,
-                                         view_scalars=vss)
-        obs_preds.append(predict(model, obs_x, device, scalars=o_s,
-                                 xray=obs_xr if xr_all is not None else None))
+            o_ = predict(model, xs, device, scalars=v_s, xray=xrs, view_scalars=vss)
+            if is_cls:
+                pr = softmax_np(o_.astype(np.float64))
+                oof_single_prob[va, pj] = pr
+                oof_single[va, pj] = pr @ reps
+            else:
+                oof_single[va, pj] = o_
+        ob = predict(model, obs_x, device, scalars=o_s,
+                     xray=obs_xr if xr_all is not None else None)
+        obs_preds.append(point(ob) if len(ob) else ob)
         print(f"  fold {k}: checkpoint epoch {best_ep}/{args.epochs}, "
               f"sel R2 {best:+.3f}  ->  outer val R2 "
               f"{r2_score(y[va], oof[va]):+.3f}")
@@ -783,6 +963,11 @@ def main():
              train_view=args.train_view, select_view=args.select_view,
              view_cols=np.array(view_cols), n_view=n_view, n_scalar=n_scalar,
              view_mask=view_mask, global_cols=np.array(global_cols),
+             # E5 (review R16)
+             loss=args.loss, class_edges=CLASS_EDGES,
+             class_of=(cls_row if cls_row is not None else np.zeros(0, np.int64)),
+             nocross=(nocross_row if nocross_row is not None else np.zeros(0, bool)),
+             oof_prob=oof_prob, oof_single_prob=oof_single_prob,
              # review R9: the raw scalar inputs as actually used (per sample
              # row i*R + r; view inputs per cluster row and projection) and
              # each fold's fitted preprocessing
