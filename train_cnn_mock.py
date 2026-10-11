@@ -16,6 +16,7 @@ Reports two things:
      shows it here as collapse to the training mean or excursion out of range.
 """
 import argparse
+import json
 
 import h5py
 import numpy as np
@@ -163,6 +164,9 @@ def load_label_classes(path, snap, halo, group_id, tsc):
     if len(set(keys)) != len(keys):
         raise ValueError(f"{path}: duplicate (snapshot, halo_id) keys")
     pos = dict(zip(keys, range(len(keys))))
+    want = list(zip(snap.astype(int), halo.astype(int)))
+    if len(set(want)) != len(want):
+        raise ValueError("duplicate requested (snapshot, halo_id) keys")
     cls = np.empty(len(halo), dtype=np.int64)
     nocross = np.empty(len(halo), dtype=bool)
     for i, (s_, h_) in enumerate(zip(snap.astype(int), halo.astype(int))):
@@ -201,6 +205,95 @@ def softmax_np(z):
     z = z - z.max(axis=-1, keepdims=True)
     e = np.exp(z)
     return e / e.sum(axis=-1, keepdims=True)
+
+
+# ---- E4 (review rounds 15-17): one contrastive X-ray pilot ----
+# A unit is one (parent, snapshot, projection, realization) observation.
+# Positives: two independent D4 transforms of the SAME unit (a spatial-
+# symmetry pilot; both views share one noise pattern). Negatives: the other
+# units of the batch, which never share a parent.
+def contrastive_batches(parent_of_unit, batch_size, rng):
+    """One epoch: every unit once. Units are shuffled within each parent;
+    layer j holds the j-th unit of every parent with more than j units, in
+    shuffled parent order, cut into batches of <= batch_size -- so no batch
+    repeats a parent. A final batch of one unit is merged into the previous
+    batch of the same layer (still distinct parents); a layer with a single
+    unit in total cannot form a negative and raises."""
+    by = {}
+    for u, g in enumerate(parent_of_unit):
+        by.setdefault(int(g), []).append(u)
+    for g in by:
+        by[g] = list(rng.permutation(by[g]))
+    out = []
+    for j in range(max(len(v) for v in by.values())):
+        layer = [by[g][j] for g in rng.permutation(sorted(by)) if len(by[g]) > j]
+        if len(layer) < 2:
+            raise ValueError(f"contrastive layer {j} has {len(layer)} unit(s): no negatives")
+        bs = [layer[i:i + batch_size] for i in range(0, len(layer), batch_size)]
+        if len(bs) > 1 and len(bs[-1]) == 1:
+            bs[-2] = bs[-2] + bs.pop()
+        out.extend(bs)
+    for b in out:
+        if len(set(parent_of_unit[b])) != len(b):
+            raise AssertionError("batch repeats a parent")
+    return out
+
+
+def nt_xent(z, temp):
+    """NT-Xent on 2B L2-normalised projections: rows i and i+B are the two
+    views of one unit; self-similarities are masked."""
+    B2 = z.shape[0]
+    B = B2 // 2
+    sim = z @ z.t() / temp
+    sim = sim.masked_fill(torch.eye(B2, dtype=torch.bool, device=z.device), float("-inf"))
+    target = torch.cat([torch.arange(B, B2), torch.arange(0, B)]).to(z.device)
+    return nn.functional.cross_entropy(sim, target)
+
+
+def d4_pair(imgs, rng):
+    """Two independently drawn D4 transforms of each (H, W) image."""
+    k1, k2 = rng.integers(8, size=len(imgs)), rng.integers(8, size=len(imgs))
+    a = np.stack([augment(im, k) for im, k in zip(imgs, k1)])
+    b = np.stack([augment(im, k) for im, k in zip(imgs, k2)])
+    return a, b
+
+
+def pretrain_encoder(units_x, parent_of_unit, epochs, temp, batch_size, device, rng,
+                     embed_dim=256):
+    """Contrastive pretraining of a fresh PooledCNN encoder on the given
+    units only (the caller passes FITTING halos). Projection head 256-256-128
+    (discarded); AdamW 3e-4 + cosine over the realised steps; final epoch
+    kept. Returns (encoder state, per-epoch mean loss, update count, pair
+    count)."""
+    base = PooledCNN(embed_dim=embed_dim)
+    enc, pool = base.encoder.to(device), base.pool.to(device)
+    proj = nn.Sequential(nn.Linear(embed_dim, embed_dim), nn.ReLU(inplace=True),
+                         nn.Linear(embed_dim, 128)).to(device)
+    params = list(enc.parameters()) + list(proj.parameters())
+    opt = torch.optim.AdamW(params, lr=3e-4, weight_decay=1e-3)
+    plan = [contrastive_batches(parent_of_unit, batch_size, rng) for _ in range(epochs)]
+    total = sum(len(p) for p in plan)
+    sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=total)
+    curve, n_upd, n_pairs = [], 0, 0
+    enc.train(); proj.train()
+    for ep_batches in plan:
+        losses = []
+        for b in ep_batches:
+            xa, xb = d4_pair(units_x[b], rng)
+            x2 = torch.tensor(np.concatenate([xa, xb])[:, None], dtype=torch.float32,
+                              device=device)
+            z = nn.functional.normalize(proj(pool(enc(x2)).flatten(1)), dim=1)
+            loss = nt_xent(z, temp)
+            opt.zero_grad()
+            loss.backward()
+            opt.step()
+            sched.step()
+            losses.append(float(loss))
+            n_upd += 1
+            n_pairs += len(b)
+        curve.append(float(np.mean(losses)))
+    return ({k: v.detach().cpu().clone() for k, v in enc.state_dict().items()},
+            np.array(curve), n_upd, n_pairs)
 
 
 def prep_view_scalars(vsc_all, fit, view_mask, view_cols):
@@ -329,7 +422,7 @@ class MockDataset(Dataset):
 def run_fold(tr_x, tr_y, sel_x, sel_y, epochs, batch_size, device, delta,
              tr_s=None, sel_s=None, n_scalar=0, tr_xr=None, sel_xr=None,
              train_view="pooled", select_view="pooled", tr_vs=None, sel_vs=None,
-             n_view=0, loss="huber", tr_cls=None, reps=None):
+             n_view=0, loss="huber", tr_cls=None, reps=None, encoder_state=None):
     """Train one fold; pick the checkpoint on `sel`, never on the outer fold.
 
     `sel` is a held-out slice of this fold's *training* clusters. Selecting
@@ -344,6 +437,11 @@ def run_fold(tr_x, tr_y, sel_x, sel_y, epochs, batch_size, device, delta,
     E5: loss "huber" (legacy default), "mse", or "class7" -- a seven-class
     head trained on tr_cls with cross-entropy, selected on the inner R2 of
     the decoded point sum_k p_k reps_k (fold-specific fitting representatives).
+
+    E4: encoder_state loads a pretrained encoder and FREEZES it -- parameters
+    (requires_grad False, excluded from the optimiser) and BatchNorm running
+    statistics (encoder kept in eval mode while the head trains).
+    Returns (model, best inner score, best epoch).
     """
     joint = tr_xr is not None
     if joint and n_scalar:
@@ -357,13 +455,21 @@ def run_fold(tr_x, tr_y, sel_x, sel_y, epochs, batch_size, device, delta,
              else PooledCNN(n_scalar=n_scalar))
     if loss == "class7":
         model.head[-1] = nn.Linear(model.head[-1].in_features, N_CLASS)
+    frozen = encoder_state is not None
+    if frozen:
+        if joint or n_view:
+            raise ValueError("E4 frozen encoder is implemented for PooledCNN only")
+        model.encoder.load_state_dict(encoder_state)
+        for prm in model.encoder.parameters():
+            prm.requires_grad_(False)
     model = model.to(device)
     decode = ((lambda o: softmax_np(o.astype(np.float64)) @ reps)
               if loss == "class7" else (lambda o: o))
     fwd = ((lambda im, xr, sc, vs: model(im, xr)) if joint else
            (lambda im, xr, sc, vs: model(im, vs, sc)) if n_view else
            (lambda im, xr, sc, vs: model(im, sc)))
-    opt = torch.optim.AdamW(model.parameters(), lr=3e-4, weight_decay=1e-3)
+    opt = torch.optim.AdamW([q for q in model.parameters() if q.requires_grad],
+                            lr=3e-4, weight_decay=1e-3)
     sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=epochs)
     crit = make_criterion(loss, delta)
     tl = DataLoader(MockDataset(tr_x, tr_cls if loss == "class7" else tr_y,
@@ -382,6 +488,8 @@ def run_fold(tr_x, tr_y, sel_x, sel_y, epochs, batch_size, device, delta,
     best, best_state, best_ep = -np.inf, None, epochs
     for ep in range(epochs):
         model.train()
+        if frozen:
+            model.encoder.eval()          # BatchNorm statistics stay frozen
         for imgs, xr, sc, vs, y in tl:
             imgs, y = imgs.to(device), y.to(device)
             sc = sc.to(device) if n_scalar else None
@@ -526,6 +634,13 @@ def main():
                     help="dataset with labels/label_score_{all,pre} and meta/ "
                          "(snap, halo_id, group_id), joined read-only for the "
                          "E5 classes; identity metadata, not a predictor input")
+    ap.add_argument("--contrastive-pretrain", action="store_true",
+                    help="E4: pretrain the encoder contrastively on each fold's "
+                         "FITTING halos (D4 pairs of one observation), then train "
+                         "the unchanged head on the frozen encoder")
+    ap.add_argument("--cl-epochs", type=int, default=300)
+    ap.add_argument("--cl-temp", type=float, default=0.2)
+    ap.add_argument("--cl-batch", type=int, default=128)
     ap.add_argument("--xray-dataset", default=None,
                     help="realistic X-ray mocks (build_xray_realistic.py) to "
                          "pair with the radio mocks in a joint model")
@@ -542,6 +657,10 @@ def main():
         raise SystemExit("--no-image without --mass leaves no input at all")
     if args.loss == "class7" and not args.label_curves:
         raise SystemExit("--loss class7 needs --label-curves")
+    if args.contrastive_pretrain and (args.xray_dataset or args.view_scalars
+                                      or args.loss != "huber" or args.select != "inner"):
+        raise SystemExit("--contrastive-pretrain is the single E4 arm: single-modality "
+                         "PooledCNN, huber head, inner selection")
     if args.loss == "class7" and (args.xray_dataset or args.view_scalars):
         raise SystemExit("--loss class7 is implemented for the single-modality "
                          "PooledCNN only")
@@ -771,11 +890,14 @@ def main():
     obs_preds = []
     fold_prep = {k: [] for k in ("scalar_mu", "scalar_sd", "view_median",
                                  "view_mu", "view_sd", "class_reps",
-                                 "class_counts", "climatology")}
+                                 "class_counts", "climatology", "best_epoch",
+                                 "sel_score", "cl_updates", "cl_pairs")}
+    cl_curves, cl_groups = [], []
     is_cls = args.loss == "class7"
-    oof_prob = np.full((N * R, N_CLASS) if is_cls else (0, N_CLASS), np.nan, np.float32)
+    # float64: float32 storage could turn tiny probabilities into exact zeros
+    oof_prob = np.full((N * R, N_CLASS) if is_cls else (0, N_CLASS), np.nan, np.float64)
     oof_single_prob = np.full((N * R, P, N_CLASS) if is_cls else (0, P, N_CLASS),
-                              np.nan, np.float32)
+                              np.nan, np.float64)
     manifest = None
     if args.fold_manifest:
         # review R4-B: persisted parent-halo folds AND inner-selection halos,
@@ -850,6 +972,28 @@ def main():
             fold_prep["climatology"].append(clim)
         tr_cls = (None if cls_row is None
                   else np.repeat(cls_row, R)[fit].astype(np.float32))
+        enc_state = None
+        if args.contrastive_pretrain:
+            # E4: FITTING halos only; inner-selection and outer halos never enter
+            fit_parents = set(np.unique(groups[fit]).tolist())
+            if fit_parents & set(np.unique(groups[sel]).tolist()) or \
+                    fit_parents & set(np.unique(groups[va]).tolist()):
+                raise SystemExit(f"fold {k}: pretraining partition overlaps inner/outer halos")
+            units_x = x[fit].reshape(-1, H, H)                  # (fit rows * P)
+            unit_parent = np.repeat(groups[fit], P)
+            try:
+                enc_state, curve, n_upd, n_pairs = pretrain_encoder(
+                    units_x, unit_parent, args.cl_epochs, args.cl_temp, args.cl_batch,
+                    device, np.random.default_rng([args.seed, k]))
+            except ValueError as e:
+                raise SystemExit(f"fold {k}: {e}")
+            cl_curves.append(curve)
+            cl_groups.append(np.array(sorted(fit_parents)))
+            fold_prep["cl_updates"].append(n_upd)
+            fold_prep["cl_pairs"].append(n_pairs)
+            print(f"  fold {k}: contrastive pretraining on {len(fit_parents)} fitting "
+                  f"parents, {len(units_x)} units, {n_upd} updates; loss "
+                  f"{curve[0]:.3f} -> {curve[-1]:.3f}")
         model, best, best_ep = run_fold(
             x[fit], y[fit], None if sel is None else x[sel],
             None if sel is None else y[sel], args.epochs, args.batch_size,
@@ -859,7 +1003,9 @@ def main():
             train_view=args.train_view, select_view=args.select_view,
             tr_vs=None if vsn is None else vsn[fit],
             sel_vs=None if (vsn is None or sel is None) else vsn[sel], n_view=n_view,
-            loss=args.loss, tr_cls=tr_cls, reps=reps)
+            loss=args.loss, tr_cls=tr_cls, reps=reps, encoder_state=enc_state)
+        fold_prep["best_epoch"].append(best_ep)
+        fold_prep["sel_score"].append(best)
         def point(o, store=None, at=None):
             """Decode raw outputs; for class7 keep the probabilities."""
             if not is_cls:
@@ -968,6 +1114,21 @@ def main():
              class_of=(cls_row if cls_row is not None else np.zeros(0, np.int64)),
              nocross=(nocross_row if nocross_row is not None else np.zeros(0, bool)),
              oof_prob=oof_prob, oof_single_prob=oof_single_prob,
+             # checkpoint record (review R17-D): per fold, selected epoch and
+             # its inner single-observation R2 (criterion: select/select_view)
+             select_criterion=f"{args.select}:{args.select_view}:r2",
+             # E4 record (review R17)
+             contrastive_pretrain=args.contrastive_pretrain,
+             cl_config=np.array(json.dumps(dict(
+                 epochs=args.cl_epochs, temp=args.cl_temp, batch=args.cl_batch,
+                 positives="two independent D4 transforms of one (parent, snapshot, "
+                           "projection, realization)",
+                 negatives="other units in the batch; one unit per parent per batch",
+                 partition="fitting halos of the fold")) if args.contrastive_pretrain else ""),
+             cl_loss_curve_fold=np.array(cl_curves) if cl_curves else np.zeros((0, 0)),
+             cl_groups_flat=np.concatenate(cl_groups) if cl_groups else np.zeros(0),
+             cl_groups_fold=(np.concatenate([np.full(len(g_), i_) for i_, g_ in enumerate(cl_groups)])
+                             if cl_groups else np.zeros(0)),
              # review R9: the raw scalar inputs as actually used (per sample
              # row i*R + r; view inputs per cluster row and projection) and
              # each fold's fitted preprocessing
