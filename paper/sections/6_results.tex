@@ -163,6 +163,27 @@
   \label{fig:pm}
 \end{figure*}
 
+\subsection{Loss, output head and contrastive pretraining}
+\label{sec:loss_head}
+\begin{itemize}
+  \item In a matched exploratory comparison, replacing the Huber loss with
+        MSE or a seven-class distributional head did not meet our
+        prespecified point-prediction adoption criterion.
+  \item The five-seed ensemble $R^2$ values were 0.432, 0.427 and 0.425,
+        respectively; paired halo-bootstrap intervals for the latter two
+        contrasts included zero.
+  \item The distributional head improved categorical log score, ranked
+        probability score and no-crossing Brier score relative to
+        fitting-halo climatology, supporting its use as a probabilistic
+        alternative without establishing calibration or equivalent point
+        accuracy.
+  \item The D4 contrastive pilot with a frozen encoder performed worse
+        ($R^2 = 0.232$; $\Delta R^2 = -0.200$, conditional 95 per cent
+        interval [$-0.260$, $-0.132$]).
+  \item These results concern the capped proxy label and this fixed
+        development protocol.
+\end{itemize}
+
 \subsection{Idealised optical structure}
 \label{sec:optical}
 \begin{itemize}
