@@ -1,7 +1,15 @@
 \section{Results}
 \label{sec:results}
 
-\subsection{What the radio image knows}
+We evaluated the degree to which \todo{define capped} capped pseudo-TSC labels can be recovered from simluated radio and X-ray images, including whether the performance changed when simulated forward-modelling was added, and whether additional inputs or variations on the training objective improved performance.
+pseudo-TSC is defined in section \ref{sec:sims}.
+All simulation scores are out-of-fold (OOF) predictions.
+Unless otherwise stated, listed uncertainties describe the standard deviation across five training seeds.
+\todo{describe bootstrapping}
+Errors expressed in Gyr are accuracy on the pseudo-TSC scale, rather than uncertainty in physical collision dates.
+\todo{justify why they are meaningful then}
+
+\subsection{Radio-only}
 \begin{itemize}
   \item All at 144\,MHz, snapshot 99, 5 seeds, same folds. Pooled CNN
         $0.485 \pm 0.028$ (ensemble 0.530) vs total flux 0.440, mass 0.314,
@@ -23,6 +31,30 @@
   \item The same analyses at 1.4\,GHz differ by at most 0.02 (the
         high-mass tercile, 0.22 there).
 \end{itemize}
+
+The 144 MHz radio images contain information beyond the realistic baselines considered here.
+On the 352 clusters imaged at snapshot-99, the CNN that pooled all three orthogonal projections achieved $R^2 = 0.485 \pm 0.028$, increasing to $0.530$ when predictions were averaged across five seeds.
+This is compared to $R^2 = 0.314$ from ridge regression on the halo mass, 0.440 using integrated radio emission, and 0.459 using all five scalar features.
+Combining the scalar features with the CNN gave $R^2 = 0.541$, an increment of 0.082 over the scalar model.
+
+The CNN remained predictive within each mass tercile, with $R^2$ values of 0.332, 0.328, and 0.239 in the lowest, medium, and highest mass bins, respectively.
+In comparison, the five-scalar model achieved $R^2=$ 0.295, 0.250, and $-0.287$.
+The partial rank correlation between pseudo-TSC and the CNN predictions after controlling for halo mass was 0.480.
+Thus, as the CNN achieved greater $R^2$ for each tercile, its performance is not explained solely by the overall association between mass and pseudo-TSC.
+However, the scalar features predicted the CNN prediction with $R^2=0.732$, and thus they have substantial overlap.
+
+Normalizing each radio projection to a common integrated emission value reduced the mean CNN score to $R^2=0.414 \pm 0.040$.
+Performance decreased in all five random seeds, with a mean paired change of $-0.071$ and a paired-seed p-value of $0.019$.
+Therefore, explicit amplitude information is helpful for prediction, but not the only component.
+Note that amplitude normalization does not isolate morphology specifically from all information related to luminosity: the original integrated emission predicted the output of the normalized-map model at $R^2=0.602$.
+Thus, morphology, brightness, and cluster properties remain correlated within the simulated population.
+
+Part of the signal could also be recovered from a representation of the morphology.
+An XGBoost decision tree model applied to 48 Minkowski-functional measurements predicted pseudo-TSC at $R^2 = 0.304$ for individual projections, and at $R^2 = 0.415$ after averaging predictions across all three cluster projections.
+At the largest area-fraction threshold, corresponding to the lowest intensity threshold considered \todo{this phrasing is unclear}, the number of connected components correlated with pseudo-TSC at Spearman correlation $\rho = 0.62$.
+Older proxy ages were thus associated with more fragmented emission.
+A similar analysis applied to clean maps at 1.4 GHz gave similar results, with scores differing by no more than 0.02.
+
 \begin{figure*}
   \centering
   \includegraphics[width=\textwidth]{fig_mf_tsc.pdf}
@@ -66,7 +98,7 @@
   \label{fig:tsc_pred}
 \end{figure*}
 
-\subsection{X-ray, and radio with X-ray}
+\subsection{X-ray and Combined Model}
 \begin{itemize}
   \item The stretch bug and fix: X-ray 0.320 $\to$ 0.511 ($p = 0.0003$).
   \item Clean joint model on the 144\,MHz radio maps: $0.545$, $+0.059 \pm
@@ -75,8 +107,24 @@
         1.4\,GHz version gave 0.537.
 \end{itemize}
 
-\subsection{Under observational degradation}
+Clean X-ray images provided comparable predictive power to clean radio images.
+Applying the globally-scaled arcsinh scaling increased the X-ray CNN correlation from $R^2=0.320$ to $0.511 \pm 0.26$.
+Improvement was found in all five seeds, with a paired-seed p-value of $0.0003$.
+This shows a large sensitivity to the preprocessing method, reflecting the the limited compression produced by applying an unscaled arcsinh transformation to low count rates.
+\todo{this isn't explained very well}
+Combining the stretched X-ray images with the 144 MHz radio maps yields a mean $R^2 = 0.545$.
+The paired increment over just radio was $0.059 \pm 0.025$, with all five seeds showing improvement ($p = 0.007$).
+This result supports the existence of complementary information between X-ray and radio data.
+However, note that the quoted significance describes variation across training seeds, and not uncertainty across independently-sampled halo populations.
+
+\subsection{With Forward-Modelling}
 \label{sec:flux}
+
+Post-processing the radio images with a forward model substantially reduced the information that could be extracted.
+Results in table \ref{tab:realistic} are obtained with radio emission cropped and rebinned in linear units with flux conservation, while X-ray photon sampling follows the exposure conventions of the processed observations.
+These models were trained on snapshots 99 and 91 and evaluated on all 352 clusters at snapshot 99.
+We distinguish the pooled-view score, which combines all three projections, from the single-view score, which evaluates each projection separately after averaging the five model predictions.
+
 \begin{itemize}
   \item Forward models as corrected after review (Section~\ref{sec:fwd}):
         radio injected as linear emission with a flux-conserving rebin and
