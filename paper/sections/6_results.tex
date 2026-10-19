@@ -125,6 +125,37 @@ Results in table \ref{tab:realistic} are obtained with radio emission cropped an
 These models were trained on snapshots 99 and 91 and evaluated on all 352 clusters at snapshot 99.
 We distinguish the pooled-view score, which combines all three projections, from the single-view score, which evaluates each projection separately after averaging the five model predictions.
 
+For single projections, the radio-only ensemble of five models achieved $R^2 = 0.072$ with a box size of 1 Mpc, and $R^2=0.203$ with a box size of 3 Mpc.
+The corresponding scores for the pooled input models, averaged over the different seeds, were $0.142\pm0.021$ and $0.238\pm0.019$.
+The experiment sensitive to arcsinh morphology \todo{explain better}, which retained the total physical flux while compressing the spatial intensity distribution, gave a similar single-projection score of $R^2=0.207$ for the 3 Mpc box.
+While the models predicting on larger boxes performed better, injection placements were also changed, so the effect of field size was not completely isolated.
+
+Despite significantly decreased performance, the radio images retained useful information beyond noisy mass measurements.
+The mass-only model achieved a single-observation ensemble score of $R^2 = 0.207$, which increased to $0.306$ when the 3 Mpc radio image was also provided.
+The mean paired difference was $+0.099$, with a $95\%$ confidence interval of $[+0.039, +0.158]$.
+Both experiments used the same fixed noisy mass measurements, but the specific fold partitions differed; thus, the confidence interval describes the contrast between the fitted models and the partitions, rather than a fully-matched radio contribution estimate.
+
+X-ray images showed much stronger performance under forward-modelling, achieving a single-observation ensemble $R^2 = 0.406$.
+Adding the radio images with 1 Mpc box size increased the score to $0.436$, a mean difference of $+0.031$.
+However, this difference was not significant, with a $95\%$ confidence interval of $[-0.014, +0.076]$.
+This comparison also used different fold partitions.
+
+A separate experiment tested whether training on individual X-ray views improved performance when inference was restricted to a single observation.
+Both conditions used identical folds and single-view inner validation scoring.
+Pooled-observation training achieved an ensemble $R^2 = 0.425$ and mean absolute error (MAE) of $0.649$ Gyr, compared with $R^2=0.421$ and MAE of $0.659$ Gyr for single-view training.
+The paired $R^2$ difference was $-0.004$, with a $95\%$ confidence interval of $[-0.027, +0.019]$.
+Therefore, single-view training showed no ensemble improvement in this experiment.
+These results create a separate comparison from those in table \ref{tab:realistic}, since the fold construction and checkpoint selection protocol differ \todo{how?}.
+
+The performance on X-ray data also depended on exposure.
+In the depth experiment, the mean pooled-view $R^2$ increased from 0.312 at 5 ks to 0.365 at 20 ks and 0.450 at 50 ks.
+Further increases were not as large, reaching 0.476 at 150 ks and 0.499 at 500 ks.
+These exposures are expressed in Cycle-22-equivalent units.
+This experiment used three seeds, and only trained on data from snapshot 99, so its scores are not directly interchangable with the single-observation, five-model results stated previously.
+The trend in accuracy with exposure time describes sensitivity within the approximate count and background model; observation-specific detector footprints are not reproduced.
+
+
+
 \begin{itemize}
   \item Forward models as corrected after review (Section~\ref{sec:fwd}):
         radio injected as linear emission with a flux-conserving rebin and
