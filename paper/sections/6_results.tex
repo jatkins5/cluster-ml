@@ -154,46 +154,21 @@ These exposures are expressed in Cycle-22-equivalent units.
 This experiment used three seeds, and only trained on data from snapshot 99, so its scores are not directly interchangable with the single-observation, five-model results stated previously.
 The trend in accuracy with exposure time describes sensitivity within the approximate count and background model; observation-specific detector footprints are not reproduced.
 
+Figure \ref{fig:tsc_pred} shows that the recovered age range is systematically compressed for the forward-modelled data.
+The youngest mergers are predicted about 0.35 Gyr too old, while systems at the 4 Gyr maximum were predicted about 1.2-1.4 Gyr below the maximum.
+Thus, substantial bias exists near the limits of the label distribution, especially near the 4 Gyr maximum.
 
+The simulated radio power also varied systematically with the merger state and the mass.
+After applying the density cut, the total 144 MHz power had a fitted mass slope of $2.67\pm0.16$ and scatter of $0.78$ dex.
+Restricting the emission to the 3 Mpc injection box resulted in a slope of $2.36\pm0.19$ and scatter of 0.93 dex.
+Residuals from the total-power relation decreased with pseudo-TSC, with Spearman $\rho=-0.33$.
+Thus, recently disturbed systems tend to be brighter at a fixed mass.
+The normalization was set globally, anchored to the observed halo-power relation; the simulated slope was not imposed.
+Comparisons with observed halo and relic relations remain contextual, as frequency, source definition, fitting method, and selection differ, and the slope alone does not establish agreement with one particular source population.
 
-\begin{itemize}
-  \item Forward models as corrected after review (Section~\ref{sec:fwd}):
-        radio injected as linear emission with a flux-conserving rebin and
-        one global flux constant fixed on total power (median matched to the
-        Cuciti et al.\ 2023 relation; its per-cluster slope is not imposed);
-        X-ray with the real data's count model (Cycle-22-equivalent exposure
-        for focused photons, livetime for particles). Training on snapshots
-        99 + 91; scores on the 352 snapshot-99 clusters
-        (Table~\ref{tab:realistic}).
-  \item Replacing the legacy forward model substantially reduces radio
-        predictive performance, consistent with the removal of an artificial
-        mass-dependent flux contribution (legacy realistic radio: 0.409,
-        $\rho({\rm pred}, M) = -0.63$); the corrected 3\,Mpc configuration
-        performs better than the corrected 1\,Mpc configuration. The box
-        comparison also changes the injection placements.
-  \item What the radio image adds beyond a noisy mass measurement (same
-        clusters, seeds and fixed blurred-mass draw): $+0.099$ in
-        single-observation $R^2$ (5-model ensembles; halo-bootstrap 95 per
-        cent interval $[+0.039, +0.158]$). Descriptive: the two arms used
-        different fold partitions, and the interval is conditional on the
-        fitted models, those partitions and the mass draw.
-  \item Adding radio to X-ray gives no demonstrated improvement: $+0.031$ in
-        single-observation $R^2$, interval $[-0.014, +0.076]$, which does not
-        exclude a modest gain (same descriptive qualification).
-  \item X-ray is the strongest realistic input (single-observation 0.406).
-        Its dependence on exposure is in Fig.~\ref{fig:xray_depth}, with a
-        different (pooled, snapshot-99-only) estimator.
-  \item The simulation's $P_{150}$--\mfive, from the cells with the density
-        cut: slope $2.67\pm0.16$, scatter 0.78\,dex, consistent with the relic
-        relation (de Gasperin et al.\ 2014, $2.83\pm0.39$) rather than the
-        halo one (Cuciti et al.\ 2023, 3.55); scatter tracks merger state with
-        the observed sign.
-  \item Snapshot 91: an earlier paired comparison under the legacy forward
-        models suggested gains from the second epoch for the noisiest inputs;
-        it has not been repeated under the corrected forward models with
-        common folds and is not used here. All realistic numbers above train
-        on both epochs.
-\end{itemize}
+All statistical models trained on forward-modelled data used images from both snapshot 99 and 91.
+A matched comparison of one- and two-epoch training has not been conducted, quantifying the benefit of an additional epoch is left to future work.
+
 \begin{table*}
   \centering
   \caption{Realistic-pipeline accuracy under the corrected forward models:
@@ -243,6 +218,26 @@ The trend in accuracy with exposure time describes sensitivity within the approx
 \end{figure*}
 
 \subsection{Loss, output head and contrastive pretraining}
+
+We also tested alternative losses and output representations in an exploratory X-ray experiment.
+The Huber loss baseline achieved a five-seed single-projection ensemble $R^2 = 0.432$ and MAE of 0.650. Gyr.
+Using the mean squared error loss instead gave $R^2 = 0.425$ and MAE of 0.663 Gyr.
+The seven-class distributional head \todo{define} gave $R^2 = 0.425$ with MAE of 0.666 Gyr.
+Their paired $R^2$ differences from the Huber loss case were $-0.005$, with $95\%$ confidence interval of $[-0.029, +0.021]$ and $-0.007$ with confidence interval $[-0.034, +0.025]$ respectively.
+Neither alternative met the prespecified point-prediction adoption criterion \todo{define}.
+
+However, the distributional head provided useful probabilistic predictions relative to the class frequencies among fitting halos.
+Its categorical log score \todp{define everything in this paragraph} was 1.649 compared with 1.888 for the reference.
+Its normalized ranked probability score was 0.125 compared with 0.160.
+Its Brier score for the no-crossing category was 0.068 compared with 0.088.
+All three paired conditional intervals favored the model.
+These results establish probabilistic skill relative to the baseline model, but do not establish calibrated uncertainty in physical collision times.
+
+A pilot study using contrastive pretraining showed that this method performed significantly worse than the Huber loss control.
+Adding magnitude-gap and positional-structure features to the noisy mass, placement redshift, and projected richness \todo{define} increased the single-projection ensemble $R^2$ from 0.313 to 0.422 and reduced MAE from 0.729 to 0.655 Gyr.
+The paired $R^2$ increase was $0.109$, with $95\%$ confidence interval of $[+0.048, +0.167]$.
+In the same experiment, adding X-ray images to the controls increased $R^2$ to 0.488, an increment of $+0.176$ with confidence interval $[+0.108, +0.243]$ and MAE of 0.605 Gyr.
+
 \label{sec:loss_head}
 \begin{itemize}
   \item In a matched exploratory comparison, replacing the Huber loss with
