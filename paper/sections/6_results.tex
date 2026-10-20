@@ -10,27 +10,6 @@ Errors expressed in Gyr are accuracy on the pseudo-TSC scale, rather than uncert
 \todo{justify why they are meaningful then}
 
 \subsection{Radio-only}
-\begin{itemize}
-  \item All at 144\,MHz, snapshot 99, 5 seeds, same folds. Pooled CNN
-        $0.485 \pm 0.028$ (ensemble 0.530) vs total flux 0.440, mass 0.314,
-        five scalars 0.459; scalars + CNN 0.541, an increment of $+0.082$ (exploratory: the stack is not nested inside an outer split,
-        so its optimism is unmeasured; a nested test is pending).
-  \item Within mass terciles: CNN 0.33/0.33/0.24 while scalars fall to
-        $-0.29$ in the high-mass bin; partial $\rho = 0.480$ at fixed mass.
-  \item Morphology alone (flux-normalised maps): $0.414 \pm 0.040$, paired
-        $-0.071$ against full flux ($p = 0.019$, 5/5 seeds lower); but
-        shape and brightness are not separable (60\% of the shape-only
-        model's output is predictable from the total flux it never saw).
-  \item Caveat: scalars explain 73\% of the CNN output.
-  \item Minkowski functionals as an interpretable baseline: XGBoost on 48
-        topology numbers reaches 0.42 (cluster mean of the three
-        projections; 0.30 per projection); fragmentation rises with merger
-        age ($\rho = 0.62$ for the component count at the largest area
-        fraction, i.e. the lowest intensity
-        threshold).
-  \item The same analyses at 1.4\,GHz differ by at most 0.02 (the
-        high-mass tercile, 0.22 there).
-\end{itemize}
 
 The 144 MHz radio images contain information beyond the realistic baselines considered here.
 On the 352 clusters imaged at snapshot-99, the CNN that pooled all three orthogonal projections achieved $R^2 = 0.485 \pm 0.028$, increasing to $0.530$ when predictions were averaged across five seeds.
@@ -99,13 +78,6 @@ A similar analysis applied to clean maps at 1.4 GHz gave similar results, with s
 \end{figure*}
 
 \subsection{X-ray and Combined Model}
-\begin{itemize}
-  \item The stretch bug and fix: X-ray 0.320 $\to$ 0.511 ($p = 0.0003$).
-  \item Clean joint model on the 144\,MHz radio maps: $0.545$, $+0.059 \pm
-        0.025$ over radio alone (paired seeds, $p = 0.007$, 5/5 seeds higher;
-        seed-level evidence, not a halo-population interval). The earlier
-        1.4\,GHz version gave 0.537.
-\end{itemize}
 
 Clean X-ray images provided comparable predictive power to clean radio images.
 Applying the globally-scaled arcsinh scaling increased the X-ray CNN correlation from $R^2=0.320$ to $0.511 \pm 0.26$.
@@ -218,6 +190,7 @@ A matched comparison of one- and two-epoch training has not been conducted, quan
 \end{figure*}
 
 \subsection{Loss, output head and contrastive pretraining}
+\label{sec:loss_head}
 
 We also tested alternative losses and output representations in an exploratory X-ray experiment.
 The Huber loss baseline achieved a five-seed single-projection ensemble $R^2 = 0.432$ and MAE of 0.650. Gyr.
@@ -234,71 +207,40 @@ All three paired conditional intervals favored the model.
 These results establish probabilistic skill relative to the baseline model, but do not establish calibrated uncertainty in physical collision times.
 
 A pilot study using contrastive pretraining showed that this method performed significantly worse than the Huber loss control.
+Rotations and reflections were applied to individual observations to construct positive pairs, followed by an encoder with weights frozen during downstream training.
+This yielded $R^2=0.232$ and MAE of 0.768 Gyr.
+The paired changes were $-0.200$ in $R^2$, with confidence interval $[-0.260, -0.132]$ and change in MAE of $+0.118$ and interval $[+0.074, +0.162]$ Gyr.
+This result provides evidence against using the tested frozen-encoder configuration, though other contrastive objectives, or fine-tuning the encoder, could change the performance.
+
+\subsection{Idealised optical structure}
+\label{sec:optical}
+
+Idealized optical structure supplied predictive information in addition to the scalar control model.
 Adding magnitude-gap and positional-structure features to the noisy mass, placement redshift, and projected richness \todo{define} increased the single-projection ensemble $R^2$ from 0.313 to 0.422 and reduced MAE from 0.729 to 0.655 Gyr.
 The paired $R^2$ increase was $0.109$, with $95\%$ confidence interval of $[+0.048, +0.167]$.
 In the same experiment, adding X-ray images to the controls increased $R^2$ to 0.488, an increment of $+0.176$ with confidence interval $[+0.108, +0.243]$ and MAE of 0.605 Gyr.
 
-\label{sec:loss_head}
-\begin{itemize}
-  \item In a matched exploratory comparison, replacing the Huber loss with
-        MSE or a seven-class distributional head did not meet our
-        prespecified point-prediction adoption criterion.
-  \item The five-seed ensemble $R^2$ values were 0.432, 0.427 and 0.425,
-        respectively; paired halo-bootstrap intervals for the latter two
-        contrasts included zero.
-  \item The distributional head improved categorical log score, ranked
-        probability score and no-crossing Brier score relative to
-        fitting-halo climatology, supporting its use as a probabilistic
-        alternative without establishing calibration or equivalent point
-        accuracy.
-  \item The D4 contrastive pilot with a frozen encoder performed worse
-        ($R^2 = 0.232$; $\Delta R^2 = -0.200$, conditional 95 per cent
-        interval [$-0.260$, $-0.132$]).
-  \item These results concern the capped proxy label and this fixed
-        development protocol.
-\end{itemize}
-
-\subsection{Idealised optical structure}
-\label{sec:optical}
-\begin{itemize}
-  \item In an idealised optical experiment, adding magnitude-gap and
-        positional-structure features to noisy mass, placement redshift and
-        projected richness improved the five-seed single-observation
-        ensemble from $R^2 = 0.313$ to 0.422 (paired $\Delta R^2 = 0.109$;
-        95 per cent halo-bootstrap interval [0.048, 0.167]).
-  \item With X-ray images also supplied, adding the same features changed
-        $R^2$ from 0.488 to 0.469 ($\Delta R^2 = -0.019$; interval
-        [$-0.067$, 0.029]), providing no demonstrated incremental
-        improvement under the tested model and evaluation protocol.
-  \item These features use simulation-defined FoF membership, true \rfive\
-        and an idealised hot-gas centre; the experiment therefore tests
-        idealised combined-input prediction rather than performance with
-        observed optical catalogues.
-  \item The intervals resample parent halos and are conditional on the
-        fitted models.
-\end{itemize}
+However, adding the optical structure features to the X-ray images and controls did not demonstrate a further improvement, with $R^2=0.469$ and MAE of 0.632 Gyr, and paired $R^2$ change of $-0.019$ with confidence interval $[-0.067, +0.029]$.
+These features use simulation-defined membership, true $R_{500}$, and an idealized hot gas reference center \todo{define}.
+Thus, this experiment measures performance only with idealized combined inputs, rather than performance achievable from true optical catalogues.
 
 \subsection{Application to LoVoCCS}
-\begin{itemize}
-  \item Predictions for 26 (radio, 3\,Mpc cutouts) and 15 (X-ray) clusters;
-        15 have both.
-  \item Radio (3\,Mpc) and X-ray agree, using 25-model ensembles (5 folds
-        $\times$ 5 seeds): Spearman $0.61$ ($p = 0.015$, $n = 15$); partial at
-        fixed $z$ 0.71 (Freedman--Lane permutation $p = 0.005$); at fixed
-        weak-lensing mass 0.54 ($n = 11$, $p = 0.11$). The target set differs
-        from the earlier comparison (15 rather than 14 clusters).
-  \item The scales do not agree: radio predictions are older than X-ray for
-        14 of 15 clusters, by a median 0.44\,Gyr (medians 1.10 and
-        0.83\,Gyr). Neither forward-model correction removed the offset; its
-        cause is not identified, so absolute ages from either model should
-        not be interpreted.
-  \item A401 is the youngest for radio (1 of 26), radio + mass and mass
-        alone (1 of 18); it is also the heaviest target with a weak-lensing
-        mass, so its rank is mass-driven. A399 is youngest for X-ray (1 of
-        15) and fifth for radio. Neither is presented as validation.
-  \item Weak-lensing peak check: only 9 overlapping clusters,
-        inconclusive.
-\end{itemize}
+
+Finally, we applied our predictive models to LoVoCCS clusters, obtaining radio predictions for 26 systems, and X-ray predictions for 15.
+All 15 X-ray systems were present in the radio sample, and thus could use combined data.
+Each observed prediction averaged 25 models spanning five folds and five seeds.
+Among the systems with both data sources, radio and X-ray predictions had Spearman $\rho = 0.61$ ($p=0.015$).
+After controlling for redshift, the partial-rank correlation was 0.71, with a Freedman-Lane \todo{define} permutation $p=0.005$.
+Controlling instead for weak-lensing mass gave a partial correlation of 0.54 among the 11 systems with available masses, with $p=0.11$.
+This latter comparison does not establish agreement independent of mass.
+
+Despite the correlated rankings between the predictions derived from radio and X-ray data, the two sources systematically disagreed in their absolute predictions.
+The radio model assigned older proxy ages than the X-ray model to 14 of the 15 clusters with both sources, with a median paired offset of 0.44 Gyr.
+Their respective median predictions were 1.10 and and 0.83 Gyr.
+Applying the forward-model did not remove this offset, and its origin remains unidentified.
+\todo{simulation issues? maybe something that affects one but not the other}
+Since these clusters do not have independent measurements of their merger times, the only consistency check we have is the comparison between model outputs. \todo{bleh phrasing}
+
 \begin{figure}
   \centering
   \includegraphics[width=\columnwidth]{fig_real_preds.pdf}
