@@ -377,18 +377,30 @@ from the physical constants and the adopted spectral and pitch-angle.
 \end{figure*}
 
 \subsection{X-ray mocks}
-\begin{itemize}
-  \item pyxsim APEC emission from hot, non-star-forming gas; soxs
-        Chandra ACIS-I (Cycle 22) response, PSF, dither, particle
-        background; 2\,Ms, observed at $z = 0.05$ (snapshot 99) and at
-        $z = 0.0994$ (snapshot 91). The snapshot-91 images are moved onto
-        the snapshot-99 physical grid, splitting each pixel's counts
-        binomially between the blocks it overlaps.
-  \item Field of view: only the ACIS-I square has data, $\pm$500\,kpc
-        (0.3--0.6\,\rfive), \emph{not} $\pm1\,r_{500}$.
-  \item Stretch: bare arcsinh is the identity at X-ray count rates; we use
-        ${\rm arcsinh}(x/a)$ with one global $a$ (Section~\ref{sec:xray}).
-\end{itemize}
+
+We generated synthetic X-ray observations using the package \textsc{pyXSIM}, with an Astrophysical Plasma Emission Code (APEC) set to be in collisional ionization equilibrium.
+The emitting gas was selected within a cube of side length $2 R_{500\text{c}}$ centered on the FoF position, using the halo properties at the selected snapshot.
+We retain gas with $T > 3 \times 10^5$ K, zero star formation rate, and \texttt{GFM\_CoolingRate} $<0$.
+The source model uses the simulated gas temperatures, metallicities, and emission measures.
+
+For each cluster, photons were projected along each of three orthogonal directions corresponding to the three radio projections.
+The snapshot-99 clusters are placed at an observing redshift of $z_{\text{obs}} = 0.05$, while the snapshot-91 clusters are observed at $z_\text{obs} = 0.0994$.
+We use photoelectric absorption using the \texttt{wabs} model, with a uniform hydrogen column density of $N_\text{H}= 10^{20}$ cm$^2$.
+The photons were then processed using the \textsc{SOXS} Chandra ACIS-I Cycle-22 instrument model, using an exposure time of 2 Ms.
+These observations take into account the instrument response, point-spread function, detector geometry, dithering, and instrumental particle background.
+Galactic foreground and point-source backgrounds were disabled when generating these initial mocks, and were added during the forward modelling in section \ref{sec:fwd}.
+
+We constructed exposure-corrected images in the observed 0.1--2.0 keV band using exposure maps evaluated at 1.2 keV.
+The native images have a pixel scale of 0.492".
+For snapshot-99, we crop the images to $128\times 128$ pixels, which corresponds to approximately 18.9 kpc per pixel.
+The ACIS-I field has a radius of approximately 1 Mpc at $z_\text{obs} = 0.05$, so the usable coverage is set by the detector, rather than the available image data.
+
+In the subsequent forward-modelling step, we recover integer count estimates from the exposure-corrected images.
+The snapshot-91 images were placed on the same physical grid as snapshot-99 by binomially allocating each native pixel's counts between overlapping output pixels in proportion to their overlap areas.
+This procedure preserves integer counts, although their recovery is approximate where the original exposure varies across chip gaps and dither edges.
+
+Before training, we compress the image dynamic range using $\operatorname{arcsinh}(x/a)$, where $x$ is the image signal and $a$ is a single scale factor used for each image from both snapshots.
+The adjustments to target redshift, exposure, luminosity, absorption, and sky background are described in section \ref{sec:xray}.
 
 \subsection{Merger-time labels}
 We characterize the merger state of each target halo using the time since collision (TSC). Using the major merger catalog of \cite{Lee2024}, we identify the major merger whose first pericenter passage is closest in time to the snapshot of interest. We then define the TSC label as
