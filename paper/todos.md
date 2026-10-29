@@ -17,6 +17,12 @@ recording them does not change the manuscript or analysis.
   past-only score; at snapshot 99 the past-only and all-event scores agree.
   The implementation assigns 0.1 Gyr when the first sampled window already
   exceeds the threshold. See [build_dataset.py](../build_dataset.py).
+- [ ] Correct the opening of [the Methods section](sections/5_methods.tex):
+  replace “elapsed time since the merger score crosses a particular
+  threshold” with “the interpolated window size at which the merger score
+  first reaches 0.5.” The crossing is defined as the window parameter
+  increases at a fixed snapshot, not as an event in the score's time
+  evolution. Keep this wording consistent with the merger-label definition.
 - [ ] Distinguish pseudo-TSC from the catalogue comparison clock. The latter
   measures time since the **most recent past first-pericentre passage**,
   without an additional mass-ratio cut. Selecting the nearest event in
