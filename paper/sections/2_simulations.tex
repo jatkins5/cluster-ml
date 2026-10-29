@@ -403,13 +403,47 @@ Before training, we compress the image dynamic range using $\operatorname{arcsin
 The adjustments to target redshift, exposure, luminosity, absorption, and sky background are described in section \ref{sec:xray}.
 
 \subsection{Merger-time labels}
-We characterize the merger state of each target halo using the time since collision (TSC). Using the major merger catalog of \cite{Lee2024}, we identify the major merger whose first pericenter passage is closest in time to the snapshot of interest. We then define the TSC label as
+% We characterize the merger state of each target halo using the time since collision (TSC). Using the major merger catalog of \cite{Lee2024}, we identify the major merger whose first pericenter passage is closest in time to the snapshot of interest. We then define the TSC label as
+% \begin{equation}
+% {\rm TSC} = t_{\rm snap} - t_{\rm merger},
+% \end{equation}
+% where $t_{\rm snap}$ is the cosmic time of the target snapshot and $t_{\rm merger}$ is the time of the first pericenter passage of the nearest merger.
+
+Our primary regression target is the \emph{pseudo-TSC}, a proxy for recent merger activity constructed from the precomputed TNG-Cluster merger scores.
+For each snapshot and halo, the merger score was sampled with window parameters $\tau = 0.1, 0.2, \ldots 4.0$ Gyr.
+The pseudo-TSC is defined as the value of $\tau$ at which the merger score first reaches 0.5, using linear interpolation between the two samples which bracket the threshold value:
 \begin{equation}
-{\rm TSC} = t_{\rm snap} - t_{\rm merger},
+    T_\text{pseudo}
+    = \tau_{j-1} + 
+     \frac{0.5-S(\tau_{j-1})}
+       {S(\tau_j)-S(\tau_{j-1})}
+  (\tau_j-\tau_{j-1}),
 \end{equation}
-where $t_{\rm snap}$ is the cosmic time of the target snapshot and $t_{\rm merger}$ is the time of the first pericenter passage of the nearest merger.
+where $j$ is the first sampled window with $S(\tau_j) \geq 0.5$ and $S(\tau_i)$ is the merger score at $\tau_i$.
+If the merger score is already at the 0.5 threshold at the smallest window, we assign $T_\text{pseudo} = 0.1$ Gyr.
+If there is no crossing within the sampled range, we assign $T_\text{pseudo} = 4$ Gyr.
+\todo{should define/cite the definition of merger score}
+For snapshot-91, we used the past-only merger score, excluding contributions from collisions that occurred after that snapshot.
+At snapshot-99, the past-only and all-event scores are identical, since the recorded history ends at that snapshot.
+Using the all-event score for snapshot-91 images would change the interpolated labels for 168 of the 351 halos.
 
+For comparison, we also consider a collision score constructed from the merger catalogue of \citet{Lee2024}, measureing the elapsed cosmic time since the most recent first-pericenter collision at or before the selected snapshot:
+\begin{equation}
+  T_{\rm cat} =
+  t_{\rm snap}
+  - \max_{k:\,t_{{\rm coll},k}\leq t_{\rm snap}}
+  t_{{\rm coll},k}.
+\end{equation}
+In the comparison labels, we obtain collision times by converting the recorded collision snapshots to cosmic time.
+We do not impose any mass-ratio threshold on the catalogued events.
+At snapshot-99, the median secondary-to-primary axis mass ratio of the events which determine $T_{\rm cat}$ is 0.093, or approximately 1:11. \todo{contextualize this}
+This definition includes minor mergers within the selection limits of the catalogue.
 
+Figure~\ref{fig:labels} shows the pseudo-TSC distributions and their correlation to $T_\text{cat}$.
+The median pseudo-TSC is 0.92 Gyr for the 352 snapshot-99 clusters, and 0.91 Gyr for the 351 snapshot-91 clusters.
+Respectively, 34 and 47 objects reach the 4 Gyr dynamic range cap, corresponding to 9.7\% and 13.4\% of samples.
+At snapshot-99, pseudo-TSC and $T_\text{cat}$  have a Spearman rank correlation of 0.961 across the 346 clusters with finite catalogue times.
+The six remaining clusters have no recorded collision and are assigned capped pseudo-TSC labels.
 
 
 \begin{itemize}
