@@ -158,3 +158,27 @@ Evidence: the original snapshot-99 and snapshot-91 X-ray generation scripts,
   emission from shock-accelerated electrons” subsection headings, or give
   them an intentional hierarchy.
 - [ ] Complete the sentence ending “the adopted spectral and pitch-angle.”
+
+## 7. Discuss Chadayammuri et al. in the Discussion
+
+- [ ] Add a comparison with [Chadayammuri et al. (2026), ERGO-ML:
+  A continuous organization of the X-ray galaxy cluster population in
+  TNG-Cluster with contrastive learning](https://doi.org/10.1093/mnras/stag422)
+  in [the Discussion](sections/7_discussion.tex). Their contrastive
+  representation of idealized TNG-Cluster X-ray maps captures trends in
+  mass, dynamical state, and merger history. Explain how our supervised
+  pseudo-TSC regression and evaluation on forward-modelled single
+  observations address a related but different inference problem; avoid
+  direct accuracy comparisons across different targets and protocols.
+- [ ] Connect their discussion of observational transfer to our remaining
+  limitations: they recommend realistic mocks including effective area,
+  chip gaps, and background noise, and identify differences between
+  simulation physics as a potential source of domain shift. Discuss our
+  frozen-encoder pilot alongside their results without interpreting its
+  underperformance as evidence against contrastive learning generally;
+  the cause of the pilot's underperformance has not been established.
+- [ ] Correct the attribution currently listed as `Eisert2024` in
+  [refs.bib](refs.bib) and the Introduction: the first author is
+  **Chadayammuri**, and the journal publication is **2026** (the preprint,
+  [arXiv:2410.22416](https://arxiv.org/abs/2410.22416), appeared in 2024).
+  Keep the citation key and manuscript references consistent.
