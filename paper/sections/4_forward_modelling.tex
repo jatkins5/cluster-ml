@@ -1,34 +1,41 @@
 \section{Forward modelling}
 \label{sec:fwd}
 
-\subsection{Radio: from simulated maps to LoTSS}
-\begin{itemize}
-  \item The simulated map is linear emission (summed DSA weight per pixel).
-        It is cropped and rebinned flux-conservingly to a 128-pixel grid
-        covering a 3\,Mpc box at each target's redshift (1\,Mpc holds a
-        median 4 per cent of a cluster's shock emission, 3\,Mpc 65 per cent),
-        then beam-convolved.
-  \item Flux: the box's own linear emission times one global constant,
-        fixed so the sample-median \emph{total} power matches the median of
-        the Cuciti et al.\ (2023) relation; the constant is the same for
-        every box size and for snapshot 91, and no per-cluster mass relation
-        is imposed. An earlier recipe interpolated the arcsinh-stretched map
-        and clipped it before summing; that distorted the fluxes (losing a
-        median 53 per cent of the power in a 1\,Mpc box, with an added
-        trend with \rfive) and is superseded.
-  \item Noise must be beam-correlated: with white noise, real-cluster
-        predictions ran to 10--27\,Gyr.
-  \item Field injection into real LoTSS DR3 fields (209 downloaded, 206
-        accepted at 40$'$; 202 at 80$'$, used here) (Bruno et al.\ 2023
-        precedent; Bottrell ``FullReal'' tier): real noise, sources and
-        artefacts.
-  \item Realism, with the metric fixed before the comparison: median
-        $|$separation$|$ of four Minkowski functionals over 1--20$\sigma$,
-        in mock standard deviations, against real cutouts of the same box
-        size. 3\,Mpc linear emission 0.095; 3\,Mpc with arcsinh-compressed
-        morphology 0.158; 1\,Mpc linear 0.403; background-only fields 0.64
-        (3\,Mpc) and 1.47 (1\,Mpc).
-\end{itemize}
+\subsection{Radio LoTSS forward model}
+
+We recovered the linear emission values from the arcsinh-stretched radio images, and then cropped and rebinned the data onto a 128$\times$128 pixel grid using pixel-overlap weights which conserved the integrated emission.
+The radio-only inputs to our predictive models cover square regions of physical side length 3 Mpc, corresponding to 23.4 kpc per pixel.
+This aperture retains 65\% of the uncropped emission, while the central 1 Mpc section only retains 4\%.
+
+The radio power assigned to each image is proportional to its integrated linear emission:
+\begin{align*}
+    P_\text{box}
+    &= A_\text{rad} \sum_{p \in \text{box}} w_p
+\end{align*}
+where $w_p$ is the total emission weight in pixel $p$.
+We fixed the global normalization $A_\text{rad}$ by matching the median total power of the snapshot-99 images to the median power predicted at its cluster masses by the relation in \cite{Cuciti2023}. \todo{may want to put relation here}
+This normalization is also used for the snapshot-91 images.
+Flux densities are calculated using the luminosity distance and a spectral index of $\alpha = 1.2$, defined by $S_\nu \propto \nu^{-\alpha}$ \citep{Cuciti2023}.
+
+For each simulated cluster, we generated three observational realizations, drawing a redshift value from the radio target sample and independently selecting a background from 201 80' LoTSS DR3 fields. \todo{should describe this in more detail - how is the background extracted, why use real rather than some kind of simulated one? why draw a real redshift rather than assigning?}
+Each realization consists of the three orthogonal simulation projections, which had the same forward-modelling process applied.
+We convolved the simulated emission with a circular 9" Gaussian restoring beam, which approximates the heterogenous native beams of the target images. \todo{why is this a good approximation?}
+converted the output to Jy per beam, and added this to the corresponding resampled field.
+Using real background fields supplies realistic observed noise correlations, unrelated radio sources, and imaging artifacts, and should produce better results than assuming some particular background and noise profile.
+
+Compact sources were then masked using the same procedure for injected mocks and observations.
+We classified connected emission by using half-peak area relative to the assumed beam area, taking components occupying at most ten beam half-power areas at $5\sigma_\text{rms}$ as being compact sources.
+These were replaced with the surrounding annular median plus Gaussian noise.
+Finally, we applied normalization as $\operatorname{arcsinh}(S/\sigma_\text{rms})$, with $\sigma_\text{rms}$ estimated by sigma clipping before masking.
+
+We assessed the realism of this simulated images using area fraction, perimeter, connected-component count, and Euler characteristic at ten logarithmically-spaced thresholds between 1 and $20\sigma_\text{rms}$.
+We calculated the difference between the observed and mock medians, divided by the mock standard deviation, across all statistics and thresholds. \todo{probably clearer to have an equation here}
+For the 3 Mpc-sized inputs, this was 0.095, compared with 0.158 for an alternative method using arcsinh-compressed emission morphology at the same integrated flux, and 0.635 for background-only fields.
+The comparison includes 3168 mocks and 26 real observations, with the mocks each containing three projections and three realizations of the 352 source clusters.
+This result supports the adopted processing at the level of morphological summaries.
+However, since our source injection is performed in the image plane, it does not measure the recovery of diffuse flux through interferometric sampling and imaging.
+Measuring this precisely would require visibility-domain injection, in e.g. \cite{Bruno2023}.
+
 \begin{figure*}
   \centering
   \includegraphics[width=\textwidth]{fig_radio_gallery.pdf}
@@ -54,37 +61,54 @@
   \label{fig:radio_mf}
 \end{figure*}
 
-\subsection{X-ray: from 2\,Ms mocks to real Chandra depths}
+\subsection{X-ray Chandra forward model}
 \label{sec:xray}
-\begin{itemize}
-  \item Mocks: 2\,Ms ACIS-I (Cycle 22) photon counts, placed at a real
-        target's redshift ($1/D_L^2$ dimming, sky-area scaling of the
-        backgrounds per physically fixed pixel, common aperture) and taken to
-        that target's depth with the real data's own count model:
-        focused photons (source and sky) thinned to its Cycle-22-equivalent
-        exposure $T_{\rm eq}$, particle background at its livetime, and the
-        particle subtraction of the real processing applied with the noise
-        of its 9.5--12\,keV estimate. $T_{\rm eq}/T_{\rm live}$ is 0.85--1.83
-        for these targets; an earlier version thinned to raw time and so gave
-        the mocks too few photons.
-  \item Status of this model: the exposure-convention defect is corrected,
-        with an explicitly approximate scalar background treatment and
-        incomplete end-to-end validation. Thinning is exact for fully exposed
-        pixels and approximate where the mocks' own exposure varies (chip
-        gaps, dither edges); the mocks do not yet carry each real
-        observation's roll, gaps and dither footprint.
-  \item On the real targets, the robust outer-aperture noise relative to
-        the mean rate, real/mock, is 1.12 (16--84 per cent 0.81--1.20;
-        the earlier model gave 0.71). One target, A763 (6\,ks), is far
-        smoother than its mocks (0.07), possibly from gap filling; not
-        explained.
-  \item TNG over-luminosity: L$_X$ scale 0.358, from the catalogue offset
-        (0.278) times the mass-matched real/mock ratio measured on Chandra
-        (1.29); a single global factor fixed without labels.
-  \item Galactic absorption per target (small: median 2\%).
-  \item Real-data processing: CIAO exposure maps, particle background from
-        9.5--12\,keV, Cycle-22-equivalent exposure, chip gaps filled.
-\end{itemize}
+
+We degraded the 2 Ms ACIS-I Cycle-22 mocks described in section~\ref{sec:sims} to approximate the redshifts and observing depths of the Chandra targets.
+The images cover the observed 0.1-2.0 keV band on a common physical grid, with pixel size of approximately 18.9 kpc.
+The X-ray images inherit their redshift values from the corresponding simulated radio observations.
+In cases when a true ACIS-I target exists at the assigned redshift, we use the exposure properties of that target; otherwise, those of a randomly-selected ACIS-I target are used.
+
+Source counts are reduced by binomial thinning, with a retainment probability incorporating the ratio of Cycle-22-equivalent exposure the the initial 2 Ms exposure, inverse-square luminosity-distance dimming, and the luminosity and absorption corrections.
+\todo{probably better to just put the formula here}
+We evaluate the distance factor relative to each mock dataset's original observing redshift.
+This placement approximates the redshift dependence through count scaling.
+
+Detected photons can come from either the source and sky background, or from instrumental particles.
+The former counts scale with the Cycle-22-equivalent exposure, $T_\text{eq}$, while the latter scale with detector livetime $T_\text{live}$.
+$T_\text{eq} / T_\text{life}$ ranges from 0.85 to 1.83 for the observed targets.
+Sky backgrounds include galactic foreground emission and cosmic X-rays, including from point sources.
+Background counts per physical pixel are scaled with the angular area subtended by that pixel.
+Note that the initial mocks already contain particle background, and additional counts from \todo{what specifically?} are added after source thinning.
+
+Mock count rates follow the same subtraction and reference-background convention as the real observations:
+\begin{align*}
+    R
+    = \frac{C-\hat P}{T_\text{eq}} + B_\text{ref}(z)
+\end{align*}
+where $C$ is the total count for the image, $\hat P$ is the estimated particle contribution, and $B_\text{ref}(z)$ restores the reference particle rate with the appropriate angular-area scaling.
+We include a coherent fractional error in the mock particle subtraction, with amplitude set by the counting uncertainty of the target's 9.5-12 keV background estimate.
+
+We use a global source-brightness factor of 0.358, combining an initial catalogue-based factor of 0.278 with a further factor of 1.29 from the observed-to-mock count-rate ratio at approximately-matched mass and redshift.
+The calibration does not use merger-time labels; however, the agreement in mean brightness values is partially imposed by this procedure.
+For the 11 targets with weak-lensing masses, the corrected median real-to-mock rate ratio is 1.07, with no detected residual mass trend.
+
+Target-dependent galactic absorption is applied using a count-rate ratio relative to the initial mock column of $N_\text{H} = 10^{20}$ cm$^{-2}$.
+This ratio was calculated using an absorbed APEC spectrum with $kT = 5$ keV and metallicity $0.3 Z_\odot$, weighted by the Cycle-22 effective area.
+This scalar approximation reduces the source count rate by approximately 2\% at the sample median.
+
+We use a common aperture of approximately 485 kpc radius at $z \geq 0.05$, and reduce its physical radius at lower redshifts to remain within an 8' angular radius.
+Pixels outside the aperture are set to zero.
+Both mock and observed count rates are transformed using $\operatorname{arcsinh}(R/a)$, with the same scale $a$ across both snapshots and observations.
+
+As a diagnostic, we measured the robust high-pass variance relative to the mean rate in the outer 60-100\% of the aperture radius, and compared the values for the mocks and real observations.
+Across 14 targets with matched mocks, the median real-to-mock ratio was 1.12, with a 16th-18th percentile range of 0.81-1.20.
+A1750 lacks a matched mock for this comparison.
+A763 is an outlier, with a ratio of 0.07.
+
+Recovering counts from exposure-corrected images is imperfect where exposure varies across dither edges and chip gaps.
+The mocks also do not reproduce each real observation's exposure footprint, roll angle, or full spectral response, and interpolation of gaps in the observed images can alter their noise properties \todo{cite reference here}.
+
 \begin{figure}
   \centering
   \includegraphics[width=\columnwidth]{fig_xray_gallery.pdf}
