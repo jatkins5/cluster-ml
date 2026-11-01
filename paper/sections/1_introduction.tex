@@ -2,23 +2,63 @@
 \label{sec:intro}
 
 Galaxy clusters grow through matter accretion and mergers with other gravitationally-bound systems.
-These interactions change the distribution of gas and dark matter, generate shocks and turbulence in the intracluster medium (ICM), and provide energy for nonthermal particle populations 
+These interactions change the distribution of gas and dark matter, generate shocks and turbulence in the intracluster medium (ICM), and provide energy for nonthermal particle populations \citep{KravtsovBorgani2012, Sarazin2002}.
+Establishing a cluster's merger history is therefore important for understanding its present structure, and for understanding the evolution of thermal and non-thermal emission.
+A cluster's merger phase also affects its interpretation as a cosmological probe; its state evolves away from equilibrium during interaction, which can alter the relationship between true and hydrostatic mass \citep{Gianfagna2023}.
+Thus, a statistical measurement of recent merger activity would help connect these processes across cluster populations, and improve our understanding of their astrophysical and cosmological properties.
 
-\begin{itemize}
-  \item Why merger timing matters: cluster assembly, particle acceleration,
-        cosmology systematics (hydrostatic bias, mass calibration).
-  \item Existing timing indicators and their limits: relic separation
-        (Lee et al.\ 2024 relation in TNG-Cluster), X-ray morphology
-        (centroid shift, concentration), galaxy phase space
-        (arXiv:2509.20637 -- cannot tell past from future mergers, and
-        explicitly suggests radio as the way to do so).
-  \item ML on cluster images so far: mostly classification on idealised
-        maps (Arendt et al.\ 2024, The300); representation learning on
-        TNG-Cluster X-ray (ERGO-ML, Eisert et al.\ 2024). Few regress a
-        timing variable; almost none carry the model to real data.
-  \item Sim-to-real gap as the central problem: Bottrell et al.\ (2019)
-        realism tiers; Ciprijanovic et al.\ (2021) domain adaptation.
-  \item This paper: regression of time since collision from radio and
-        X-ray images, a measured account of what the image adds beyond
-        mass and brightness, and forward modelling to LOFAR and Chandra.
-\end{itemize}
+Radio and X-ray observations offer different information about the response of the ICM to mergers.
+Thermal X-ray emission traces the distribution and thermodynamic state of gas, revealing cold fronts, disturbed cores, shocks, and displaced gas components \citep{MarkevitchVikhlinin2007}.
+In contrast, diffuse radio emission tracks relativistic particles and magnetic fields.
+Peripheral radio relics are associated with shocks, while giant radio halos are linked to particle acceleration via turbulence within the cluster \citep{BrunettiJones2014, vanWeeren2019}.
+This variation of sensitivity to different cluster components motivates the use of multiple observing bands to investigate merger history.
+
+There are several observational signatures of cluster disturbance.
+X-ray concentration, power ratios, and centroid shifts are summary statistics of the emitting gas distribution, and their association with giant radio halos demonstrates a connection between nonthermal activity and thermal structure \citep{Cassano2010}.
+However, converting these measurements into a merger age is difficult.
+The observable properties of disturbed systems are a function of the merger mass ratio, orbit, our viewing direction, and the particular interactions stage, and an apparently normal gas distribution does not imply dynamical relaxation \citep{Poole2006}.
+Thus, measurements of cluster disturbance require physical calibration before utilization to predict merger history.
+
+Reconstructing individual merger dynamics can produce more direct timing constraints.
+Methods based on subcluster masses, projected separations, and relative velocities allow prediction of of possible trajectories and times since pericentric passage, and comparisons with simulated analagous clusters provide an alternative way of contraining geometry and merger stage \citep{Dawson2013, Wittman2019}.
+In addition, halo sparsity---the ratio of masses measured within different overdensity radii---has been investigated as an indicator of the time since major merger \citep{RichardsonCorasaniti2022}.
+These approaches constrain related aspects of cluster assembly history, but their timing variables depend on the definition of a merger event.
+Halo coalescence, first pericentric passage, and a continuous measure of recent interactions have not yet been shown to identify the same evolution stage \todo{check this - also, the last one is a bit vague}.
+
+\cite{KongDellAntonio2026} developed a complementary approach, using simulated galaxy phase space distributions to infer a continuous merger score.
+Their estimator was sensitive to merger activity, but had difficulty distinguishing approaching and receding systems.
+They also investigated galaxy populations, as well as the offset between the brightest cluster galaxy location and the central X-ray emission, and identified radio emission as a promising additional source of timing information.
+Their results motivate examining the relationship between gas signals and the recent interaction history, as encoded by a continuous merger state indicator.
+
+Machine learning provides a way to investigate merger history indicators without restricting analysis to a small set of predefined measurements.
+\cite{Arendt2024}, using simulated X-ray and Sunyaev-Zel'dovitch maps from The Three Hundred project, trained convolutional neural networks (CNNs) to distinguish merging and non-merging clusters.
+The ERGO-ML study of \cite{Chadayammuri2026} used contrastive learning to organize TNG-Cluster X-ray images into a continuous representation, and investigated the relationship between this representation and merger times.
+These studies illustrate that information about clusters' assembly history is encoded in image data, but also motivate a more specific question: how much of this information is available in different observing bands, beyond simpler cluster properties, and how much is retained after degradation by real-world instrument observation?
+
+Cluster images encode several correlated quantities, and thus comparison of a machine learning model with simpler regression is essential.
+X-ray morphology is informative about mass as well as dynamical state \citep{Green2019}.
+Simulated shock-powered radio luminosity also depends on cluster mass, and evolves as merging progresses \citep{Nuza2024}.
+A machine learning model can thus predict a merging state indicator by using emission amplitude, spatial structure, and/or luminosity-structure correlations.
+Comparison with baselines for mass and integrated emission, in conjunction with image normalization and tests within mass intervals, are necessary to assess the added contribution from full image data.
+These comparisons also help establish whether combining radio and X-ray data provides information above using one source alone.
+
+An additional challenge is understanding the correspondence between simulated images and real observations.
+Sensitivity, background structure, finite angular resolution, and photon statistics can alter features that are informative in idealized images.
+Studies of galaxy merger classification have shown that observational realism strongly impacts the real-world applicability of models trained on simulated data, though domain-adaptation methods can mitigate some differences between training and observational data \citep{Bottrell2019, Ciprijanovic2021}.
+For cluster radio emission, the physical emission model introduces an additional consideration.
+Models connecting shocks and synchrotron emission rely on assumptions about particle acceleration and the emitting plasma \citep{HoeftBruggen2007}.
+Characterizing a machine learning model's observational applicability thus requires understanding both the gas responsible for the synthetic emission used for training data, as well as the effects of the observing process.
+
+In this work, we analyze the information about recent merger activity encoded in radio and X-ray images.
+We train CNNs on the TNG-Cluster cosmological magnetohydrodynamical simulations \citep{Nelson2024}, and construct shock-powered radio images at 144 MHz and synthetic X-ray maps for the 352 clusters at redshift 0, as well as their progenitors at redshift 0.1.
+Our prediction target, which we call \emph{pseudo-TSC}, is a characteristic merging timescale derived from a threshold applied to the merger-history score.
+Pseudo-TSC provides a continuous indicator of recent merger activity, though its interpretation depends on the merging score definition and its finite temporal range.
+We investigate its relationship to catalogue collision times, though we retain the distinction between our proxy and the physical elapsed time since an individually-identified pericentric passage.
+
+We first compare the predictive information in idealized radio and X-ray observations, separately and together, against the predictive power of mass, brightness, and morphological summary statistics.
+We then construct approximate observational forward models for LOFAR and Chandra to determine changes in the available information due to real observational conditions.
+The forward-modelling procedure for radio images injects simulated emission into observed survey fields, while the X-ray procedure includes distance, exposure, and background effects, as well as photon statistics.
+Finally, we apply the trained models to nearby clusters from the Local Volume-Complete Cluster Survey (LoVoCCS, \cite{Fu2022, Fu2024}), predicting merger times for 26 clusters in radio and 15 in X-rays.
+Since clusters with available X-ray data are a subset of those with radio data, we can assess consistency between the two predictions.
+However, independent constraints on merger history are needed to establish their absolute accuracy.
+Together, these experiments assess the predictive information retained retained by observable cluster images, as well as the requirements for interpreting predictions as physical merger times.
