@@ -1,25 +1,17 @@
 \begin{abstract}
-\begin{itemize}
-  \item Merger timing (time since last collision) from images; TNG-Cluster
-        (352 clusters), radio (DSA shock emission) and X-ray (Chandra mocks).
-  \item Clean-image skill: pooled CNN $R^2 = 0.485 \pm 0.028$ (radio,
-        144\,MHz); X-ray $0.511$; joint $0.545$. The CNN
-        beats five scalar baselines (0.459) and holds skill within mass bins;
-        the stacked increment ($+0.082$) is exploratory until nested (F2).
-  \item Physics: the model's radio emission is carried by cold, overdense
-        gas rather than the diffuse ICM (origin untraced); a density cut,
-        motivated by the DSA model's own ICM-shock assumptions, removes it.
-  \item Forward modelling to LOFAR (field injection, flux-conserving,
-        3\,Mpc box) and Chandra (real count model, backgrounds, redshift
-        placement), training on two epochs ($z = 0$ and 0.1). Per single
-        real-like observation: X-ray $R^2 = 0.41$, radio 0.20; in an
-        exploratory comparison (fold partitions not matched) the radio image
-        adds $\sim$0.1 beyond a noisy mass measurement; adding radio to X-ray
-        shows no demonstrated gain. Replacing the legacy forward model
-        substantially reduces radio predictive performance.
-  \item Applied to LoVoCCS (26 radio, 15 X-ray clusters): radio and X-ray
-        rank the clusters consistently ($\rho = 0.61$, $n = 15$) but differ
-        in absolute age by $\sim$0.4\,Gyr; no ground truth, so framed as a
-        demonstration.
-\end{itemize}
+
+Radio and X-ray observations track the response of intracluster gas to merging events, but the merger-history information retained in realistic observing conditions remains uncertain.
+We train convolutional neural networks on synthetic images of 352 systems in TNG-Cluster to infer \emph{pseudo-TSC}, an indicator of recent merger activity derived from the merger score.
+This proxy strongly correlates with catalogue collision times at $z=0$ ($\rho=0.96$).
+Idealized observations combining three orthogonal projections yield mean $R^2$ with calculated pseudo-TSC values of $R^2=0.485$, 0.511, and 0.545 for 144 MHz radio, X-ray, and joint inputs, respectively.
+Radio predictions remain informative within mass bins and after normalization of integrated emission, indicating information content beyond total brightness.
+We also find that dense gas, including a significant cold component, dominates the unfiltered synthetic radio images, motivating a density cut to restrict emission to diffuse gas.
+We construct approximate LOFAR and Chandra forward models, and apply them to simulated cluster images at both redshifts, creating a training dataset closer to real-world observations.
+For individual simulated observations, five-model ensembles reach $R^2=0.203$ for radio images of physical size 3 Mpc, and $R^2=0.406$ for X-ray images.
+Adding 1 Mpc radio images to X-rays yields no statistically-significant improvement.
+Applying the CNN to the Local Volume-Complete Cluster Survey (LoVoCCS) yields radio predictions for 26 clusters, and overlapping X-ray predictions for 15 clusters.
+For the overlapping sample, the merger time rankings between radio and X-ray correlate ($\rho=0.61$), but radio assigns systematically older proxy ages, producing a median age offset of 0.44 Gyr.
+These results indicate the presence of recoverable information about recent merger activity in simulated cluster observations, and show that X-rays are a stronger predictor than radio under the tested observing conditions.
+However, independent calibration is needed to establish accuracy of the predicted physical collision ages.
+
 \end{abstract}
