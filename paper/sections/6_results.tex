@@ -216,25 +216,6 @@ Its normalized ranked probability score was 0.125 compared with 0.160.
 Its Brier score for the no-crossing category was 0.068 compared with 0.088.
 All three paired conditional intervals favored the model.
 These results establish probabilistic skill relative to the baseline model, but do not establish calibrated uncertainty in physical collision times.
-\suggestion{Add these definitions to Methods and retain the numerical
-scores here:
-For an observation with true class $y$ and predicted class probabilities
-$p_c$, the categorical log score is $-\ln p_y$.
-The normalized ranked probability score is
-\[
-\mathrm{RPS}=\frac{1}{6}\sum_{k=0}^{5}
-\left[\sum_{c=0}^{k}p_c-\mathbf{1}(y\leq k)\right]^2,
-\]
-where $\mathbf{1}$ denotes the indicator function.
-The no-crossing Brier score is
-$[p_6-\mathbf{1}(y=6)]^2$.
-Lower values are better for all three scores.
-The reference assigns the class frequencies among each fold's fitting
-halos, counting each halo--snapshot label once. We compare the mean
-scores on the same held-out observations using paired parent-halo
-bootstrap intervals, conditional on the fitted models.
-These scores evaluate probabilities for the defined proxy categories,
-not physical collision-time intervals.}
 
 A pilot study using contrastive pretraining showed that this method performed significantly worse than the Huber loss control.
 Rotations and reflections were applied to individual observations to construct positive pairs, followed by an encoder with weights frozen during downstream training.

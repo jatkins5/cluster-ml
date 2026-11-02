@@ -54,6 +54,25 @@ For paired model comparisons, we use a bootstrap \citep{EfronTibshirani1993}, re
 We state the 2.5th and 97.5th percentiles of the resulting metric differences as conditional 95\% intervals.
 The same sampled halos are used for both compared models.
 These confidence intervals condition on fitted runs, and thus do not include uncertainty from retraining on new halo populations.
+\suggestion{Define the probabilistic scores for the distributional head here
+(numerical scores are reported in section~\ref{sec:loss_head}):
+For an observation with true class $y$ and predicted class probabilities
+$p_c$, the categorical log score is $-\ln p_y$.
+The normalized ranked probability score is
+\[
+\mathrm{RPS}=\frac{1}{6}\sum_{k=0}^{5}
+\left[\sum_{c=0}^{k}p_c-\mathbf{1}(y\leq k)\right]^2,
+\]
+where $\mathbf{1}$ denotes the indicator function.
+The no-crossing Brier score is
+$[p_6-\mathbf{1}(y=6)]^2$.
+Lower values are better for all three scores.
+The reference assigns the class frequencies among each fold's fitting
+halos, counting each halo--snapshot label once. We compare the mean
+scores on the same held-out observations using paired parent-halo
+bootstrap intervals, conditional on the fitted models.
+These scores evaluate probabilities for the defined proxy categories,
+not physical collision-time intervals.}
 
 To evaluate the increased predictive power from access to raw image data, we compared our CNN model with several scalar prediction baselines.
 A five-feature ridge regression model was fit from log(halo mass), log(halo radius), log(integrated emission), mean intensity in the arcsinh-stretched image, and the fraction of pixels with non-zero intensity.
