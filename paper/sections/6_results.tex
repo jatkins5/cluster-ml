@@ -4,11 +4,7 @@
 We evaluated the degree to which pseudo-TSC labels can be recovered from simulated radio and X-ray images, including whether the performance changed when simulated forward-modelling was added, and whether additional inputs or variations on the training objective improved performance.
 All simulation scores are out-of-fold (OOF) predictions.
 Unless otherwise stated, listed uncertainties describe the standard deviation across five training seeds.
-\todo{describe bootstrapping}
-\suggestion{Cross-reference the bootstrap description here, e.g.\
-``Intervals on paired model differences are parent-halo bootstrap
-intervals (section~\ref{sec:methods}).''}
-
+Confidence intervals on paired model differences are calculated using parent-halo bootstrapping, described in section~\ref{sec:methods}.
 Errors expressed in Gyrs quantify pseudo-TSC recovery on held-out simulated clusters.
 The strong rank correlation between pseudo-TSC and catalogue collision times supports its interpretation as a merger activity indicator; thus, these errors measure useful information about merger history, but are not calibrated uncertainties about the date of a physical collision.
 
@@ -33,16 +29,9 @@ Thus, morphology, brightness, and cluster properties remain correlated within th
 
 Part of the signal could also be recovered from a representation of the morphology.
 An XGBoost decision tree model applied to 48 Minkowski-functional measurements predicted pseudo-TSC at $R^2 = 0.304$ for individual projections, and at $R^2 = 0.415$ after averaging predictions across all three cluster projections.
-At the largest area-fraction threshold, corresponding to the lowest intensity threshold considered \todo{this phrasing is unclear}, the number of connected components correlated with pseudo-TSC at Spearman correlation $\rho = 0.62$.
+At the threshold selecting approximately the brightest 50\% of image pixels, the number of connected components had a Spearman correlation $\rho=0.62$ with pseudo-TSC.
+This threshold was the lowest-intensity one considered, corresponding to the highest area fraction.
 Older proxy ages were thus associated with more fragmented emission.
-\suggestion{Replace the preceding threshold description and interpretation
-with:
-At the threshold selecting approximately the brightest 50 per cent of
-pixels, the connected-component count has a Spearman correlation of
-$\rho=0.62$ with pseudo-TSC. This is the lowest intensity threshold in
-the sweep; tied pixel intensities can reduce the selected fraction.
-Older proxy ages are associated with more fragmented emission at this
-threshold.}
 A similar analysis applied to clean maps at 1.4 GHz gave similar results, with scores differing by no more than 0.02.
 
 \begin{figure*}
@@ -93,16 +82,10 @@ A similar analysis applied to clean maps at 1.4 GHz gave similar results, with s
 Clean X-ray images provided comparable predictive power to clean radio images.
 Applying the globally-scaled arcsinh scaling increased the X-ray CNN correlation from $R^2=0.320$ to $0.511 \pm 0.026$.
 Improvement was found in all five seeds, with a paired-seed p-value of $0.0003$.
-This shows a large sensitivity to the preprocessing method, reflecting the the limited compression produced by applying an unscaled arcsinh transformation to low count rates.
-\todo{this isn't explained very well}
-\suggestion{Replace the preceding preprocessing explanation with:
-The original X-ray count rates are numerically much smaller than unity,
-so applying $\operatorname{arcsinh}(x)$ leaves most pixels nearly
-unchanged: $\operatorname{arcsinh}(x)\simeq x$ in this regime.
-Using $\operatorname{arcsinh}(x/a)$ with a shared global scale $a$
-compresses bright cores and increases the relative visibility of
-fainter spatial structure, while preserving differences in overall
-brightness between clusters.}
+This shows a large sensitivity to the preprocessing method.
+The original X-ray count rates are much smaller than unity, so applying the arcsinh-stretch leaves most pixels nearly unchanged.
+Using $\operatorname{arcsinh}(x/a)$ with a global scale $a$ compresses bright cores and increases the relative visibility of faint spatial structure, while preserving overall brightness differences between clusters.
+
 Combining the stretched X-ray images with the 144 MHz radio maps yields a mean $R^2 = 0.545$.
 The paired increment over just radio was $0.059 \pm 0.025$, with all five seeds showing improvement ($p = 0.007$).
 This result supports the existence of complementary information between X-ray and radio data.
@@ -119,14 +102,11 @@ We distinguish the pooled-view score, which combines all three projections, from
 For single projections, the radio-only ensemble of five models achieved $R^2 = 0.072$ with a box size of 1 Mpc, and $R^2=0.203$ with a box size of 3 Mpc.
 The corresponding scores for the pooled input models, averaged over the different seeds, were $0.142\pm0.021$ and $0.238\pm0.019$.
 The experiment sensitive to arcsinh morphology \todo{explain better}, which retained the total physical flux while compressing the spatial intensity distribution, gave a similar single-projection score of $R^2=0.207$ for the 3 Mpc box.
-\suggestion{Replace the preceding sentence with:
-In a compressed-morphology sensitivity test, we redistributed the same
-physical total source flux according to an arcsinh-compressed spatial
-profile before beam convolution and background injection. This gave a
-single-view ensemble score of $R^2=0.207$ for the 3\,Mpc box.
-This alternative source profile is distinct from the final
-$\operatorname{arcsinh}(S/\sigma_{\rm rms})$ transformation applied to
-all processed inputs. Use \emph{compressed-morphology sensitivity test}
+
+In a test of the sensitivity of the compressed morphology, we redistributed the same physical total source flux according to an arcsinh-compressed spatial profile, followed by beam convolution and background injection.
+This experiment yielded a single-view ensemble score of $R^2=0.207$ for the 3 Mpc box.
+This source profile is distinct from the final $\operatorname{arcsinh}(S/\sigma_{\rm rms})$ transformation, which was applied to all processed inputs.
+\suggestion{Use \emph{compressed-morphology sensitivity test}
 for the corresponding table row as well.}
 While the models predicting on larger boxes performed better, injection placements were also changed, so the effect of field size was not completely isolated.
 
@@ -145,15 +125,9 @@ Both conditions used identical folds and single-view inner validation scoring.
 Pooled-observation training achieved an ensemble $R^2 = 0.425$ and mean absolute error (MAE) of $0.649$ Gyr, compared with $R^2=0.421$ and MAE of $0.659$ Gyr for single-view training.
 The paired $R^2$ difference was $-0.004$, with a $95\%$ confidence interval of $[-0.027, +0.019]$.
 Therefore, single-view training showed no ensemble improvement in this experiment.
-These results create a separate comparison from those in table \ref{tab:realistic}, since the fold construction and checkpoint selection protocol differ \todo{how?}.
-\suggestion{Replace the preceding sentence with:
-This comparison uses a persisted parent-halo fold assignment and
-identical inner-selection halos in both arms, with checkpoint selection
-based on single-view predictions. The earlier experiments in
-Table~\ref{tab:realistic} used the earlier group-fold construction and
-pooled-view checkpoint selection. Their scores are consequently
-reported as separate experiments rather than as a controlled comparison
-with the view-training test.}
+This comparison uses a persistant parent-halo fold assignment and identical inner-selection halos in both conditions, with checkpoint selection based on single-view predictions.
+The experiments in Table ~\ref{tab:realistic} used the group-fold construction and pooled-view checkpoint selection.
+Consequently, their scores are reported as separate experiments.
 
 The performance on X-ray data also depended on exposure.
 In the depth experiment, the mean pooled-view $R^2$ increased from 0.312 at 5 ks to 0.365 at 20 ks and 0.450 at 50 ks.
@@ -174,14 +148,9 @@ Thus, recently disturbed systems tend to be brighter at a fixed mass.
 The normalization was set globally, anchored to the observed halo-power relation; the simulated slope was not imposed.
 Comparisons with observed halo and relic relations remain contextual, as frequency, source definition, fitting method, and selection differ, and the slope alone does not establish agreement with one particular source population.
 
-All statistical models trained on forward-modelled data used images from both snapshot 99 and 91.
-A matched comparison of one- and two-epoch training has not been conducted, quantifying the benefit of an additional epoch is left to future work.
-\suggestion{Replace the two preceding sentences with:
-The principal forward-modelled comparisons in Table~\ref{tab:realistic}
-train on both snapshots 99 and 91. The exposure experiment instead
-trains on snapshot 99 alone. A matched comparison of one- and two-epoch
-training has not been conducted, so the benefit of the additional epoch
-has not been isolated.}
+The principal forward-modelled comparisons in Table~\ref{tab:realistic} are between models trained on images from both snapshot 99 and 91.
+In contrast, the exposure experiment was trained on snapshot-99 data alone.
+We did not conduct a matched comparison of one- and two-epoch training, so the benefit of the additional epoch has not been isolated.
 
 \begin{table*}
   \centering
@@ -235,12 +204,8 @@ has not been isolated.}
 \label{sec:loss_head}
 
 We also tested alternative losses and output representations in an exploratory X-ray experiment.
-The Huber loss baseline achieved a five-seed single-projection ensemble $R^2 = 0.432$ and MAE of 0.650. Gyr.
-Using the mean squared error loss instead gave $R^2 = 0.425$ and MAE of 0.663 Gyr.
-\suggestion{Change the MSE score to $R^2=0.427$, as recorded in
-\texttt{logs/score\_e5\_7369011.out}. The reported difference of
-$-0.005$ from the Huber control is already correct. Also change
-\emph{0.650. Gyr} in the preceding sentence to \emph{0.650\,Gyr}.}
+The Huber loss baseline achieved a five-seed single-projection ensemble $R^2 = 0.432$ and MAE of 0.650 Gyr.
+Using the mean squared error loss instead gave $R^2 = 0.427$ and MAE of 0.663 Gyr.
 The seven-class distributional head \todo{define} gave $R^2 = 0.425$ with MAE of 0.666 Gyr.
 \suggestion{Introduce the output head in Methods before reporting this
 result:
