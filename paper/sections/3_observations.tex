@@ -31,9 +31,7 @@ These range in exposure time from 6.2-229.4 ks, with a median of 31.3 ks.
 This approximately corrects for differences in effective area between observations.
 
 We estimate the particle background from the 9.5-12 keV events; the telescope has little focused signal in this band, and thus particle counts predominantly trace the background.
-We convert the hard-band particle rate to the expected contribution at 0.1--2.0 keV using the soft-to-hard count ratio of the adopted ACIS-I particle-background spectrum.
-\suggestion{For a supporting reference, use the Chandra X-ray Center's
-\emph{ACIS-stowed background} guidance.}
+We convert the hard-band particle rate to the expected contribution at 0.1--2.0 keV using the soft-to-hard count ratio of the adopted ACIS-I particle-background spectrum \citep{CXCStowedBkg}.
 We subtract this background before normalizing the exposure, then restore the the reference particle background level from the mocks.
 X-ray images are centered on the smoothed emission peak within 2' of the catalog position, then bin the emission onto a 128x128 pixel grid, each pixel being about 18.9 kpc on a side.
 We retain a circular aperture with approximate radius 485 kpc at $z \geq 0.05$, which we reduce at lower redshifts to remain within the 8' angular aperture.
