@@ -95,40 +95,24 @@ We also considered predictive performance within mass bins, and calculated parti
 For analyses in which we conditioned on cluster mass, we concatenated $\log_{10} (M_\text{500c})$ to the image representation before being fed into the regression head.
 To approximate uncertainty associated with weak-lensing masses, we perturbed simulated log-masses with Gaussian noise with widths sampled from the empirical distribution of weak-lensing fractional mass errors.
 We used the available fractional uncertainties on $M_\text{200c}$ estimates to approximate uncertainties in the converted $M_\text{500c}$ values.
-\suggestion{Define the idealized optical features here (results in
-section~\ref{sec:optical}):
-The idealized optical catalogue contains FoF-member galaxies with
-stellar particles and intrinsic, dust-free $r$-band absolute magnitude
-$M_r<-19$. Richness counts the subset with $M_r<-20$ inside projected
-$R_{500}$ of the gas reference centre.
-The BCG is the brightest member within $0.5R_{500}$, and the magnitude
-gap is the second-brightest minus brightest $r$-band magnitude in that
-aperture. The positional features are the BCG offset from the gas
-centre, its offset from the number-weighted galaxy centroid within
-$R_{500}$, and the separation of the galaxy centroids within
-$0.5R_{500}$ and $R_{500}$. All distances are divided by the true
-$R_{500}$. Simulation membership removes foreground and background
-interlopers; photometric-redshift errors are not modelled.}
-\suggestion{Define the gas reference centre here (used by the optical
-features in section~\ref{sec:optical}):
-The gas reference centre is the projected centroid weighted by
-$m_{\rm gas}\rho_{\rm gas}$, an emission-measure proxy, for gas with
-$T>3\times10^5$\,K and zero star-formation rate. We select gas within
-a cube of half-width $2R_{500}$ about GroupPos and within projected
-$R_{500}$ of that position. This idealized centre is not measured
-from a photon-limited X-ray image.}
+
+The idealized optical catalogue contains FoF-member galaxies with stellar particles and intrinsic, dust-free $r$-band absolute magnitude $M_r < -19$.
+Richness measures the subset with $M_r < -20$ inside the projected $R_{500}$ of the gas reference center.
+The BCG is the brightest member within $0.5 R_{500}$, and the magnitude gap is calculated as the second-brightest minus brightest $r$-band magnitude in that aperture.
+The positional features are: the BCG offset from the gas center, its offset from the number-weighted galaxy centroid within $R_{500}$, and the separation of the galaxy centroids within $0.5R_{500}$ and $R_{500}$.
+All distances are normalized by the true $R_{500}$.
+Simulation membership removes foreground and background interlopers; photometric-redshift errors are not modelled.
+
+The gas reference center is the projected centroid weighted by $m_{\rm gas}\rho_{\rm gas}$, which is a proxy for emission, for gas with $T>3\times10^5$ K and no star formation.
+We select gas within a cube of half-width $2R_{500}$ about the \texttt{GroupPos} and within projected $R_{500}$ of that position.
 
 The experiments that have access to all three cluster projections provide a benchmark in which several views of the same cluster are available, which can be compared with the model performance on the realistic case individual observed images from a single viewing direction.
 The latter can be interpreted alongside the corresponding observationally forward-modelled tests.
 Because the observed clusters lack independent pseudo-TSC labels, agreement between radio and X-ray predictions provides a consistency check rather than a direct accuracy measurement.
-\suggestion{Define the partial-rank statistic and Freedman--Lane test here
-(coefficients and $p$-values are reported in Results):
-We rank the two prediction vectors and the nuisance variable once,
-and regress each ranked prediction on an intercept and the ranked
-nuisance variable. Their residual correlation is the partial-rank
-statistic. For the Freedman--Lane test, we permute the residuals of one
-prediction, add back its fitted nuisance component, and recompute the
-partial statistic after nuisance regression, without reranking the
-permuted values. We use a two-sided permutation comparison.
-The resulting inference is conditional on the fitted nuisance model
-and its residual-exchangeability assumptions.}
+
+We rank the two prediction vectors and the nuisance variable once, and regress each ranked prediction on an intercept and the ranked nuisance variable.
+Their residual correlation is the partial-rank statistic.
+For the Freedman--Lane test, we permute the residuals of one prediction, add back its fitted nuisance component, and recompute the partial statistic after nuisance regression, without reranking the permuted values.
+We use a two-sided permutation comparison.
+Note the resulting inference is conditional on the fitted nuisance model
+and its residual-exchangeability assumptions.
