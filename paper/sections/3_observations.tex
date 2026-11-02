@@ -14,12 +14,6 @@ We extract squares of physical side length 3 Mpc from 80' cutouts centered on th
 We then resample the squares onto 128x128 pixel grids.
 The native restoring beam size varies across targets, with 9" for 22 targets and 6" for four targets.
 LoTSS DR3 observations below 10$^\circ$ declination have a 9" resolution, compared to 6" resolution above 10$^\circ$ declination.
-Thus, the native restoring beam size varies across our sample, with 4/26 targets using the lower resolution of the $<10^\circ$ sample.
-\suggestion{Delete this sentence: it reverses the measured beam counts.
-The preceding statement that 22 targets have 9-arcsec beams and four have
-6-arcsec beams is supported by the FITS headers. Use those measured beams
-to describe this sample; the nominal survey resolution alone does not
-determine the resolution of a delivered cutout.}
 Our processing adopts a common 9" beam assumption for masking and mock construction.
 
 To suppress contamination from compact sources, we identify connected components of emission above five times the measured root-mean-squared (rms) luminosity level.
@@ -52,16 +46,12 @@ We arcsinh-stretch the resulting images with the same scale as the mocks.
 Because the radio and X-ray images are centered differently, their relative positional offsets are not preserved.
 Section \ref{sec:fwd} describes the count model and remaining footprint limitations.
 
-LoVoCCS provides weak-lensing mass estimates for 18 of the 26 radio targets, including 11 of the 18 ACIS-I targets.
-\suggestion{Replace the last clause with \emph{including 11 of the 15
-ACIS-I targets}. Eighteen is the number with lensing masses, not the
-size of the ACIS-I sample.}
+LoVoCCS provides weak-lensing mass estimates for 18 of the 26 radio targets, including 11 of the 15 ACIS-I targets.
 We use single-peak Navarro-Frenk-White (NFW) profile fits from the LoVoCCS processing outputs, and convert the $M_\text{200c}$ to $M_\text{500c}$ values using the NFW concentration relation and cosmology adopted in those fits.
 The median fractional uncertainty on the input $M_\text{200c}$ measurements is 22.5\%.
-\suggestion{Add the uncertainty convention:
 For each target, the fractional uncertainty is half the difference
-between the quoted upper and lower mass bounds, divided by the median
-$M_{200\mathrm{c}}$ estimate.}
+between the upper and lower mass bounds, divided by the median
+estimate of $M_{200\mathrm{c}}$.
 These masses are used for the mass-conditioned analysis, as well as comparisons at fixed mass values.
 Because the observed clusters lack independent merger-time labels, agreement between their radio and X-ray predictions is used to check consistency.
 
