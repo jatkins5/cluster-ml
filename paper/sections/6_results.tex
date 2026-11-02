@@ -207,18 +207,6 @@ We also tested alternative losses and output representations in an exploratory X
 The Huber loss baseline achieved a five-seed single-projection ensemble $R^2 = 0.432$ and MAE of 0.650 Gyr.
 Using the mean squared error loss instead gave $R^2 = 0.427$ and MAE of 0.663 Gyr.
 The seven-class distributional head \todo{define} gave $R^2 = 0.425$ with MAE of 0.666 Gyr.
-\suggestion{Introduce the output head in Methods before reporting this
-result:
-The distributional model predicts probabilities for seven classes:
-a threshold already reached at the smallest sampled window of
-0.1\,Gyr; first crossings in $(0.1,0.25]$, $(0.25,0.5]$, $(0.5,1]$,
-$(1,2]$, and $(2,4]$\,Gyr; and no crossing by 4\,Gyr.
-We train with categorical cross-entropy. For point scoring, we decode
-the probabilities as $\hat T_{\rm pseudo}=\sum_{c=0}^{6}p_c\mu_c$,
-where $\mu_c$ is the mean label of fitting halos in class $c$ for that
-fold, with the endpoint representatives fixed at 0.1 and 4\,Gyr.
-The no-crossing class is identified from the score curve, not merely
-from a numerical label equal to 4\,Gyr.}
 Their paired $R^2$ differences from the Huber loss case were $-0.005$, with $95\%$ confidence interval of $[-0.029, +0.021]$ and $-0.007$ with confidence interval $[-0.034, +0.025]$ respectively.
 Neither alternative met the prespecified point-prediction adoption criterion \todo{define}.
 \suggestion{Replace the preceding sentence with:
