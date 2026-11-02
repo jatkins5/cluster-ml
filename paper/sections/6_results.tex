@@ -1,15 +1,7 @@
 \section{Results}
 \label{sec:results}
 
-We evaluated the degree to which \todo{define capped} capped pseudo-TSC labels can be recovered from simluated radio and X-ray images, including whether the performance changed when simulated forward-modelling was added, and whether additional inputs or variations on the training objective improved performance.
-pseudo-TSC is defined in section \ref{sec:sims}.
-\suggestion{Replace the two preceding sentences with:
-We evaluated how well the pseudo-TSC labels defined in
-Section~\ref{sec:sims}, capped at 4\,Gyr, can be recovered from simulated
-radio and X-ray images. We tested sensitivity to observational forward
-modelling, additional inputs, and changes to the training objective.
-The cap is already defined in the labels section, so a second full
-definition is unnecessary.}
+We evaluated the degree to which pseudo-TSC labels can be recovered from simulated radio and X-ray images, including whether the performance changed when simulated forward-modelling was added, and whether additional inputs or variations on the training objective improved performance.
 All simulation scores are out-of-fold (OOF) predictions.
 Unless otherwise stated, listed uncertainties describe the standard deviation across five training seeds.
 \todo{describe bootstrapping}
@@ -22,16 +14,9 @@ realizations in each draw. We use 4000 draws and quote the 2.5th and
 in a comparison. These intervals condition on the fitted runs and do
 not include uncertainty from retraining on new halo populations.
 Scatter across training seeds is reported separately.}
-Errors expressed in Gyr are accuracy on the pseudo-TSC scale, rather than uncertainty in physical collision dates.
-\todo{justify why they are meaningful then}
-\suggestion{Replace the preceding error-interpretation sentence with:
-Errors expressed in Gyr quantify recovery of the defined pseudo-TSC
-label on held-out simulated clusters. The strong rank correlation
-between this label and catalogue collision times supports its
-interpretation as an indicator of recent merger activity.
-These errors therefore measure useful predictive information about
-merger history, but are not calibrated uncertainties on the date of
-a particular physical collision.}
+
+Errors expressed in Gyrs quantify pseudo-TSC recovery on held-out simulated clusters.
+The strong rank correlation between pseudo-TSC and catalogue collision times supports its interpretation as a merger activity indicator; thus, these errors measure useful information about merger history, but are not calibrated uncertainties about the date of a physical collision.
 
 \subsection{Radio-only}
 

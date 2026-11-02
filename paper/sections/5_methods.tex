@@ -11,20 +11,16 @@ The three projection representations are averaged, which makes the prediction in
 This vector is then passed to a regression head, constructed from a 64-hidden-unit layer with dropout.
 In the joint radio and X-ray model, each modality has a separate encoder, with the encodings concatenated before the regression step.
 
-While training, we augmented our set of radio and X-ray projections with random reflections, and $90^\circ$, $180^\circ$, and $270^\circ$ rotations, applied consistently to both observational bands.
-\todo{clean map experiments}
-\suggestion{Add:
-The clean-map benchmarks use the 352 snapshot-99 clusters and combine
-their three orthogonal projections. The principal forward-modelled
-experiments train on snapshots 99 and 91, with evaluation restricted to
-snapshot 99. Before training, each image channel is standardized using
-the mean and standard deviation of that fold's fitting images; the same
-transformation is applied to its validation, test, and observed inputs.
-We distinguish pooled-view predictions, which combine three projections,
-from single-view predictions for individual observations. For the latter,
-the five-seed ensemble averages the five model outputs for the same
-observation, without averaging its viewing directions or realizations.
-The snapshot-99-only exposure experiment is described separately.}
+While training, we augmented our set of radio and X-ray projections with random reflections, and $90^\circ$, $180^\circ$, and $270^\circ$ rotations, applied to both observational bands.
+
+For the clean, non-forward-modelled case, we use the 352 snapshot-99 clusters with all three orthogonal projections.
+The forward-modelled experiments train on images from snapshots 99 and 91, with evaluation restricted to snapshot 99.
+Before training, we normalize the image channels within a fold using the mean and standard deviation of images within that fold.
+We apply the same transformation to the validation, test, and observed datasets.
+
+We train models on two types of inputs: idealized pooled-view datasets, in which the three projections of a cluster are combined, and single-view datasets, for which the model is only given one orthogonal projection.
+For the latter, we measure the ensemble average performance for five models initialized with five different random seeds.
+
 Observationally forward-modelled data was preprocessed using the procedure described in section \ref{sec:fwd}.
 We used AdamW to optimize the CNN for 60 epochs, with an initial learning rate of $3\times 10^{-4}$, weight decay of $10^{-3}$, a cosine learning-rate schedule, and a batch size of 32.
 We used a Huber loss function:
@@ -53,49 +49,25 @@ A five-feature ridge regression model was fit from log(halo mass), log(halo radi
 We standardized features over the training data, with ridge regularization strength selected within the training sample.
 These comparisons tested whether the raw image data provided extra predictive power over summary statistics of a cluster's scale, emission amplitude, and simple properties of the intensity distribution.
 
-We also compared the CNN performance to explicit image morphology descriptions.
-For radio maps, we constructed thresholded excursion sets at 12 intensity quantiles, forming a 48-dimensional feature vector containing their perimeter, Euler characteristic, and numbers of connected components and holes.
-This was supplied to an XGBoost regressor.
-All projections of a cluster remained grouped during cross-validation, with their predictions averaged for cross-cluster comparison.
-For X-ray data, we fit a ridge-regression model on aperture-based concentration, centroid variation, ellipticity, and integrated emission.
-These were defined relative to the image extent, also with features averaged across projections.
-\todo{should probably define some of these more clearly}
-\suggestion{Replace the morphology-definition paragraph with:
-\par
-For each radio projection, we threshold the image at 12 logarithmically
-spaced upper-area fractions $f=0.005$--0.5, using the $(1-f)$ intensity
-quantile. At each threshold we record the normalized perimeter, number
-of connected components, number of holes, and Euler characteristic
-$\chi=N_{\rm comp}-N_{\rm hole}$. Foreground components use
-8-connectivity and background holes use 4-connectivity. The perimeter is
-the number of horizontal and vertical foreground--background transitions
-divided by the number of pixels. These 48 descriptors are supplied to an
-XGBoost regressor, with projections grouped by cluster during
-cross-validation and their predictions averaged for cluster-level scoring.
-\par
-For X-rays, let $R$ be half the image side length, measured in pixels,
-and let $F(<r)$ denote integrated linear emission within radius $r$
-about the image centre. We use concentration $F(<0.1R)/F(<R)$,
-$\log_{10}F(<R)$, centroid variation, and ellipticity.
-Centroid variation is $[\operatorname{sd}(x_c)+
-\operatorname{sd}(y_c)]/R$, evaluated over ten circular apertures
-spanning $0.1R$ to $R$. Ellipticity is
-$1-\sqrt{\lambda_{\min}/\lambda_{\max}}$, where the eigenvalues are
-those of the intensity-weighted position covariance matrix within
-$0.5R$. We average these features across projections before fitting
-ridge regression. These are image-aperture definitions; $R$ is not
-being identified with the true $R_{500}$.}
+For each radio projection, we threshold the image data at 12 logarithmically-spaced upper-area fractions, $f=0.005$--0.5, using the $(1-f)$ intensity quantile.
+At each threshold, we calculate the normalized \todo{normalized how?} perimeter, number of connected components, number of holes, and Euler characteristic, computed as $\chi = N_\text{comp} - N_\text{holes}$.
+To decide if pixels are part of the same connected component, we use 8-connectivity for foreground components, and 4-connectivity for background components. \todo{why the difference}?
+The perimeter is calculated as the number of foreground-background transitions divided by the number of pixels.
+These calculations yield a vector of 48 scalar descriptors, which are supplied to an XGBoost regressor, with projections grouped by cluster during cross-validation, and their predictions averaged for cluster-level scoring.
+
+To characterize X-ray morphology, we caclulate the concentration, centroid variation, and ellipticity.
+Let $R$ be half of the image's side length, and denote integrated linear emission within radius $r$ by $F(<r)$.
+The concentration is then $F(<0.1R)/F(<R)$.
+Centroid variation is calculated as $[\sigma(x_c) + \sigma(y_c)]/R$, evaluated over ten circular apertures spaning $0.1R$ to $R$.
+Ellipticity is calculated from the eigenvalues of the intensity-weighted position covariance matrix within $0.5R$.
+These features are averaged across projections, then supplied to a ridge regressor.
 
 Several complementary analyses considered the role of mass and emission amplitude.
 To test the contribution of explicit amplitude information, one analysis ran shape-normalization \todo{more detail}, with each projection then rescaled to a common integrated emission before applying the intensity arcsinh-stretch.
-\suggestion{Replace the preceding sentence with:
-To remove variation in integrated amplitude from the clean radio inputs,
-we invert the stored arcsinh transform, divide each projection's linear
-emission by its own total, and multiply by the median projection total
-over the dataset. We then reapply the arcsinh transform. Every valid
-projection thus has the same integrated emission, while retaining its
-normalized spatial distribution. This procedure does not remove
-correlations between spatial structure and the original luminosity or mass.}
+
+To remove variation in integrated amplitude from the clean radio maps, we invert the arcsinh-stretch, divide each projection's linear emission by the total emission, and scale by the median of the total emission over all projections.
+We then reapplied the arcsinh transform.
+Thus, every projection has the same integrated emission, with a retained spatial distribution.
 Note that this normalization did not remove correlations between mass, morphology, and luminosity.
 We also considered predictive performance within mass bins, and calculated partial-rank correlations between predictions and labels after accounting for halo mass.
 
