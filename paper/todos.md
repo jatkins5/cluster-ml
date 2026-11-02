@@ -145,7 +145,7 @@ Evidence: the original snapshot-99 and snapshot-91 X-ray generation scripts,
 
 ## 6. Fix citations and remaining prose issues
 
-- [ ] Replace `Nelson2015`, the original Illustris public-data release,
+- [x] Replace `Nelson2015`, the original Illustris public-data release,
   with the TNG release reference, **Nelson et al. (2019)**. Retain
   Nelson et al. (2024) for TNG-Cluster. This follows the
   [TNG-Cluster citation guidance](https://www.tng-project.org/data/cluster/).
