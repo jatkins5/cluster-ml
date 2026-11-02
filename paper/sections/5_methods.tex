@@ -44,7 +44,8 @@ We measured performance using the coefficient of determination, $R^2$, with over
 Our primary experiments were repeated with five random seeds, with comparisons between conditions using shared seeds to reduce noise in comparisons.
 We measured scatter across seeds to estimate variation between runs, but this cannot be interpreted as a calibrated uncertainty interval for the TSC.
 
-For paired model comparisons, we resample entire parent halos with replacement 4000 times, and state the 2.5th and 97.5th percentiles of the resulting metric differences as conditional 95\% intervals.
+For paired model comparisons, we use a bootstrap \citep{EfronTibshirani1993}, resampling entire parent halos with replacement 4000 times so that correlated views and realizations of the same halo are drawn together \citep{DavisonHinkley1997}.
+We state the 2.5th and 97.5th percentiles of the resulting metric differences as conditional 95\% intervals.
 The same sampled halos are used for both compared models.
 These confidence intervals condition on fitted runs, and thus do not include uncertainty from retraining on new halo populations.
 
