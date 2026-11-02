@@ -20,18 +20,18 @@ To suppress contamination from compact sources, we identify connected components
 We classify their compactness using the size of the area that is above their half their peak intensity, relative to the assumed beam half-power area.
 Components occupying at most ten such beam areas are masked by replacing them with the surrounding annular median emission value with added Gaussian noise at the measured rms level.
 The same procedure is applied to the field-injected mocks.
-The resulting images are then ``arcsinh-stretched'', by applying $\operatorname{arcsinh}(S/\sigma_\text{rms})$, where $S$ is the pixel value and $\sigma_\text{rms}$ is a scale estimated by sigma-clipping before masking \todo{clarify this more}.
+The resulting images are then ``arcsinh-stretched'', by applying $\operatorname{arcsinh}(S/\sigma_\text{rms})$, where $S$ is the pixel value and $\sigma_\text{rms}$ is a scale estimated by \emph{sigma-clipping} before masking: on the resampled image, we perform five iterations of clipping pixels more than three standard deviations from the current median; we take the remaining standard deviation as the scale; retain that scale through compact-source masking; and then apply the arcsinh-stretch.
 The median value of the scale on the resampled 3 Mpc cutouts is 0.143 mJy per beam.
 
-The archival Chandra dataset contains 55 public observations of 19 of our radio targets.
-We use the 25 ACIS-I observations, which cover 15 targets, matching the detector configuration of our simulated observations.
-\todo{confirm numbers here - 25 of the 55 are in fact from ACIS-I?}
+The archival Chandra dataset contains 55 public observations of 19 of our radio targets, comprising 25 ACIS-I observations of 15 targets and 30 ACIS-S observations.
+We use the 25 ACIS-I observations, matching the detector configuration of our simulated observations.
 We combine all events in the 0.1-2 keV band for each target.
 Exposure maps from the CIAO software evaluated at 1.2 keV are converted to Cycle-22-equivalent exposures.
 These range in exposure time from 6.2-229.4 ks, with a median of 31.3 ks.
 This approximately corrects for differences in effective area between observations.
 
-We estimate the particle background from the 9.5-12 keV events \todo{explain why that range}, which we subtract before normalizing the exposure, then restore the the reference particle background level from the mocks.
+We estimate the particle background from the 9.5-12 keV events; the telescope has little focused signal in this band, and thus particle counts predominantly trace the background.
+We subtract this background before normalizing the exposure, then restore the the reference particle background level from the mocks.
 X-ray images are centered on the smoothed emission peak within 2' of the catalog position, then bin the emission onto a 128x128 pixel grid, each pixel being about 18.9 kpc on a side.
 We retain a circular aperture with approximate radius 485 kpc at $z \geq 0.05$, which we reduce at lower redshifts to remain within the 8' angular aperture.
 Pixels outside the aperture are set to 0.
@@ -40,9 +40,9 @@ We arcsinh-stretch the resulting images with the same scale as the mocks.
 Because the radio and X-ray images are centered differently, their relative positional offsets are not preserved.
 Section \ref{sec:fwd} describes the count model and remaining footprint limitations.
 
-LoVoCCS provides weak-lensing mass estimates for 18 of the 26 radio targets, including 11 of the 18 Chandra targets.
+LoVoCCS provides weak-lensing mass estimates for 18 of the 26 radio targets, including 11 of the 18 ACIS-I targets.
 We use single-peak Navarro-Frenk-White (NFW) profile fits from the LoVoCCS processing outputs, and convert the $M_\text{200c}$ to $M_\text{500c}$ values using the NFW concentration relation and cosmology adopted in those fits.
-The median fractional uncertainty on the input $M_\text{200c}$ measurements is about 23\%. \todo{probably should put exact number here}
+The median fractional uncertainty on the input $M_\text{200c}$ measurements is 22.5\%.
 These masses are used for the mass-conditioned analysis, as well as comparisons at fixed mass values.
 Because the observed clusters lack independent merger-time labels, agreement between their radio and X-ray predictions is used to check consistency.
 

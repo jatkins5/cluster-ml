@@ -13,15 +13,21 @@ The radio power assigned to each image is proportional to its integrated linear 
     &= A_\text{rad} \sum_{p \in \text{box}} w_p
 \end{align*}
 where $w_p$ is the total emission weight in pixel $p$.
-We fixed the global normalization $A_\text{rad}$ by matching the median total power of the snapshot-99 images to the median power predicted at its cluster masses by the relation in \cite{Cuciti2023}. \todo{may want to put relation here}
-This normalization is also used for the snapshot-91 images.
+We fixed the global normalization $A_\text{rad}$ by matching the median total power of the snapshot-99 images to the median power predicted at its cluster masses by the relation in \cite{Cuciti2023}:
+\begin{equation}
+    \log_{10} \! \left( \frac{P_{150}}{10^{24.5}}\, \text{W\,Hz}^{-1} \right)
+    = 1.1 + 3.55 \log_{10}\! \left( \frac{M_{500}}{10^{14.9} M_\odot} \right).
+\end{equation}
+This normalization is used globally, for every cluster from both snapshots, as a normalization of radio halos at 150 MHz for the 144 MHz shock emission maps.
 Flux densities are calculated using the luminosity distance and a spectral index of $\alpha = 1.2$, defined by $S_\nu \propto \nu^{-\alpha}$ \citep{Cuciti2023}.
 
-For each simulated cluster, we generated three observational realizations, drawing a redshift value from the radio target sample and independently selecting a background from 201 80' LoTSS DR3 fields. \todo{should describe this in more detail - how is the background extracted, why use real rather than some kind of simulated one? why draw a real redshift rather than assigning?}
+For each simulated cluster, we generated three observational realizations, drawing a redshift value from the radio target sample and independently selecting a background from 201 80' LoTSS DR3 fields.
+Background positions were sampled 1-3 degrees from the survey targets; usable 80' fields were cropped to the angular size appropriate for the selected redshift and then resampled.
+We draw real redshifts to ensure we sample from the observed redshift distribution.
+Using real background fields supplies realistic observed noise correlations, unrelated radio sources, and imaging artifacts.
 Each realization consists of the three orthogonal simulation projections, which had the same forward-modelling process applied.
-We convolved the simulated emission with a circular 9" Gaussian restoring beam, which approximates the heterogenous native beams of the target images. \todo{why is this a good approximation?}
-converted the output to Jy per beam, and added this to the corresponding resampled field.
-Using real background fields supplies realistic observed noise correlations, unrelated radio sources, and imaging artifacts, and should produce better results than assuming some particular background and noise profile.
+We convolved the simulated emission with a circular 9" Gaussian restoring beam, which matches the true beam size for 22 of the 26 targets, with the rest having 6" beam sizes.
+We converted the output to Jy per beam, and added this to the corresponding resampled field.
 
 Compact sources were then masked using the same procedure for injected mocks and observations.
 We classified connected emission by using half-peak area relative to the assumed beam area, taking components occupying at most ten beam half-power areas at $5\sigma_\text{rms}$ as being compact sources.
@@ -29,7 +35,13 @@ These were replaced with the surrounding annular median plus Gaussian noise.
 Finally, we applied normalization as $\operatorname{arcsinh}(S/\sigma_\text{rms})$, with $\sigma_\text{rms}$ estimated by sigma clipping before masking.
 
 We assessed the realism of this simulated images using area fraction, perimeter, connected-component count, and Euler characteristic at ten logarithmically-spaced thresholds between 1 and $20\sigma_\text{rms}$.
-We calculated the difference between the observed and mock medians, divided by the mock standard deviation, across all statistics and thresholds. \todo{probably clearer to have an equation here}
+We measured morphology agreement as
+\newcommand{\median}{\operatorname{median}}
+\begin{equation}
+    D = \median_{j,k} \left\{\frac{\left|\median_i\left(F^\text{obs}_{ijk}\right) - \median_i\left(F^\text{mock}_{ijk}\right)\right|}{\sigma_i\left(F^\text{mock}_{ijk}\right)} \right\}
+\end{equation}
+where $F_{ijk}$ is the collection of values of statistic $j$ measured at threshold $k$ for image $i$, for the observed or mock maps.
+$\sigma_i(F)$ is the standard deviation of $F$ over all images.
 For the 3 Mpc-sized inputs, this was 0.095, compared with 0.158 for an alternative method using arcsinh-compressed emission morphology at the same integrated flux, and 0.635 for background-only fields.
 The comparison includes 3168 mocks and 26 real observations, with the mocks each containing three projections and three realizations of the 352 source clusters.
 This result supports the adopted processing at the level of morphological summaries.
@@ -69,8 +81,16 @@ The images cover the observed 0.1-2.0 keV band on a common physical grid, with p
 The X-ray images inherit their redshift values from the corresponding simulated radio observations.
 In cases when a true ACIS-I target exists at the assigned redshift, we use the exposure properties of that target; otherwise, those of a randomly-selected ACIS-I target are used.
 
-Source counts are reduced by binomial thinning, with a retainment probability incorporating the ratio of Cycle-22-equivalent exposure the the initial 2 Ms exposure, inverse-square luminosity-distance dimming, and the luminosity and absorption corrections.
-\todo{probably better to just put the formula here}
+Source counts are reduced by binomial thinning, with retainment probability:
+\begin{equation}
+    p_\text{src}
+    = \min\! \left[1,\,
+    \frac{T_\text{eq}}{2\,\text{Ms}}
+    \left( \frac{D_L(z_\text{mock})}{D_L(z)} \right)^2
+    f_{L_X} f_{N_H}
+    \right]
+\end{equation}
+where $T_\text{eq}$ is the target Chandra ACIS-I equivalent exposure time, 2 Ms is the original mock exposure, $D_L(z)$ is the luminosity distance at the assigned observing redshift $z$, $z_\text{mock}$ is the original observing redshift for the mock (0.05 for snapshot-99 and 0.0994 for snapshot-91), $f_{L_X}$ is a dimensionless global source-brightness correction of 0.358, and $f_{N_H}$ is a dimensionless absorption correction, calculated from the predicted source count rate through the target's Galactic hydrogen column divided by that through the original mock column, $N_H = 10^{20}$ cm$^{-2}$.
 We evaluate the distance factor relative to each mock dataset's original observing redshift.
 This placement approximates the redshift dependence through count scaling.
 
@@ -79,7 +99,7 @@ The former counts scale with the Cycle-22-equivalent exposure, $T_\text{eq}$, wh
 $T_\text{eq} / T_\text{life}$ ranges from 0.85 to 1.83 for the observed targets.
 Sky backgrounds include galactic foreground emission and cosmic X-rays, including from point sources.
 Background counts per physical pixel are scaled with the angular area subtended by that pixel.
-Note that the initial mocks already contain particle background, and additional counts from \todo{what specifically?} are added after source thinning.
+Note that the initial mocks already contain a particle background that is thinned with the source; the added particles supplies the remaining expected contribution from the livetime and angular area.
 
 Mock count rates follow the same subtraction and reference-background convention as the real observations:
 \begin{align*}
@@ -107,7 +127,7 @@ A1750 lacks a matched mock for this comparison.
 A763 is an outlier, with a ratio of 0.07.
 
 Recovering counts from exposure-corrected images is imperfect where exposure varies across dither edges and chip gaps.
-The mocks also do not reproduce each real observation's exposure footprint, roll angle, or full spectral response, and interpolation of gaps in the observed images can alter their noise properties \todo{cite reference here}.
+The mocks also do not reproduce each real observation's exposure footprint, roll angle, or full spectral response, and interpolation of gaps in the observed images can create correlated noise and altered variance.
 
 \begin{figure}
   \centering

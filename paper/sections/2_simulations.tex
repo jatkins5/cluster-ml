@@ -14,8 +14,8 @@ $\Omega_{\mathrm{b}}=0.0486$, and
 $h=0.6774$, corresponding to
 $H_0=67.74\,\mathrm{km\,s^{-1}\,Mpc^{-1}}$.
 
-For this work, we use the 352 primary clusters at snapshot 99 ($z=0$), and their corresponding progenitors at snapshot 91 $z = 0.0994$. We construct three orthogonal projections for each cluster at each snapshot to generate the synthetic radio and X-ray observations. \todo{I'm not sure if we need to say we treat them as independent sample and explain why here... please double check}
-
+For this work, we use the 352 primary clusters at snapshot 99 ($z=0$), and 351 of their corresponding progenitors at snapshot 91 $z = 0.0994$. We construct three orthogonal projections for each cluster at each snapshot to generate the synthetic radio and X-ray observations.
+Since different projections and snapshots of the same cluster are not independent, all data corresponding to individual clusters are kept in the same fold during training.
 
 Each map is centred on the FoF group position (\texttt{GroupPos}), and
 we use the corresponding $R_{500\mathrm{c}}$ and
@@ -419,15 +419,19 @@ The pseudo-TSC is defined as the value of $\tau$ at which the merger score first
        {S(\tau_j)-S(\tau_{j-1})}
   (\tau_j-\tau_{j-1}),
 \end{equation}
-where $j$ is the first sampled window with $S(\tau_j) \geq 0.5$ and $S(\tau_i)$ is the merger score at $\tau_i$.
+where $j$ is the first sampled window with $S(\tau_j) \geq 0.5$ and $S(\tau_i)$ is the merger score at $\tau_i$, defined as \citep{KongDellAntonio2026}
+\begin{equation}
+    S(\tau_j)
+    = \sum_\text{mergers} \exp \left(-\frac{\Delta t}{\tau_j} \right)
+\end{equation}
+in which $\Delta t$ is the time interval between the current snapshot $j$ and the merger event, and $\tau_j$ is a characteristic decay timescale.
 If the merger score is already at the 0.5 threshold at the smallest window, we assign $T_\text{pseudo} = 0.1$ Gyr.
 If there is no crossing within the sampled range, we assign $T_\text{pseudo} = 4$ Gyr.
-\todo{should define/cite the definition of merger score}
 For snapshot-91, we used the past-only merger score, excluding contributions from collisions that occurred after that snapshot.
 At snapshot-99, the past-only and all-event scores are identical, since the recorded history ends at that snapshot.
 Using the all-event score for snapshot-91 images would change the interpolated labels for 168 of the 351 halos.
 
-For comparison, we also consider a collision score constructed from the merger catalogue of \citet{Lee2024}, measureing the elapsed cosmic time since the most recent first-pericenter collision at or before the selected snapshot:
+For comparison, we also consider a collision score constructed from the merger catalogue of \citet{Lee2024}, measuring the elapsed cosmic time since the most recent first-pericenter collision at or before the selected snapshot:
 \begin{equation}
   T_{\rm cat} =
   t_{\rm snap}
@@ -436,7 +440,8 @@ For comparison, we also consider a collision score constructed from the merger c
 \end{equation}
 In the comparison labels, we obtain collision times by converting the recorded collision snapshots to cosmic time.
 We do not impose any mass-ratio threshold on the catalogued events.
-At snapshot-99, the median secondary-to-primary axis mass ratio of the events which determine $T_{\rm cat}$ is 0.093, or approximately 1:11. \todo{contextualize this}
+At snapshot-99, the median secondary-to-primary mass ratio of the events which determine $T_{\rm cat}$ is 0.093, or approximately 1:11.
+Therefore, the catalogue comparison predominantly measures time since relatively minor collisions, rather than since the last major merger.
 This definition includes minor mergers within the selection limits of the catalogue.
 
 Figure~\ref{fig:labels} shows the pseudo-TSC distributions and their correlation to $T_\text{cat}$.

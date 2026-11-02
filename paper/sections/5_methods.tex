@@ -12,11 +12,20 @@ The three projection representations are averaged, which makes the prediction in
 This vector is then passed to a regression head, constructed from a 64-hidden-unit layer with dropout.
 In the joint radio and X-ray model, each modality has a separate encoder, with the encodings concatenated before the regression step.
 
-While training, we augmented our set of radio and X-ray projections with random reflections, and $90^\circ$, $180^\circ$, and $270^\circ$ rotations, applied consistently to both modalities.
+While training, we augmented our set of radio and X-ray projections with random reflections, and $90^\circ$, $180^\circ$, and $270^\circ$ rotations, applied consistently to both observational bands.
 \todo{clean map experiments}
 Observationally forward-modelled data was preprocessed using the procedure described in section \ref{sec:fwd}.
 We used AdamW to optimize the the CNN for 60 epochs, with an initial learning rate of $3\times 10^{-4}$, weight decay of $10^{-3}$, a cosine learning-rate schedule, and a batch size of 32.
-We used a Huber loss \todo{Huber loss formula} with transition scale $0.5$ Gyr to reduce the influence of large residuals.
+We used a Huber loss function:
+\begin{equation}
+    L_\delta(r)
+    = \begin{cases}
+        r^2/2,& |r| \leq \delta,\\
+        \delta(|r| - \delta/2),& |r| > \delta,
+    \end{cases}
+    \qquad \delta = 0.5\,\text{Gyr}
+\end{equation}
+The transition scale of 0.5 Gyr is to reduce the influence of large residuals.
 
 To evaluate performance, we used five-fold cross validation, with data from each cluster (projections, noise realizations, and available snapshots) always being in the same fold to prevent data leakage.
 Within each outer training partition, 15\% of clusters were reserved for training checkpoint selection; we retained the checkpoint with the the lowest inner-validation squared error, and excluded the outer test partition from checkpoint selection.
