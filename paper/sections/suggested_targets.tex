@@ -1,0 +1,68 @@
+% Draft table in a review annotation, generated from the adopted metadata.
+% Inputs: injected_fix_phys_b3000.h5 (obs names, z, processed rms);
+% LoVoCCS_target_list - lovoccs.csv (catalogue coordinates);
+% lotss_images_80/*.fits (native beam headers);
+% chandra/observations.csv (ACIS-I ObsIDs), xray_obs_fix.h5 (T_eq);
+% lovoccs_wl_masses.csv (converted M500c and quoted bounds).
+% No image data or event lists are read to construct this table.
+\ifshowsuggestions
+\begin{table*}
+\suggestion{Proposed target table for the remaining Observations TODO.
+These are the 26 adopted radio targets; only the 15 usable ACIS-I
+targets receive X-ray exposure entries. The quoted masses are
+$M_{500\mathrm{c}}$, with the lower and upper bounds propagated from
+the lensing fits. The coordinates retain the precision of the local
+target list; check them against the definitive catalogue before submission.
+\par\medskip
+\centering
+\resizebox{\textwidth}{!}{%
+\renewcommand{\arraystretch}{1.3}%
+\begin{tabular}{lrrrrrlrr}
+\toprule
+Target & RA & Dec. & $z$ & Beam & Radio rms & ACIS-I ObsIDs
+& $T_{\rm eq}$ & $M_{500\mathrm{c}}$ \\
+& (deg) & (deg) & & (arcsec) & (mJy\,beam$^{-1}$)
+& & (ks) & ($10^{14}M_\odot$) \\
+\midrule
+A119 & 14.08 & -1.22 & 0.0442 & 9 & 0.337 & 4180, 7918 & 91.6 & $3.79^{+0.88}_{-0.83}$ \\
+A1205 & 168.34 & +2.53 & 0.0780 & 9 & 0.188 & --- & --- & $3.16^{+0.71}_{-0.66}$ \\
+A1307 & 173.22 & +14.47 & 0.0834 & 9 & 0.087 & 14387 & 13.3 & $1.91^{+0.63}_{-0.58}$ \\
+A1650 & 194.67 & -1.76 & 0.0845 & 9 & 0.456 & \shortstack{5822, 5823, 6356 \\ 6357, 6358, 7242 \\ 7691} & 173.0 & $6.05^{+1.07}_{-1.00}$ \\
+A1750 & 202.71 & -1.87 & 0.0852 & 9 & 0.131 & 11879 & 31.3 & $4.10^{+0.90}_{-0.81}$ \\
+A1809 & 208.25 & +5.16 & 0.0788 & 9 & 0.126 & --- & --- & $2.16^{+0.67}_{-0.60}$ \\
+A2033 & 227.85 & +6.32 & 0.0817 & 9 & 0.146 & 15167 & 12.5 & --- \\
+A2050 & 229.08 & +0.10 & 0.1181 & 9 & 0.356 & 18251 & 16.7 & $4.34^{+0.94}_{-0.92}$ \\
+A2051 & 229.14 & +0.95 & 0.1198 & 9 & 0.268 & --- & --- & --- \\
+A2052 & 229.18 & +7.02 & 0.0353 & 9 & 0.179 & --- & --- & $2.81^{+1.06}_{-0.87}$ \\
+A2055 & 229.69 & +6.23 & 0.1021 & 9 & 0.167 & --- & --- & $0.94^{+0.49}_{-0.40}$ \\
+A2063 & 230.77 & +8.60 & 0.0355 & 9 & 0.126 & 4187 & 14.9 & --- \\
+A2147 & 240.58 & +16.02 & 0.0353 & 6 & 0.097 & 3211 & 31.0 & --- \\
+A2440 & 335.97 & -1.64 & 0.0906 & 9 & 0.434 & 15107, 15312 & 35.6 & $4.77^{+0.94}_{-0.88}$ \\
+A2443 & 336.51 & +17.38 & 0.1072 & 6 & 0.089 & 15169 & 139.6 & $4.59^{+0.87}_{-0.79}$ \\
+A2495 & 342.59 & +10.90 & 0.0768 & 9 & 0.108 & --- & --- & $0.84^{+0.54}_{-0.41}$ \\
+A2589 & 350.97 & +16.81 & 0.0416 & 6 & 0.074 & --- & --- & --- \\
+A2703 & 1.34 & +16.21 & 0.1164 & 6 & 0.085 & --- & --- & $3.19^{+1.00}_{-0.88}$ \\
+A399 & 44.46 & +13.05 & 0.0722 & 9 & 0.136 & 3230 & 85.0 & --- \\
+A401 & 44.74 & +13.58 & 0.0739 & 9 & 0.145 & 518, 2309, 14024 & 229.4 & $8.25^{+1.45}_{-1.43}$ \\
+A763 & 138.12 & +15.94 & 0.0851 & 9 & 0.097 & 16144 & 6.2 & $1.62^{+0.66}_{-0.57}$ \\
+MKW 3s & 230.46 & +7.71 & 0.0442 & 9 & 0.140 & 900 & 104.8 & $3.93^{+0.89}_{-0.79}$ \\
+RXC J0034.2-0204 & 8.56 & -2.08 & 0.0822 & 9 & 0.299 & --- & --- & --- \\
+RXC J0034.6-0208 & 8.65 & -2.14 & 0.0812 & 9 & 0.298 & --- & --- & $3.80^{+0.93}_{-0.90}$ \\
+RXC J1217.6+0339 & 184.42 & +3.66 & 0.0766 & 9 & 0.289 & 4184 & 20.7 & $5.58^{+1.17}_{-1.05}$ \\
+RX J0820.9+0751 & 125.26 & +7.87 & 0.1100 & 9 & 0.109 & --- & --- & --- \\
+\bottomrule
+\end{tabular}}
+\par\medskip\raggedright
+\emph{Suggested caption:}
+Observational inputs for the 26 LoVoCCS radio targets. The beam column
+gives the native restoring-beam FWHM. Radio rms is the sigma-clipped
+scale measured on the resampled 3\,Mpc cutout before compact-source
+masking, rather than the native survey rms. Chandra ObsIDs list the
+ACIS-I observations used for the 15 X-ray targets; $T_{\rm eq}$ is their
+combined Cycle-22-equivalent exposure. Lensing masses are the
+single-peak NFW $M_{500\mathrm{c}}$ estimates converted from the
+$M_{200\mathrm{c}}$ fits, with the quoted asymmetric mass bounds.
+A dash denotes an unavailable input for this analysis, not a
+non-detection or absence of all archival observations.}
+\end{table*}
+\fi

@@ -14,6 +14,7 @@ The improved performance of the combined radio and X-ray model indicates the pot
 
 The details of construction of the simulated observations are consequential for their physical interpretation and applicability.
 Before applying an emitting-gas density cut, a median of 99\% of the model radio weight originated in gas denser than $N_\text{H} = 10^{-4}$ cm$^{-3}$, including in cold gas outside of the diffuse intracluster medium targeted by the emission model.
+\suggestion{Use $n_{\rm H}$, not $N_{\rm H}$, for this volume density.}
 Restricting the emitting gas reduced this concentration.
 This result demonstrates the need to examine the gas phases that dominate the synthetic emission maps when constructing simulated images.
 
@@ -22,14 +23,24 @@ For individual simulated observations, five-model ensembles achieved $R^2 = 0.40
 An exploratory comparison suggested that radio images do add information beyond a noisy mass measurement, although this result requires confirmation using matched cross-validation partitions.
 Combining the 1 Mpc radio images with X-ray images yielded no statistically significant improvement.
 This, the complementary information between radio and X-ray data present in the clean images appeared to be eroded by realistic observing conditions for these apertures.
+\suggestion{Replace the preceding sentence with:
+The tested forward-modelled 1\,Mpc joint configuration therefore
+provides no demonstrated gain over X-rays alone; a matched comparison
+using the adopted 3\,Mpc radio aperture is still needed.}
 A separate exposure experiment also showed improved X-ray performance with increasing depth, with diminishing gains beyond approximately 50 ks.
 
 Applying our trained networks to clusters in the LoVoCCS sample yielded radio predictions for 26 clusters and X-ray predictions for 15 clusters.
 For the sample with both radio and X-ray data, the predictions had age ranks correlated at Spearman $\rho=0.61$, but radio assigned older proxy ages to 14 of the 15 systems, with a median offset of 0.44 Gyr.
 While the ordering agreement shows consistency between predictive models, and therefore suggests some level of accuracy, there is no independent confirmation of the merger history of these clusters.
+\suggestion{Replace the preceding sentence with:
+The ordering agreement demonstrates consistency between the two
+prediction methods, but shared biases could also produce agreement.
+Independent merger-history constraints are needed to establish
+their accuracy on real clusters.}
 The offset in their predictions identifies an unresolved difference between methods.
 
 These results establish the feasibility of recovering a continuous indicator of recent merger activity from simulated cluster observations, including images subjected to approximate survey observational degradation.
 The principal challenges for estimating merger timing are now to establish the robustness of the emission models, calibrate predictions against independent constraints, and improve the matching of simulated and observed samples.
 Validation must also address the compression of the predicted age range, as well as uncertainty beyond variation between training runs.
 With these developments, inference from cluster images could support systematic analyses of connections between intracluster gas structure, merger history, and and radio emission across large cluster populations.
+\suggestion{Remove the repeated \emph{and} in the final sentence.}

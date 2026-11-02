@@ -6,6 +6,11 @@
 We use the TNG-Cluster suite of cosmological magnetohydrodynamical zoom simulations \citep{Nelson2024, Nelson2015}. The suite comprises 352 massive
 galaxy clusters, spanning
 $M_{200\mathrm{c}} \simeq 10^{14.3}$--$10^{15.4}\,\mathrm{M_\odot}$ at redshift 0.
+\suggestion{Replace the \texttt{Nelson2015} citation with Nelson et al.\
+(2019), \emph{The IllustrisTNG Simulations: Public Data Release}
+(arXiv:1812.05609), while retaining \texttt{Nelson2024}. The 2015 paper
+describes the original Illustris release; the TNG-Cluster data documentation
+requests the 2019 TNG release reference.}
 
 TNG-Cluster adopts a flat $\Lambda$CDM cosmology consistent with the Planck 2015 results \citep{Planck2016}:
 $\Omega_{\mathrm{m}}=0.3089$,
@@ -35,7 +40,20 @@ $M_{500\mathrm{c}}$ values at each snapshot.
         centring was off by a median 0.70\,\rfive\ (Appendix~\ref{app:audit}).
 \end{itemize}
 
+\suggestion{Consolidate the preceding outline into the new sample-description
+prose, retaining the centring audit as a cross-reference. Replace the claim
+that the earlier snapshots are mostly new examples with:
+The two epochs are separated by 1.336\,Gyr. The median snapshot-91 minus
+snapshot-99 mass difference is $-0.029$ dex, and the matched pseudo-TSC
+values have a Spearman correlation of 0.324. These changes provide temporal
+variation within the sample; both epochs of each cluster nevertheless remain
+in the same cross-validation fold.}
+
 \subsection{Radio emission model}
+\suggestion{Use a single subsection heading here, for example
+\emph{Shock-powered radio emission}, and remove the immediately following
+duplicate subsection heading. Throughout the section, replace
+\emph{diffuse shock acceleration} with \emph{diffusive shock acceleration}.}
 % Insert this fragment into a manuscript using amsmath and natbib.
 % Reference choice: k_B T_* = 7 keV and s_* = 2.
 % If this reference is changed, change I_* and P_* together.
@@ -43,6 +61,40 @@ $M_{500\mathrm{c}}$ values at each snapshot.
 
 \subsection{Synchrotron emission from shock-accelerated electrons}
 \label{sec:hybrid-radio}
+
+\suggestion{The analytical derivation below is not the prescription used to
+generate the existing maps. The implemented coefficient is
+$5.2\times10^{23}\,\mathrm{W\,Hz^{-1}}$, with the stored
+\texttt{normalized\_psi\_table.npz} factor; it is not the derived $P_*\Phi$.
+Because the spectral factors differ with Mach number and temperature, the
+global radio calibration cannot reconcile them. For the present results,
+replace the derivation with a description of the implemented prescription;
+alternatively, regenerate and reassess the maps before claiming to use the
+new derivation. A draft opening for the implemented-method option is:
+\par
+We assign radio weights to gas cells with Mach number $\mathcal M>1.3$
+and positive shock energy dissipation using the tabulated prescription
+adopted in the map-generation pipeline. Writing $s=2(\mathcal M^2+1)/
+(\mathcal M^2-1)$, the unrescaled cell weight is
+\[
+\begin{split}
+w_\nu={}&(5.2\times10^{23}\,\mathrm{W\,Hz^{-1}})
+\left(\frac{\dot E_{\rm diss}}{10^{44}\,\mathrm{erg\,s^{-1}}}\right)\\
+&{}\times
+\frac{(B/\mu\mathrm{G})^{1+s/2}}
+{(B/\mu\mathrm{G})^2+(B_{\rm CMB}/\mu\mathrm{G})^2}
+\left(\frac{\nu}{1.4\,\mathrm{GHz}}\right)^{-s/2}
+\Psi_{\rm tab}(s,\tilde e_{\min}),
+\end{split}
+\]
+where $\tilde e_{\min}=10k_BT_d/(m_ec^2)$.
+We interpolate the stored spectral factor on its grid in $s$ and
+$\log_{10}\tilde e_{\min}$. The image normalization is subsequently set
+globally as described in Section~\ref{sec:fwd}.
+\par
+Before accepting this replacement, document the lookup table's actual
+integral definition and normalization from its generator; do not rename it
+$\Phi$ and silently retain the different derivation below.}
 
 We model shock-powered radio emission using the framework of \citet{HoeftBruggen2007}, with the electron energy
 budget expressed in terms of the shock dissipation rate ($\dot E_{\rm diss}$) as in \citet{Lee2024}. Please refer to these two papers for details, but we will provide our key equations here.
@@ -331,6 +383,9 @@ The reference temperature fixes the separate definitions of $P_*$ and
 $\Phi$; changing it consistently leaves their product, and hence the
 predicted luminosity, unchanged. We evaluate the coefficient directly
 from the physical constants and the adopted spectral and pitch-angle.
+\suggestion{If the derivation is retained, complete the last phrase as
+\emph{the adopted electron spectrum and pitch-angle approximation}.
+Its role must still be distinguished from the implemented map prescription.}
 
 \begin{itemize}
   \item Hoeft \& Br\"uggen (2007) DSA emission per shocked cell
@@ -376,6 +431,27 @@ from the physical constants and the adopted spectral and pitch-angle.
   \label{fig:phase}
 \end{figure*}
 
+\suggestion{Replace the outdated concentration and frequency-comparison
+outline bullets with the following prose, alongside Fig.~\ref{fig:phase}:
+\par
+In the current 144\,MHz maps, the median fraction of a cluster's emission
+carried by its brightest cell falls from 25.0 to 5.1 per cent after the
+density cut. The corresponding radio-weighted mean Mach-number summary
+falls from 61.7 to 4.8. The older value near 26 describes a weighted median
+and should not be used interchangeably with the weighted mean.
+The gas dominating the uncut maps is cold and dense; its origin has not
+been traced.
+\par
+The frequency factor is applied separately to each shock cell because its
+spectral index depends on Mach number. After dividing the 144\,MHz weights
+by a global factor of 12.5, the logarithmic ratio to the 1.4\,GHz fluxes has
+a standard deviation of 0.035 dex. This is residual scatter after rescaling,
+not the absolute luminosity change between frequencies. Approximately
+5 per cent of the normalized map flux is redistributed between pixels.
+\par
+Retain the current statement that the cut has no demonstrated clean-map
+accuracy gain ($R^2=0.500\to0.485$, paired-seed $p=0.164$).}
+
 \subsection{X-ray mocks}
 
 We generated synthetic X-ray observations using the package \textsc{pyXSIM}, with an Astrophysical Plasma Emission Code (APEC) set to be in collisional ionization equilibrium.
@@ -386,6 +462,7 @@ The source model uses the simulated gas temperatures, metallicities, and emissio
 For each cluster, photons were projected along each of three orthogonal directions corresponding to the three radio projections.
 The snapshot-99 clusters are placed at an observing redshift of $z_{\text{obs}} = 0.05$, while the snapshot-91 clusters are observed at $z_\text{obs} = 0.0994$.
 We use photoelectric absorption using the \texttt{wabs} model, with a uniform hydrogen column density of $N_\text{H}= 10^{20}$ cm$^2$.
+\suggestion{Change the absorption-column unit to $\mathrm{cm^{-2}}$.}
 The photons were then processed using the \textsc{SOXS} Chandra ACIS-I Cycle-22 instrument model, using an exposure time of 2 Ms.
 These observations take into account the instrument response, point-spread function, detector geometry, dithering, and instrumental particle background.
 Galactic foreground and point-source backgrounds were disabled when generating these initial mocks, and were added during the forward modelling in section \ref{sec:fwd}.
@@ -394,6 +471,15 @@ We constructed exposure-corrected images in the observed 0.1--2.0 keV band using
 The native images have a pixel scale of 0.492".
 For snapshot-99, we crop the images to $128\times 128$ pixels, which corresponds to approximately 18.9 kpc per pixel.
 The ACIS-I field has a radius of approximately 1 Mpc at $z_\text{obs} = 0.05$, so the usable coverage is set by the detector, rather than the available image data.
+\suggestion{Replace the two preceding grid/footprint sentences with:
+For snapshot 99, we crop the native $4880\times4880$ images to
+$4864\times4864$ pixels and average $38\times38$-pixel blocks to obtain a
+$128\times128$ grid with a physical pixel size of approximately 18.9\,kpc.
+The stored grid extends beyond the exposed detector footprint, whose
+half-width is approximately 500\,kpc at $z_{\rm obs}=0.05$.
+At the snapshot-91 observing redshift, $z_{\rm obs}=0.0994$, the native
+detector covers a larger physical area. The source-selection volume, image
+grid, and detector footprint are therefore distinct.}
 
 In the subsequent forward-modelling step, we recover integer count estimates from the exposure-corrected images.
 The snapshot-91 images were placed on the same physical grid as snapshot-99 by binomially allocating each native pixel's counts between overlapping output pixels in proportion to their overlap areas.
@@ -425,6 +511,17 @@ where $j$ is the first sampled window with $S(\tau_j) \geq 0.5$ and $S(\tau_i)$ 
     = \sum_\text{mergers} \exp \left(-\frac{\Delta t}{\tau_j} \right)
 \end{equation}
 in which $\Delta t$ is the time interval between the current snapshot $j$ and the merger event, and $\tau_j$ is a characteristic decay timescale.
+\suggestion{Here $j$ indexes the window samples, not the simulation
+snapshot. Replace the preceding sentence with:
+Here $\Delta t$ is the time separation between a merger event and the
+fixed snapshot being labelled, while $j$ indexes the sampled decay
+timescales $\tau_j$.
+\par
+The score is now cited and defined, so the earlier request to add its
+equation is resolved. One provenance check remains: verify the event
+selection and any timescale conventions against the generator of the
+stored scores. The local dataset builder reads precomputed scores and
+does not itself establish their merger mass-ratio selection.}
 If the merger score is already at the 0.5 threshold at the smallest window, we assign $T_\text{pseudo} = 0.1$ Gyr.
 If there is no crossing within the sampled range, we assign $T_\text{pseudo} = 4$ Gyr.
 For snapshot-91, we used the past-only merger score, excluding contributions from collisions that occurred after that snapshot.

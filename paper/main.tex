@@ -7,6 +7,7 @@
 % Convention in this draft:
 %   \todo{...}     things to write or decide
 %   \stale{...}    figures or numbers that predate a fix and must be regenerated
+%   \suggestion{...}  Codex draft wording or editorial comments for review
 %   bullet lists under each heading are talking points, not prose
 
 \documentclass[fleqn,usenatbib]{mnras}
@@ -22,6 +23,16 @@
 
 \newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
 \newcommand{\stale}[1]{\textcolor{orange}{[STALE: #1]}}
+% Paragraph form supports proposed prose, displayed equations, and tables.
+% Set \showsuggestionsfalse to hide the review annotations.
+\newif\ifshowsuggestions
+\showsuggestionstrue
+\newcommand{\suggestion}[1]{%
+  \ifshowsuggestions
+    \par\smallskip\begingroup
+    \color{blue!65!black}\noindent\textbf{Suggestion: }#1%
+    \par\endgroup\smallskip
+  \fi}
 \newcommand{\tsc}{$t_{\rm sc}$}
 \newcommand{\rfive}{$r_{500}$}
 \newcommand{\mfive}{$M_{500}$}
@@ -74,6 +85,13 @@ analysis -- methods: numerical
 
 
 \section*{Data Availability}
+
+\suggestion{Bibliography cleanup: remove the unused placeholder
+\texttt{Ayromlou2024} unless it is needed for a specific claim. If the intended
+reference is the gas-dynamics study, its title is \emph{An Atlas of Gas
+Motions in the TNG-Cluster Simulation: from Cluster Cores to the Outskirts},
+A\&A, 690, A20 (2024), arXiv:2311.06339. The earlier duplicate-key and
+Chadayammuri-attribution items in \texttt{todos.md} are already resolved.}
 
 \bibliographystyle{mnras}
 \bibliography{refs}

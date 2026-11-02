@@ -3,11 +3,35 @@
 
 We evaluated the degree to which \todo{define capped} capped pseudo-TSC labels can be recovered from simluated radio and X-ray images, including whether the performance changed when simulated forward-modelling was added, and whether additional inputs or variations on the training objective improved performance.
 pseudo-TSC is defined in section \ref{sec:sims}.
+\suggestion{Replace the two preceding sentences with:
+We evaluated how well the pseudo-TSC labels defined in
+Section~\ref{sec:sims}, capped at 4\,Gyr, can be recovered from simulated
+radio and X-ray images. We tested sensitivity to observational forward
+modelling, additional inputs, and changes to the training objective.
+The cap is already defined in the labels section, so a second full
+definition is unnecessary.}
 All simulation scores are out-of-fold (OOF) predictions.
 Unless otherwise stated, listed uncertainties describe the standard deviation across five training seeds.
 \todo{describe bootstrapping}
+\suggestion{Add to Methods, then cross-reference it here:
+For paired model comparisons, we resample whole parent halos with
+replacement, retaining all associated viewing directions and observational
+realizations in each draw. We use 4000 draws and quote the 2.5th and
+97.5th percentiles of the resulting metric differences as conditional
+95 per cent intervals. The same sampled halos are used for both models
+in a comparison. These intervals condition on the fitted runs and do
+not include uncertainty from retraining on new halo populations.
+Scatter across training seeds is reported separately.}
 Errors expressed in Gyr are accuracy on the pseudo-TSC scale, rather than uncertainty in physical collision dates.
 \todo{justify why they are meaningful then}
+\suggestion{Replace the preceding error-interpretation sentence with:
+Errors expressed in Gyr quantify recovery of the defined pseudo-TSC
+label on held-out simulated clusters. The strong rank correlation
+between this label and catalogue collision times supports its
+interpretation as an indicator of recent merger activity.
+These errors therefore measure useful predictive information about
+merger history, but are not calibrated uncertainties on the date of
+a particular physical collision.}
 
 \subsection{Radio-only}
 
@@ -32,6 +56,14 @@ Part of the signal could also be recovered from a representation of the morpholo
 An XGBoost decision tree model applied to 48 Minkowski-functional measurements predicted pseudo-TSC at $R^2 = 0.304$ for individual projections, and at $R^2 = 0.415$ after averaging predictions across all three cluster projections.
 At the largest area-fraction threshold, corresponding to the lowest intensity threshold considered \todo{this phrasing is unclear}, the number of connected components correlated with pseudo-TSC at Spearman correlation $\rho = 0.62$.
 Older proxy ages were thus associated with more fragmented emission.
+\suggestion{Replace the preceding threshold description and interpretation
+with:
+At the threshold selecting approximately the brightest 50 per cent of
+pixels, the connected-component count has a Spearman correlation of
+$\rho=0.62$ with pseudo-TSC. This is the lowest intensity threshold in
+the sweep; tied pixel intensities can reduce the selected fraction.
+Older proxy ages are associated with more fragmented emission at this
+threshold.}
 A similar analysis applied to clean maps at 1.4 GHz gave similar results, with scores differing by no more than 0.02.
 
 \begin{figure*}
@@ -84,6 +116,14 @@ Applying the globally-scaled arcsinh scaling increased the X-ray CNN correlation
 Improvement was found in all five seeds, with a paired-seed p-value of $0.0003$.
 This shows a large sensitivity to the preprocessing method, reflecting the the limited compression produced by applying an unscaled arcsinh transformation to low count rates.
 \todo{this isn't explained very well}
+\suggestion{Replace the preceding preprocessing explanation with:
+The original X-ray count rates are numerically much smaller than unity,
+so applying $\operatorname{arcsinh}(x)$ leaves most pixels nearly
+unchanged: $\operatorname{arcsinh}(x)\simeq x$ in this regime.
+Using $\operatorname{arcsinh}(x/a)$ with a shared global scale $a$
+compresses bright cores and increases the relative visibility of
+fainter spatial structure, while preserving differences in overall
+brightness between clusters.}
 Combining the stretched X-ray images with the 144 MHz radio maps yields a mean $R^2 = 0.545$.
 The paired increment over just radio was $0.059 \pm 0.025$, with all five seeds showing improvement ($p = 0.007$).
 This result supports the existence of complementary information between X-ray and radio data.
@@ -100,6 +140,15 @@ We distinguish the pooled-view score, which combines all three projections, from
 For single projections, the radio-only ensemble of five models achieved $R^2 = 0.072$ with a box size of 1 Mpc, and $R^2=0.203$ with a box size of 3 Mpc.
 The corresponding scores for the pooled input models, averaged over the different seeds, were $0.142\pm0.021$ and $0.238\pm0.019$.
 The experiment sensitive to arcsinh morphology \todo{explain better}, which retained the total physical flux while compressing the spatial intensity distribution, gave a similar single-projection score of $R^2=0.207$ for the 3 Mpc box.
+\suggestion{Replace the preceding sentence with:
+In a compressed-morphology sensitivity test, we redistributed the same
+physical total source flux according to an arcsinh-compressed spatial
+profile before beam convolution and background injection. This gave a
+single-view ensemble score of $R^2=0.207$ for the 3\,Mpc box.
+This alternative source profile is distinct from the final
+$\operatorname{arcsinh}(S/\sigma_{\rm rms})$ transformation applied to
+all processed inputs. Use \emph{compressed-morphology sensitivity test}
+for the corresponding table row as well.}
 While the models predicting on larger boxes performed better, injection placements were also changed, so the effect of field size was not completely isolated.
 
 Despite significantly decreased performance, the radio images retained useful information beyond noisy mass measurements.
@@ -118,6 +167,14 @@ Pooled-observation training achieved an ensemble $R^2 = 0.425$ and mean absolute
 The paired $R^2$ difference was $-0.004$, with a $95\%$ confidence interval of $[-0.027, +0.019]$.
 Therefore, single-view training showed no ensemble improvement in this experiment.
 These results create a separate comparison from those in table \ref{tab:realistic}, since the fold construction and checkpoint selection protocol differ \todo{how?}.
+\suggestion{Replace the preceding sentence with:
+This comparison uses a persisted parent-halo fold assignment and
+identical inner-selection halos in both arms, with checkpoint selection
+based on single-view predictions. The earlier experiments in
+Table~\ref{tab:realistic} used the earlier group-fold construction and
+pooled-view checkpoint selection. Their scores are consequently
+reported as separate experiments rather than as a controlled comparison
+with the view-training test.}
 
 The performance on X-ray data also depended on exposure.
 In the depth experiment, the mean pooled-view $R^2$ increased from 0.312 at 5 ks to 0.365 at 20 ks and 0.450 at 50 ks.
@@ -140,6 +197,12 @@ Comparisons with observed halo and relic relations remain contextual, as frequen
 
 All statistical models trained on forward-modelled data used images from both snapshot 99 and 91.
 A matched comparison of one- and two-epoch training has not been conducted, quantifying the benefit of an additional epoch is left to future work.
+\suggestion{Replace the two preceding sentences with:
+The principal forward-modelled comparisons in Table~\ref{tab:realistic}
+train on both snapshots 99 and 91. The exposure experiment instead
+trains on snapshot 99 alone. A matched comparison of one- and two-epoch
+training has not been conducted, so the benefit of the additional epoch
+has not been isolated.}
 
 \begin{table*}
   \centering
@@ -195,16 +258,57 @@ A matched comparison of one- and two-epoch training has not been conducted, quan
 We also tested alternative losses and output representations in an exploratory X-ray experiment.
 The Huber loss baseline achieved a five-seed single-projection ensemble $R^2 = 0.432$ and MAE of 0.650. Gyr.
 Using the mean squared error loss instead gave $R^2 = 0.425$ and MAE of 0.663 Gyr.
+\suggestion{Change the MSE score to $R^2=0.427$, as recorded in
+\texttt{logs/score\_e5\_7369011.out}. The reported difference of
+$-0.005$ from the Huber control is already correct. Also change
+\emph{0.650. Gyr} in the preceding sentence to \emph{0.650\,Gyr}.}
 The seven-class distributional head \todo{define} gave $R^2 = 0.425$ with MAE of 0.666 Gyr.
+\suggestion{Introduce the output head in Methods before reporting this
+result:
+The distributional model predicts probabilities for seven classes:
+a threshold already reached at the smallest sampled window of
+0.1\,Gyr; first crossings in $(0.1,0.25]$, $(0.25,0.5]$, $(0.5,1]$,
+$(1,2]$, and $(2,4]$\,Gyr; and no crossing by 4\,Gyr.
+We train with categorical cross-entropy. For point scoring, we decode
+the probabilities as $\hat T_{\rm pseudo}=\sum_{c=0}^{6}p_c\mu_c$,
+where $\mu_c$ is the mean label of fitting halos in class $c$ for that
+fold, with the endpoint representatives fixed at 0.1 and 4\,Gyr.
+The no-crossing class is identified from the score curve, not merely
+from a numerical label equal to 4\,Gyr.}
 Their paired $R^2$ differences from the Huber loss case were $-0.005$, with $95\%$ confidence interval of $[-0.029, +0.021]$ and $-0.007$ with confidence interval $[-0.034, +0.025]$ respectively.
 Neither alternative met the prespecified point-prediction adoption criterion \todo{define}.
+\suggestion{Replace the preceding sentence with:
+Neither alternative met our prespecified practical adoption rule:
+an increase of at least 0.02 in single-view ensemble $R^2$, with an
+increase in MAE of no more than 0.02\,Gyr relative to the Huber control.
+This rule specifies a practical preference for further exploratory
+work; it is separate from the bootstrap uncertainty assessment.}
 
 However, the distributional head provided useful probabilistic predictions relative to the class frequencies among fitting halos.
-Its categorical log score \todp{define everything in this paragraph} was 1.649 compared with 1.888 for the reference.
+Its categorical log score \todo{define everything in this paragraph} was 1.649 compared with 1.888 for the reference.
 Its normalized ranked probability score was 0.125 compared with 0.160.
 Its Brier score for the no-crossing category was 0.068 compared with 0.088.
 All three paired conditional intervals favored the model.
 These results establish probabilistic skill relative to the baseline model, but do not establish calibrated uncertainty in physical collision times.
+\suggestion{Add these definitions to Methods and retain the numerical
+scores here:
+For an observation with true class $y$ and predicted class probabilities
+$p_c$, the categorical log score is $-\ln p_y$.
+The normalized ranked probability score is
+\[
+\mathrm{RPS}=\frac{1}{6}\sum_{k=0}^{5}
+\left[\sum_{c=0}^{k}p_c-\mathbf{1}(y\leq k)\right]^2,
+\]
+where $\mathbf{1}$ denotes the indicator function.
+The no-crossing Brier score is
+$[p_6-\mathbf{1}(y=6)]^2$.
+Lower values are better for all three scores.
+The reference assigns the class frequencies among each fold's fitting
+halos, counting each halo--snapshot label once. We compare the mean
+scores on the same held-out observations using paired parent-halo
+bootstrap intervals, conditional on the fitted models.
+These scores evaluate probabilities for the defined proxy categories,
+not physical collision-time intervals.}
 
 A pilot study using contrastive pretraining showed that this method performed significantly worse than the Huber loss control.
 Rotations and reflections were applied to individual observations to construct positive pairs, followed by an encoder with weights frozen during downstream training.
@@ -217,11 +321,31 @@ This result provides evidence against using the tested frozen-encoder configurat
 
 Idealized optical structure supplied predictive information in addition to the scalar control model.
 Adding magnitude-gap and positional-structure features to the noisy mass, placement redshift, and projected richness \todo{define} increased the single-projection ensemble $R^2$ from 0.313 to 0.422 and reduced MAE from 0.729 to 0.655 Gyr.
+\suggestion{Add the optical-feature definitions to Methods:
+The idealized optical catalogue contains FoF-member galaxies with
+stellar particles and intrinsic, dust-free $r$-band absolute magnitude
+$M_r<-19$. Richness counts the subset with $M_r<-20$ inside projected
+$R_{500}$ of the gas reference centre.
+The BCG is the brightest member within $0.5R_{500}$, and the magnitude
+gap is the second-brightest minus brightest $r$-band magnitude in that
+aperture. The positional features are the BCG offset from the gas
+centre, its offset from the number-weighted galaxy centroid within
+$R_{500}$, and the separation of the galaxy centroids within
+$0.5R_{500}$ and $R_{500}$. All distances are divided by the true
+$R_{500}$. Simulation membership removes foreground and background
+interlopers; photometric-redshift errors are not modelled.}
 The paired $R^2$ increase was $0.109$, with $95\%$ confidence interval of $[+0.048, +0.167]$.
 In the same experiment, adding X-ray images to the controls increased $R^2$ to 0.488, an increment of $+0.176$ with confidence interval $[+0.108, +0.243]$ and MAE of 0.605 Gyr.
 
 However, adding the optical structure features to the X-ray images and controls did not demonstrate a further improvement, with $R^2=0.469$ and MAE of 0.632 Gyr, and paired $R^2$ change of $-0.019$ with confidence interval $[-0.067, +0.029]$.
 These features use simulation-defined membership, true $R_{500}$, and an idealized hot gas reference center \todo{define}.
+\suggestion{Define this centre in Methods:
+The gas reference centre is the projected centroid weighted by
+$m_{\rm gas}\rho_{\rm gas}$, an emission-measure proxy, for gas with
+$T>3\times10^5$\,K and zero star-formation rate. We select gas within
+a cube of half-width $2R_{500}$ about GroupPos and within projected
+$R_{500}$ of that position. This idealized centre is not measured
+from a photon-limited X-ray image.}
 Thus, this experiment measures performance only with idealized combined inputs, rather than performance achievable from true optical catalogues.
 
 \subsection{Application to LoVoCCS}
@@ -231,6 +355,17 @@ All 15 X-ray systems were present in the radio sample, and thus could use combin
 Each observed prediction averaged 25 models spanning five folds and five seeds.
 Among the systems with both data sources, radio and X-ray predictions had Spearman $\rho = 0.61$ ($p=0.015$).
 After controlling for redshift, the partial-rank correlation was 0.71, with a Freedman-Lane \todo{define} permutation $p=0.005$.
+\suggestion{Add the test definition to Methods:
+We rank the two prediction vectors and the nuisance variable once,
+and regress each ranked prediction on an intercept and the ranked
+nuisance variable. Their residual correlation is the partial-rank
+statistic. For the Freedman--Lane test, we permute the residuals of one
+prediction, add back its fitted nuisance component, and recompute the
+partial statistic after nuisance regression, without reranking the
+permuted values. We use a two-sided permutation comparison.
+The resulting inference is conditional on the fitted nuisance model
+and its residual-exchangeability assumptions.
+Keep the coefficient and $p$-value in Results.}
 Controlling instead for weak-lensing mass gave a partial correlation of 0.54 among the 11 systems with available masses, with $p=0.11$.
 This latter comparison does not establish agreement independent of mass.
 
@@ -239,7 +374,20 @@ The radio model assigned older proxy ages than the X-ray model to 14 of the 15 c
 Their respective median predictions were 1.10 and and 0.83 Gyr.
 Applying the forward-model did not remove this offset, and its origin remains unidentified.
 \todo{simulation issues? maybe something that affects one but not the other}
+\suggestion{Add to the Discussion rather than assigning a cause in Results:
+The radio--X-ray offset could arise from modality-dependent emission
+physics, brightness calibration, aperture and centring choices, or
+differences in regression bias. Its origin has not been established.
+A useful diagnostic would compare the two models' residuals for matched
+simulated observations at fixed mass, observing redshift, and pseudo-TSC,
+then test whether the observed offset is consistent with those biases.}
 Since these clusters do not have independent measurements of their merger times, the only consistency check we have is the comparison between model outputs. \todo{bleh phrasing}
+\suggestion{Replace the preceding sentence with:
+Without independent merger-time constraints, the agreement tests
+consistency of the inferred ordering, while the systematic offset
+shows that the two proxy-age scales are not interchangeable.
+Delete \emph{the only consistency check}: the image and background
+diagnostics also test aspects of the simulation--observation match.}
 
 \begin{figure}
   \centering

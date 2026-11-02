@@ -19,6 +19,21 @@ We fixed the global normalization $A_\text{rad}$ by matching the median total po
     = 1.1 + 3.55 \log_{10}\! \left( \frac{M_{500}}{10^{14.9} M_\odot} \right).
 \end{equation}
 This normalization is used globally, for every cluster from both snapshots, as a normalization of radio halos at 150 MHz for the 144 MHz shock emission maps.
+\suggestion{Move the power unit into the denominator so the logarithm
+has a dimensionless argument:
+\[
+\log_{10}\!\left(\frac{P_{150}}
+{10^{24.5}\,\mathrm{W\,Hz^{-1}}}\right)
+=1.1+3.55\log_{10}\!\left(\frac{M_{500}}
+{10^{14.9}M_\odot}\right).
+\]
+Replace the normalization explanation with:
+We set one multiplicative constant by matching the median logarithmic
+total power of the full snapshot-99 maps to the median logarithmic power
+predicted at their cluster masses by this relation. The same constant is
+used for both snapshots and all aperture sizes. The relation therefore
+sets an overall amplitude anchor; it does not impose the observed
+mass--power slope or scatter on individual simulated clusters.}
 Flux densities are calculated using the luminosity distance and a spectral index of $\alpha = 1.2$, defined by $S_\nu \propto \nu^{-\alpha}$ \citep{Cuciti2023}.
 
 For each simulated cluster, we generated three observational realizations, drawing a redshift value from the radio target sample and independently selecting a background from 201 80' LoTSS DR3 fields.
@@ -27,6 +42,10 @@ We draw real redshifts to ensure we sample from the observed redshift distributi
 Using real background fields supplies realistic observed noise correlations, unrelated radio sources, and imaging artifacts.
 Each realization consists of the three orthogonal simulation projections, which had the same forward-modelling process applied.
 We convolved the simulated emission with a circular 9" Gaussian restoring beam, which matches the true beam size for 22 of the 26 targets, with the rest having 6" beam sizes.
+\suggestion{Add:
+The common 9-arcsec beam is an approximation for the four 6-arcsec targets;
+these data have not been explicitly homogenized to a common restoring
+beam.}
 We converted the output to Jy per beam, and added this to the corresponding resampled field.
 
 Compact sources were then masked using the same procedure for injected mocks and observations.
@@ -42,6 +61,13 @@ We measured morphology agreement as
 \end{equation}
 where $F_{ijk}$ is the collection of values of statistic $j$ measured at threshold $k$ for image $i$, for the observed or mock maps.
 $\sigma_i(F)$ is the standard deviation of $F$ over all images.
+\suggestion{Clarify the indices with:
+$F_{ijk}$ is the value of statistic $j$ measured at threshold $k$ in
+image $i$. The four statistics and ten thresholds give 40 comparisons;
+the inner medians and standard deviations are taken over images within
+the observed or mock sample, and the outer median is taken over the
+40 absolute standardized differences. This is a descriptive agreement
+measure, not a hypothesis-test statistic.}
 For the 3 Mpc-sized inputs, this was 0.095, compared with 0.158 for an alternative method using arcsinh-compressed emission morphology at the same integrated flux, and 0.635 for background-only fields.
 The comparison includes 3168 mocks and 26 real observations, with the mocks each containing three projections and three realizations of the 352 source clusters.
 This result supports the adopted processing at the level of morphological summaries.
@@ -100,6 +126,14 @@ $T_\text{eq} / T_\text{life}$ ranges from 0.85 to 1.83 for the observed targets.
 Sky backgrounds include galactic foreground emission and cosmic X-rays, including from point sources.
 Background counts per physical pixel are scaled with the angular area subtended by that pixel.
 Note that the initial mocks already contain a particle background that is thinned with the source; the added particles supplies the remaining expected contribution from the livetime and angular area.
+\suggestion{Replace the preceding sentence with:
+After thinning the input counts, we add independently sampled sky-background
+counts and, where needed, a particle-background top-up. The initial mocks
+already contain particles that are thinned with the source; the top-up
+supplies the remaining expected particle contribution for the target's
+livetime and the pixel's angular area.
+Also use $T_{\rm live}$ consistently in the preceding exposure ratio
+instead of $T_{\rm life}$.}
 
 Mock count rates follow the same subtraction and reference-background convention as the real observations:
 \begin{align*}
@@ -123,6 +157,8 @@ Both mock and observed count rates are transformed using $\operatorname{arcsinh}
 
 As a diagnostic, we measured the robust high-pass variance relative to the mean rate in the outer 60-100\% of the aperture radius, and compared the values for the mocks and real observations.
 Across 14 targets with matched mocks, the median real-to-mock ratio was 1.12, with a 16th-18th percentile range of 0.81-1.20.
+\suggestion{Change \emph{16th--18th percentile} to
+\emph{16th--84th percentile}.}
 A1750 lacks a matched mock for this comparison.
 A763 is an outlier, with a ratio of 0.07.
 
