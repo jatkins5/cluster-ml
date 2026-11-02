@@ -43,6 +43,15 @@ Overall, 68\% of clusters were used for training, 12\% were used for inner valid
 We measured performance using the coefficient of determination, $R^2$, with overall $R^2$ calculated from the combined OOF predictions.
 Our primary experiments were repeated with five random seeds, with comparisons between conditions using shared seeds to reduce noise in comparisons.
 We measured scatter across seeds to estimate variation between runs, but this cannot be interpreted as a calibrated uncertainty interval for the TSC.
+\suggestion{Add here, then cross-reference it from Results:
+For paired model comparisons, we resample whole parent halos with
+replacement, retaining all associated viewing directions and observational
+realizations in each draw. We use 4000 draws and quote the 2.5th and
+97.5th percentiles of the resulting metric differences as conditional
+95 per cent intervals. The same sampled halos are used for both models
+in a comparison. These intervals condition on the fitted runs and do
+not include uncertainty from retraining on new halo populations.
+Scatter across training seeds is reported separately.}
 
 To evaluate the increased predictive power from access to raw image data, we compared our CNN model with several scalar prediction baselines.
 A five-feature ridge regression model was fit from log(halo mass), log(halo radius), log(integrated emission), mean intensity in the arcsinh-stretched image, and the fraction of pixels with non-zero intensity.

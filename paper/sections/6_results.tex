@@ -5,15 +5,12 @@ We evaluated the degree to which pseudo-TSC labels can be recovered from simulat
 All simulation scores are out-of-fold (OOF) predictions.
 Unless otherwise stated, listed uncertainties describe the standard deviation across five training seeds.
 \todo{describe bootstrapping}
-\suggestion{Add to Methods, then cross-reference it here:
-For paired model comparisons, we resample whole parent halos with
-replacement, retaining all associated viewing directions and observational
-realizations in each draw. We use 4000 draws and quote the 2.5th and
-97.5th percentiles of the resulting metric differences as conditional
-95 per cent intervals. The same sampled halos are used for both models
-in a comparison. These intervals condition on the fitted runs and do
-not include uncertainty from retraining on new halo populations.
-Scatter across training seeds is reported separately.}
+\suggestion{Cross-reference the bootstrap description in
+section~\ref{sec:methods} here, and cite a standard bootstrap reference,
+e.g.\ Efron \& Tibshirani (1993), \emph{An Introduction to the
+Bootstrap}. Because whole parent halos are resampled, Davison \& Hinkley
+(1997), \emph{Bootstrap Methods and their Application}, which treats
+resampling of hierarchical (clustered) data, would also be appropriate.}
 
 Errors expressed in Gyrs quantify pseudo-TSC recovery on held-out simulated clusters.
 The strong rank correlation between pseudo-TSC and catalogue collision times supports its interpretation as a merger activity indicator; thus, these errors measure useful information about merger history, but are not calibrated uncertainties about the date of a physical collision.
