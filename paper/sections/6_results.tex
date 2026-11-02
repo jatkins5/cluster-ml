@@ -206,15 +206,9 @@ We did not conduct a matched comparison of one- and two-epoch training, so the b
 We also tested alternative losses and output representations in an exploratory X-ray experiment.
 The Huber loss baseline achieved a five-seed single-projection ensemble $R^2 = 0.432$ and MAE of 0.650 Gyr.
 Using the mean squared error loss instead gave $R^2 = 0.427$ and MAE of 0.663 Gyr.
-The seven-class distributional head \todo{define} gave $R^2 = 0.425$ with MAE of 0.666 Gyr.
+The seven-class distributional head gave $R^2 = 0.425$ with MAE of 0.666 Gyr.
 Their paired $R^2$ differences from the Huber loss case were $-0.005$, with $95\%$ confidence interval of $[-0.029, +0.021]$ and $-0.007$ with confidence interval $[-0.034, +0.025]$ respectively.
-Neither alternative met the prespecified point-prediction adoption criterion \todo{define}.
-\suggestion{Replace the preceding sentence with:
-Neither alternative met our prespecified practical adoption rule:
-an increase of at least 0.02 in single-view ensemble $R^2$, with an
-increase in MAE of no more than 0.02\,Gyr relative to the Huber control.
-This rule specifies a practical preference for further exploratory
-work; it is separate from the bootstrap uncertainty assessment.}
+Neither alternative yielded an increase of at least 0.02 in a single-view ensemble $R^2$, with an increase in MAE of less than or equal to 0.02 Gyr relative to the Huber loss control; this was our prespecified adoption rule before running the comparison.
 
 However, the distributional head provided useful probabilistic predictions relative to the class frequencies among fitting halos.
 Its categorical log score \todo{define everything in this paragraph} was 1.649 compared with 1.888 for the reference.
