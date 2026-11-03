@@ -96,23 +96,7 @@ Ellipticity is calculated from the eigenvalues of the intensity-weighted positio
 These features are averaged across projections, then supplied to a ridge regressor.
 
 Several complementary analyses considered the role of mass and emission amplitude.
-To test the contribution of explicit amplitude information, one analysis ran shape-normalization \todo{more detail}, with each projection then rescaled to a common integrated emission before applying the intensity arcsinh-stretch.
-\suggestion{This TODO is already resolved by the paragraph immediately
-below, which matches \texttt{build\_shape\_dataset.py}. Delete the
-preceding sentence and its TODO, and retain the detailed paragraph.
-For precision, replace that paragraph's opening sentence with:
-To remove variation in integrated amplitude from the clean radio maps,
-we invert the arcsinh stretch, divide each projection by its own total
-linear emission, and multiply by the median total linear emission
-over all valid projections in the dataset.
-\par
-The subsequent sentence about reapplying the arcsinh transform completes
-the procedure. This is the clean-map amplitude-removal experiment;
-the reduced-source-contrast test in Section~\ref{sec:flux} instead
-retains each source's own total physical flux while changing its
-relative pixel intensities.}
-
-To remove variation in integrated amplitude from the clean radio maps, we invert the arcsinh-stretch, divide each projection's linear emission by the total emission, and scale by the median of the total emission over all projections.
+To remove variation in integrated amplitude from the clean radio maps, we invert the arcsinh-stretch, divide each projection by its own total linear emission, and scale by the median total linear emission of all valid projections.
 We then reapplied the arcsinh transform.
 Thus, every projection has the same integrated emission, with a retained spatial distribution.
 Note that this normalization did not remove correlations between mass, morphology, and luminosity.
