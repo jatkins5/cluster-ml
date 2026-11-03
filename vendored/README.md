@@ -34,3 +34,26 @@ API key. In these copies it is replaced by `REDACTED-TNG-API-KEY` (the only
 change from the originals), because this repository is public. The copies
 are for reading the model, not running the download step; anyone running
 it needs their own key from tng-project.org.
+
+## 2026-11-03: Chuiyang's regenerated radio model (Radio_Snap{99,91}_new)
+
+| file | source |
+|---|---|
+| `ckong13_Radio_generation_snap99_new_2026-11-02.py` | `/oscar/data/idellant/Chuiyang/Radio_Snap99_new/Radio_generation.py` |
+| `ckong13_Radio_generation_snap91_new_2026-11-02.py` | `/oscar/data/idellant/Chuiyang/Radio_Snap91_new/Radio_generation.py` |
+| `ckong13_generate_phi_func_new_2026-11-02.py` | `/oscar/data/idellant/Chuiyang/Radio_Snap99_new/generate_phi_func.py` |
+
+The spectral table these read is copied (not committed; data) to
+`Radio_Data_new/radio_spectral_ratio_table.npz`, sha256
+85aefdbaf6036c1f248e9e9c093080bdfb34f2d0ac2482ffebdd02dd76fd0153 (identical
+in her 99 and 91 directories).
+
+What changed (`compare_radio_versions.py`, `logs/compare_radio_versions_*.out`):
+the HB07 Psi (with (q-1)/q and the compression square root, normalised at a
+reference e_min) at (nu/1.4 GHz)^(-s/2) is replaced by first-principles
+synchrotron coefficients (cal_coefficients.ipynb): 8.70e34 W/Hz (xi_e/0.05) E
+(3 e B_ref / 16 m_e c nu)^(s/2) (I_Psi/I_spec) B^(1+s/2)/(B^2+B_cmb^2), at
+144 MHz. The per-unit-s base differs by exactly 10x from the old 4.85e-4
+(sqrt(2.29e-8 * 144/1400) = 4.85e-5), so the old code over-weighted weak
+shocks. The snapshot-91 script also uses the true redshift now (was z = 0).
+`build_radio_cells.py --model synch` reimplements the new weights.

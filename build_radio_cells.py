@@ -79,8 +79,26 @@ def make_psi(table):
         bounds_error=False, fill_value=None)
 
 
+# ---- Chuiyang's regenerated model (Radio_Snap{99,91}_new, 2026-11-02) ----
+# First-principles synchrotron coefficients (her cal_coefficients.ipynb):
+#   w = POWER_PREF (xi_e/0.05) E SPECTRAL_BASE^(s/2) (I_Psi/I_spec)(s, e_min)
+#       B^(1+s/2) / (B^2 + B_cmb^2) (nu / 144 MHz)^(-s/2)     [W/Hz]
+# replacing the HB07 Psi of the default model. The table holds
+# log10(I_Psi/I_spec) and is queried with bounds_error=True, as in hers.
+XI_E = 0.05
+POWER_PREF_W_HZ = 8.701249739473983e+34
+SPECTRAL_BASE = 2.290130219242185e-08
+NU_REF_GHZ = 0.144
+
+
+def make_ratio(table):
+    d = np.load(table)
+    return RegularGridInterpolator(
+        (d["s_grid"], d["loge_grid"]), d["log10_spectral_ratio"], bounds_error=True)
+
+
 def generate(cutout, interp_psi, min_T_keV=0.0, max_nH=np.inf,
-             exclude_sf=False, nu_ghz=1.4, phase=False):
+             exclude_sf=False, nu_ghz=1.4, phase=False, model="hb07"):
     with h5py.File(cutout, "r") as f:
         p0 = f["PartType0"]
         mach = p0["Machnumber"][:]
@@ -125,16 +143,23 @@ def generate(cutout, interp_psi, min_T_keV=0.0, max_nH=np.inf,
     B_uG = np.sqrt((bfld.astype(np.float64) ** 2).sum(axis=1)) * H0 / A ** 2 \
         * UNIT_B_G * 1e6
     s = s_of_M(M)
-    phi = interp_psi(np.column_stack([s, np.log10(T_keV * 10.0 / 511.0)]))
-    w = 5.2e23 * E * B_uG ** (1.0 + 0.5 * s) / (B_uG ** 2 + bcmb_uG(Z) ** 2) * phi
-    # Hoeft & Brueggen (2007) eq. 32 / Lee et al. (2024) eq. 9 carry a
-    # (nu / 1.4 GHz)^(-s/2) factor that the upstream code omits, i.e. it
-    # computes 1.4 GHz emission. Default keeps that; nu_ghz=0.144 gives the
-    # LOFAR-band weights. Measured over all 352 clusters
-    # (check_radio_theory.py) the difference is close to a global factor of
-    # ~10, because Psi suppresses weak shocks, so it barely moves morphology.
-    if nu_ghz != 1.4:
-        w = w * (nu_ghz / 1.4) ** (-0.5 * s)
+    if model == "synch":
+        ratio = 10.0 ** interp_psi(np.column_stack([s, np.log10(T_keV * 10.0 / 511.0)]))
+        w = (POWER_PREF_W_HZ * (XI_E / 0.05) * E
+             * np.power(SPECTRAL_BASE, 0.5 * s) * ratio
+             * B_uG ** (1.0 + 0.5 * s) / (B_uG ** 2 + bcmb_uG(Z) ** 2)
+             * (nu_ghz / NU_REF_GHZ) ** (-0.5 * s))
+    else:
+        phi = interp_psi(np.column_stack([s, np.log10(T_keV * 10.0 / 511.0)]))
+        w = 5.2e23 * E * B_uG ** (1.0 + 0.5 * s) / (B_uG ** 2 + bcmb_uG(Z) ** 2) * phi
+        # Hoeft & Brueggen (2007) eq. 32 / Lee et al. (2024) eq. 9 carry a
+        # (nu / 1.4 GHz)^(-s/2) factor that the upstream code omits, i.e. it
+        # computes 1.4 GHz emission. Default keeps that; nu_ghz=0.144 gives the
+        # LOFAR-band weights. Measured over all 352 clusters
+        # (check_radio_theory.py) the difference is close to a global factor of
+        # ~10, because Psi suppresses weak shocks, so it barely moves morphology.
+        if nu_ghz != 1.4:
+            w = w * (nu_ghz / 1.4) ** (-0.5 * s)
 
     # Equivalent-sphere radius of each Voronoi cell. Mass units cancel, so
     # only the length unit needs converting to physical kpc.
@@ -152,6 +177,11 @@ def main():
     ap.add_argument("--radio-dir", default="Radio_Data")
     ap.add_argument("--out-dir", default="Radio_Cells")
     ap.add_argument("--psi-table", default="Radio_Data/normalized_psi_table.npz")
+    ap.add_argument("--model", choices=["hb07", "synch"], default="hb07",
+                    help="hb07: the original HB07-Psi weights (default, legacy); "
+                         "synch: Chuiyang's regenerated first-principles weights "
+                         "(Radio_Snap*_new), table --ratio-table")
+    ap.add_argument("--ratio-table", default="Radio_Data_new/radio_spectral_ratio_table.npz")
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--validate", action="store_true",
                     help="compare recomputed w against the stored npz")
@@ -176,12 +206,18 @@ def main():
                          "1.4 GHz units and isolate the per-cell effect")
     args = ap.parse_args()
     set_redshift(args.z)
-    if args.validate and (args.z != 0.0 or args.nu_ghz != 1.4):
+    if args.validate and args.model == "hb07" and (args.z != 0.0 or args.nu_ghz != 1.4):
         raise SystemExit("--validate compares with the stored z=0, 1.4 GHz "
                          "weights; run it without --z / --nu-ghz")
+    if args.validate and args.model == "synch" and (args.nu_ghz != 0.144 or args.w_scale != 1.0
+                                                    or args.max_nh != float("inf")
+                                                    or args.min_temp_kev or args.exclude_sf):
+        raise SystemExit("--validate --model synch compares with Radio_Snap*_new: "
+                         "--nu-ghz 0.144, no cuts, no --w-scale, and the snapshot's --z")
 
     os.makedirs(args.out_dir, exist_ok=True)
-    interp_psi = make_psi(args.psi_table)
+    interp_psi = (make_ratio(args.ratio_table) if args.model == "synch"
+                  else make_psi(args.psi_table))
 
     srcs = sorted(glob.glob(os.path.join(args.radio_dir, "radio_FOF*.npz")))
     if args.limit:
@@ -200,7 +236,8 @@ def main():
         out = generate(cutout, interp_psi,
                        min_T_keV=args.min_temp_kev,
                        max_nH=args.max_nh,
-                       exclude_sf=args.exclude_sf, nu_ghz=args.nu_ghz)
+                       exclude_sf=args.exclude_sf, nu_ghz=args.nu_ghz,
+                       model=args.model)
         if out is None:
             print(f"  FOF{fof}: no shock cells")
             continue
