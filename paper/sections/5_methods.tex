@@ -17,19 +17,10 @@ For the clean, non-forward-modelled case, we use the 352 snapshot-99 clusters wi
 The forward-modelled experiments train on images from snapshots 99 and 91, with evaluation restricted to snapshot 99.
 Before training, we normalize the image channels within a fold using the mean and standard deviation of images within that fold.
 We apply the same transformation to the validation, test, and observed datasets.
-\suggestion{My earlier suggested wording overgeneralized this step.
-The fitting-image mean/std transformation is implemented in
-\texttt{train\_cnn\_pooled.py} for the clean-map experiments;
-\texttt{train\_cnn\_mock.py} uses the stored forward-modelled images
-without that additional image-standardization step. Replace the preceding
-two sentences with:
-For the clean-map CNN experiments, each image channel is standardized
-using the mean and standard deviation of that outer fold's fitting
-images, excluding the inner-validation and outer-test images.
-The same transformation is applied to that fold's validation and test
-inputs. The forward-modelled CNN experiments use the stored
-arcsinh-transformed inputs described in Section~\ref{sec:fwd}, without
-an additional image mean/std transformation.}
+
+In the clean-map CNN experiments, each image channel is standardized using the mean and standard deviation of the outer fold's fitting images, excluding the inner-validation and outer-test images.
+We apply the same transformation to that fold's validation and test inputs.
+The forward-modelled CNN experiments use the stored arcsinh-stretched inputs described in section~\ref{sec:fwd}, without an additional transformation.
 
 We train models on two types of inputs: idealized pooled-view datasets, in which the three projections of a cluster are combined, and single-view datasets, for which the model is only given one orthogonal projection.
 For the latter, we measure the ensemble average performance for five models initialized with five different random seeds.
@@ -74,25 +65,15 @@ The normalized ranked probability score is
     \text{RPS} = \frac{1}{6} \sum_{k=0}^5 \left[ \sum_{c=0}^k p_c - \mathbf{1}(y \leq k) \right]^2
 \end{equation}
 where $\mathbf{1}$ denotes the indicator function.
-\suggestion{Restore the third score definition here, before the statement
-that lower values are better for all three scores:
-For the no-crossing class, indexed by $c=6$, the Brier score is
-$[p_6-\mathbf{1}(y=6)]^2$, the squared difference between its predicted
-probability and whether the observation belongs to that class.
-We report the mean of each score over the evaluated observations.}
+For the no-crossing class, indexed by $c=6$, the Brier score is $[p_6-\mathbf{1}(y=6)]^2$.
+We report the mean of each score over the evaluated observations.
 Lower values are better for all three scores.
-The reference \todo{wait what reference?} assigns the class frequencies among each fold's fitting halos, counting each halo-snapshot label once.
-\suggestion{Here the reference is an image-independent probability
-baseline, not a literature reference. Replace the preceding sentence with:
-We compare against a fitting-sample frequency baseline. Within each
-outer fold, let $N_c$ be the number of fitting halo--snapshot labels
-in class $c$, counting each label once irrespective of its number of
-projections or observing realizations. The baseline assigns
-$q_c=N_c/\sum_{d=0}^{6}N_d$ to every held-out observation in that fold.
-Thus its predictions use the fitting-sample class proportions but no
-image information. Inner-validation and outer-test labels are excluded
-from these proportions.}
-We compare the mean scores on the same held-out observations using paired parent-halo bootstrap intervals, conditional on the fitted models.
+We compare against a frequency baseline from the fitting sample.
+Within each outer fold, let $N_c$ be the number of fitting halo--snapshot labels in class $c$, counting each label once regardless of its number of projections or observational realizations.
+The baseline assigns $q_c=N_c/\sum_{d=0}^{6}N_d$ to every held-out observation in that fold.
+Thus, its predictions use the class proportions from the fitting sample, but no image information.
+We exclude inner validation and outer test labels from these proportions.
+The mean scores on the same held-out observations are compared using paired parent-halo bootstrap intervals, conditional on the fitted models.
 
 To evaluate the increased predictive power from access to raw image data, we compared our CNN model with several scalar prediction baselines.
 A five-feature ridge regression model was fit from log(halo mass), log(halo radius), log(integrated emission), mean intensity in the arcsinh-stretched image, and the fraction of pixels with non-zero intensity.
@@ -100,19 +81,12 @@ We standardized features over the training data, with ridge regularization stren
 These comparisons tested whether the raw image data provided extra predictive power over summary statistics of a cluster's scale, emission amplitude, and simple properties of the intensity distribution.
 
 For each radio projection, we threshold the image data at 12 logarithmically-spaced upper-area fractions, $f=0.005$--0.5, using the $(1-f)$ intensity quantile.
-At each threshold, we calculate the normalized \todo{normalized how?} perimeter, number of connected components, number of holes, and Euler characteristic, computed as $\chi = N_\text{comp} - N_\text{holes}$.
-\suggestion{The normalization is already defined two sentences below.
-Consolidate the definitions by replacing the preceding sentence with:
-At each threshold, we record the number of horizontal and vertical
-foreground--background pixel transitions divided by the total number
-of image pixels, together with the component count, hole count, and
-Euler characteristic $\chi=N_{\rm comp}-N_{\rm holes}$.
-Only transitions between adjacent pixels within the image are counted.
-\par
-Delete the later sentence beginning \emph{The perimeter is calculated},
-which would then repeat this definition. The component and hole counts
-and Euler characteristic are not divided by the pixel count.}
-To decide if pixels are part of the same connected component, we use 8-connectivity for foreground components, and 4-connectivity for background components. \todo{why the difference}?
+At each threshold, we record the number of foreground--background pixel transitions, divided by the total number of image pixels, together with component count, hole count, and Euler characteristic $\chi=N_{\rm comp}-N_{\rm holes}$.
+Only transitions between adjacent pixels are counted.
+Foreground pixels are connected when they share an edge or corner (8-connectivity), while background pixels are connected only when sharing an edge (4-connectivity).
+This convention avoids treating the foreground and background as connected across diagonal contacts.
+Holes are background components that do not touch the image boundary.
+
 \suggestion{Replace the preceding connectivity sentence and its TODO with:
 Foreground pixels are connected when they share an edge or a corner
 (8-connectivity), whereas background pixels are connected only when
@@ -126,7 +100,6 @@ The choice is a convention for consistent digital topology; the reverse
 The scikit-image Euler-number documentation explains the complementary
 foreground/background convention:
 \url{https://scikit-image.org/docs/stable/api/skimage.measure.html\#skimage.measure.euler_number}.}
-The perimeter is calculated as the number of foreground-background transitions divided by the number of pixels.
 These calculations yield a vector of 48 scalar descriptors, which are supplied to an XGBoost regressor, with projections grouped by cluster during cross-validation, and their predictions averaged for cluster-level scoring.
 
 To characterize X-ray morphology, we caclulate the concentration, centroid variation, and ellipticity.
