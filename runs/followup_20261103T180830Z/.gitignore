@@ -1,0 +1,5 @@
+/mplcache/
+
+# Small, curated artifacts needed to inspect/reproduce this pilot's selections.
+!/preflight/splits_s*.npz
+!/relic_pilot/members_*_snap*.npz

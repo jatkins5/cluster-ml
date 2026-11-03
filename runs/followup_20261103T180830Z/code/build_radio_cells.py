@@ -1,0 +1,274 @@
+#!/usr/bin/env python3
+"""Regenerate the DSA radio weights, keeping each shock cell's physical size.
+
+Radio_Data/radio_FOF*.npz stores only (pos, w), so the map builder has no
+choice but to deposit each cell as a point. That is what makes the linear map
+a delta function: one cell carries a median 30% of the total weight (see the
+weight-concentration finding), and a point deposit gives it a single pixel.
+
+TNG-Cluster gas cells in the ICM are 15 kpc in radius against an 18 kpc map
+pixel, so the missing ingredient is the cell's own volume. Masses and Density
+are already present in the cutouts (Chuiyang's Radio_generation.py reads both
+and uses neither), so V = M / rho gives an equivalent-sphere radius per cell.
+
+Reproduces the weight formula from
+/oscar/data/idellant/Chuiyang/Radio_Data/Radio_generation.py exactly -- the
+--validate flag checks the recomputed w against the stored npz -- and adds
+r_kpc. Chuiyang's files are read-only; output goes to Radio_Cells/.
+"""
+import argparse
+import glob
+import os
+import re
+import time
+
+import h5py
+import numpy as np
+from astropy import constants as c
+from astropy import units as u
+from astropy.constants import k_B
+from astropy.cosmology import Planck15
+from scipy.interpolate import RegularGridInterpolator
+
+GAMMA = 5.0 / 3.0
+XH = 0.76
+H0 = Planck15.h
+# Redshift enters the unit conversions (a = 1/(1+z)), B_CMB and the density
+# conversion. Chuiyang's code hard-codes z = 0, which is right for snapshot 99
+# and wrong for any earlier snapshot; set_redshift() must be called before
+# generating from snapshot 91 (z = 0.1) or 84 (z = 0.2).
+Z = 0.0
+A = 1.0 / (1.0 + Z)
+
+# Code-unit conversions, transcribed from Radio_generation.py.
+UNIT_B_G = (np.sqrt(1e10 * u.Msun / u.kpc) * (u.km / u.s) / u.kpc).to(
+    u.g ** 0.5 / (u.cm ** 0.5 * u.s)).value
+ECONV = ((1e10 * u.Msun / u.kpc) * (u.km / u.s) ** 3).to(u.erg / u.s).value
+# Density code unit (1e10 Msun/h)/(ckpc/h)^3 -> g/cm^3, then n_H = rho*XH/m_p.
+RHO_CGS = ((1e10 * u.Msun / u.kpc ** 3).to(u.g / u.cm ** 3).value
+           * H0 ** 2 / A ** 3)
+
+
+def set_redshift(z):
+    """Switch every redshift-dependent constant to snapshot redshift z."""
+    global Z, A, RHO_CGS
+    Z = float(z)
+    A = 1.0 / (1.0 + Z)
+    RHO_CGS = ((1e10 * u.Msun / u.kpc ** 3).to(u.g / u.cm ** 3).value
+               * H0 ** 2 / A ** 3)
+
+
+def r_of_M(M):
+    M2 = M * M
+    return (GAMMA + 1.0) * M2 / ((GAMMA - 1.0) * M2 + 2.0)
+
+
+def s_of_M(M):
+    r = r_of_M(M)
+    return (r + 2.0) / (r - 1.0)
+
+
+def bcmb_uG(z):
+    return 3.24 * (1.0 + z) ** 2
+
+
+def make_psi(table):
+    d = np.load(table)
+    return RegularGridInterpolator(
+        (d["s_grid"], d["loge_grid"]), d["normalized_psi_grid"],
+        bounds_error=False, fill_value=None)
+
+
+# ---- Chuiyang's regenerated model (Radio_Snap{99,91}_new, 2026-11-02) ----
+# First-principles synchrotron coefficients (her cal_coefficients.ipynb):
+#   w = POWER_PREF (xi_e/0.05) E SPECTRAL_BASE^(s/2) (I_Psi/I_spec)(s, e_min)
+#       B^(1+s/2) / (B^2 + B_cmb^2) (nu / 144 MHz)^(-s/2)     [W/Hz]
+# replacing the HB07 Psi of the default model. The table holds
+# log10(I_Psi/I_spec) and is queried with bounds_error=True, as in hers.
+XI_E = 0.05
+POWER_PREF_W_HZ = 8.701249739473983e+34
+SPECTRAL_BASE = 2.290130219242185e-08
+NU_REF_GHZ = 0.144
+
+
+def make_ratio(table):
+    d = np.load(table)
+    return RegularGridInterpolator(
+        (d["s_grid"], d["loge_grid"]), d["log10_spectral_ratio"], bounds_error=True)
+
+
+def generate(cutout, interp_psi, min_T_keV=0.0, max_nH=np.inf,
+             exclude_sf=False, nu_ghz=1.4, phase=False, model="hb07"):
+    with h5py.File(cutout, "r") as f:
+        p0 = f["PartType0"]
+        mach = p0["Machnumber"][:]
+        edis = p0["EnergyDissipation"][:]
+        shock = (mach > 1.3) & (edis > 0)
+        if not shock.any():
+            return None
+        coords = p0["Coordinates"][shock]
+        dens = p0["Density"][shock]
+        mass = p0["Masses"][shock]
+        elec = p0["ElectronAbundance"][shock]
+        uint = p0["InternalEnergy"][shock]
+        bfld = p0["MagneticField"][shock]
+        sfr = p0["StarFormationRate"][shock] if exclude_sf else None
+        mach = mach[shock]
+        edis = edis[shock]
+
+    mu = 4.0 / (1.0 + 3.0 * XH + 4.0 * XH * elec) * c.m_p.cgs.value
+    temperature = (GAMMA - 1.0) * uint / c.k_B.cgs.value * 1e10 * mu
+    T_keV = (k_B * (temperature * u.K)).to(u.keV).value
+
+    # Gas-phase cuts. The upstream model selects on Mach number alone, which
+    # lets the weight be carried by cold, ~380x overdense, Mach-26 cells --
+    # ram-pressure stripped ISM of infalling galaxies, not the diffuse ICM in
+    # which radio relics form. Excluding cold and star-forming gas is standard
+    # in DSA relic modelling; these cuts are off by default so the unmodified
+    # model is reproduced exactly.
+    nH = dens.astype(np.float64) * RHO_CGS * XH / c.m_p.cgs.value
+    keep = (T_keV >= min_T_keV) & (nH <= max_nH)
+    if exclude_sf:
+        keep &= (sfr <= 0)
+    if not keep.all():
+        coords, dens, mass = coords[keep], dens[keep], mass[keep]
+        elec, uint, bfld = elec[keep], uint[keep], bfld[keep]
+        mach, edis, T_keV = mach[keep], edis[keep], T_keV[keep]
+        if mach.size == 0:
+            return None
+
+    pos = coords * A / H0                                   # physical kpc
+    M = mach.astype(np.float64)
+    E = edis.astype(np.float64) / A * ECONV * 1e-44
+    B_uG = np.sqrt((bfld.astype(np.float64) ** 2).sum(axis=1)) * H0 / A ** 2 \
+        * UNIT_B_G * 1e6
+    s = s_of_M(M)
+    if model == "synch":
+        ratio = 10.0 ** interp_psi(np.column_stack([s, np.log10(T_keV * 10.0 / 511.0)]))
+        w = (POWER_PREF_W_HZ * (XI_E / 0.05) * E
+             * np.power(SPECTRAL_BASE, 0.5 * s) * ratio
+             * B_uG ** (1.0 + 0.5 * s) / (B_uG ** 2 + bcmb_uG(Z) ** 2)
+             * (nu_ghz / NU_REF_GHZ) ** (-0.5 * s))
+    else:
+        phi = interp_psi(np.column_stack([s, np.log10(T_keV * 10.0 / 511.0)]))
+        w = 5.2e23 * E * B_uG ** (1.0 + 0.5 * s) / (B_uG ** 2 + bcmb_uG(Z) ** 2) * phi
+        # Hoeft & Brueggen (2007) eq. 32 / Lee et al. (2024) eq. 9 carry a
+        # (nu / 1.4 GHz)^(-s/2) factor that the upstream code omits, i.e. it
+        # computes 1.4 GHz emission. Default keeps that; nu_ghz=0.144 gives the
+        # LOFAR-band weights. Measured over all 352 clusters
+        # (check_radio_theory.py) the difference is close to a global factor of
+        # ~10, because Psi suppresses weak shocks, so it barely moves morphology.
+        if nu_ghz != 1.4:
+            w = w * (nu_ghz / 1.4) ** (-0.5 * s)
+
+    # Equivalent-sphere radius of each Voronoi cell. Mass units cancel, so
+    # only the length unit needs converting to physical kpc.
+    vol = mass.astype(np.float64) / dens.astype(np.float64)
+    r_kpc = (3.0 * vol / (4.0 * np.pi)) ** (1.0 / 3.0) * A / H0
+    if phase:                 # per-cell gas state, for diagnostics
+        return pos, w, r_kpc, T_keV, nH[keep] if not keep.all() else nH, M
+    return pos, w, r_kpc
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--cutout-dir",
+                    default="/oscar/data/idellant/Chuiyang/TNGCluster_Cutout/snap99")
+    ap.add_argument("--radio-dir", default="Radio_Data")
+    ap.add_argument("--out-dir", default="Radio_Cells")
+    ap.add_argument("--psi-table", default="Radio_Data/normalized_psi_table.npz")
+    ap.add_argument("--model", choices=["hb07", "synch"], default="hb07",
+                    help="hb07: the original HB07-Psi weights (default, legacy); "
+                         "synch: Chuiyang's regenerated first-principles weights "
+                         "(Radio_Snap*_new), table --ratio-table")
+    ap.add_argument("--ratio-table", default="Radio_Data_new/radio_spectral_ratio_table.npz")
+    ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--validate", action="store_true",
+                    help="compare recomputed w against the stored npz")
+    ap.add_argument("--min-temp-kev", type=float, default=0.0,
+                    help="drop shock cells colder than this (ICM is ~2 keV; "
+                         "the dominant cells today are ~0.006 keV)")
+    ap.add_argument("--max-nh", type=float, default=float("inf"),
+                    help="drop shock cells denser than this n_H [cm^-3] "
+                         "(typical shock cell is ~5e-5)")
+    ap.add_argument("--exclude-sf", action="store_true",
+                    help="drop star-forming cells")
+    ap.add_argument("--z", type=float, default=0.0,
+                    help="snapshot redshift (99: 0, 91: 0.1, 84: 0.2)")
+    ap.add_argument("--nu-ghz", type=float, default=1.4,
+                    help="emission frequency; 1.4 reproduces the upstream "
+                         "weights, 0.144 is the LOFAR band")
+    ap.add_argument("--w-scale", type=float, default=1.0,
+                    help="divide every weight by this constant. The maps are "
+                         "arcsinh(w), so a global change of units also changes "
+                         "the stretch; at 0.144 GHz pass the sample-median "
+                         "ratio (12.5 = 9.72^1.11, integrated index 1.11) to keep the "
+                         "1.4 GHz units and isolate the per-cell effect")
+    args = ap.parse_args()
+    set_redshift(args.z)
+    if args.validate and args.model == "hb07" and (args.z != 0.0 or args.nu_ghz != 1.4):
+        raise SystemExit("--validate compares with the stored z=0, 1.4 GHz "
+                         "weights; run it without --z / --nu-ghz")
+    if args.validate and args.model == "synch" and (args.nu_ghz != 0.144 or args.w_scale != 1.0
+                                                    or args.max_nh != float("inf")
+                                                    or args.min_temp_kev or args.exclude_sf):
+        raise SystemExit("--validate --model synch compares with Radio_Snap*_new: "
+                         "--nu-ghz 0.144, no cuts, no --w-scale, and the snapshot's --z")
+
+    os.makedirs(args.out_dir, exist_ok=True)
+    interp_psi = (make_ratio(args.ratio_table) if args.model == "synch"
+                  else make_psi(args.psi_table))
+
+    srcs = sorted(glob.glob(os.path.join(args.radio_dir, "radio_FOF*.npz")))
+    if args.limit:
+        srcs = srcs[:args.limit]
+    print(f"{len(srcs)} clusters")
+
+    worst = 0.0
+    t0 = time.time()
+    for i, src in enumerate(srcs):
+        m = re.search(r"radio_FOF(\d+)_sub(\d+)\.npz", os.path.basename(src))
+        fof, sub = m.group(1), m.group(2)
+        cutout = os.path.join(args.cutout_dir, f"cutout_sub{sub}_FOF{fof}.hdf5")
+        if not os.path.exists(cutout):
+            print(f"  MISSING cutout for FOF{fof}")
+            continue
+        out = generate(cutout, interp_psi,
+                       min_T_keV=args.min_temp_kev,
+                       max_nH=args.max_nh,
+                       exclude_sf=args.exclude_sf, nu_ghz=args.nu_ghz,
+                       model=args.model)
+        if out is None:
+            print(f"  FOF{fof}: no shock cells")
+            continue
+        pos, w, r_kpc = out
+        w = w / args.w_scale
+
+        if args.validate:
+            # Only meaningful with no cuts applied.
+            ref = np.load(src)
+            rw = ref["w"]
+            if len(rw) != len(w):
+                print(f"  FOF{fof}: LENGTH MISMATCH {len(rw)} vs {len(w)}")
+            else:
+                both = np.isfinite(rw) & np.isfinite(w) & (rw > 0)
+                rel = np.abs(w[both] - rw[both]) / rw[both]
+                worst = max(worst, np.nanmax(rel) if rel.size else 0.0)
+                if i < 3 or np.nanmax(rel) > 1e-6:
+                    print(f"  FOF{fof}: n={len(w)} max rel diff "
+                          f"{np.nanmax(rel):.3e}")
+
+        np.savez_compressed(
+            os.path.join(args.out_dir, f"cells_FOF{fof}_sub{sub}.npz"),
+            pos=pos.astype(np.float64), w=w.astype(np.float64),
+            r_kpc=r_kpc.astype(np.float64))
+        if (i + 1) % 50 == 0:
+            print(f"  {i+1}/{len(srcs)}  ({time.time()-t0:.0f}s)")
+
+    if args.validate:
+        print(f"\nworst relative difference vs stored weights: {worst:.3e}")
+    print(f"done in {time.time()-t0:.0f}s")
+
+
+if __name__ == "__main__":
+    main()

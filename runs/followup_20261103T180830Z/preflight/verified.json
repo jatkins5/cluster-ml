@@ -1,0 +1,32 @@
+{
+  "radio": "injected_syn_phys_b3000_s9991.h5",
+  "xray": "xray_fix_b3000_s9991.h5",
+  "shape": [
+    703,
+    3,
+    3,
+    128,
+    128
+  ],
+  "matched_metadata": [
+    "group_id",
+    "halo_id",
+    "snap",
+    "pseudo_tsc",
+    "log_m500",
+    "z"
+  ],
+  "parents": 352,
+  "seeds": [
+    42,
+    43,
+    44,
+    45,
+    46
+  ],
+  "protocol": "unchanged default pooled training/selection, 5 folds, 60 epochs",
+  "sha256": {
+    "injected_syn_phys_b3000_s9991.h5": "e743300b6e92d4a9fba9dbe902d9b3940fdfc810465e92a6fdf789cb29a0080d",
+    "xray_fix_b3000_s9991.h5": "b88a80c254b1e7c1bfbf4e37dae26c625462271763ee07d6fe314734667c8c2a"
+  }
+}

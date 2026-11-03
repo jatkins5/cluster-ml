@@ -1,0 +1,84 @@
+Paper experiment follow-ups, 2026-11-03
+
+Authorized scope: matched 3 Mpc X-ray control, radio-X-ray offset analysis,
+and a six-halo relic/event feasibility pilot. Diffusion remains deferred.
+The active radio retraining array 8298678 is unchanged.
+
+Jobs
+  8299937  CPU metadata/fold preflight (passed)
+  8299941  One GPU, seeds 42-46 serially; five folds per seed, 60 epochs,
+           pooled training and pooled inner-validation selection, unchanged
+           defaults from the running radio/joint protocol. 12-hour limit.
+  8299973  CPU relic pilot, 4 CPUs, 64 GB, 4-hour limit.
+  8299974  CPU offset analysis after 8299941 and radio array tasks 35-39.
+  8299980  CPU joint comparison after those inputs plus joint tasks 70-74.
+The two analysis jobs have 8 GB and 30-minute limits each.
+No job arrays were submitted for this follow-up.
+
+The first preflight (8299652) failed before accessing datasets because the
+frozen bundle omitted minkowski_functionals.py. The helper was copied and
+imports tested before resubmission. Its dependent GPU job 8299657 is
+superseded; it could not start because its afterok dependency failed.
+
+Inputs/provenance
+  preflight/verified.json records exact metadata equality and input hashes.
+  preflight/splits_s*.npz records expected outer and inner-selection splits.
+  code/ holds frozen source copies, including the unmodified CNN trainer.
+  run_manifest.json records job IDs, source/script hashes, and git revision.
+  New outputs are confined to this directory. Original datasets and paper
+  source are read-only inputs to these jobs.
+
+Expected outputs
+  preds/xray_b3000_s{42..46}_preds.npz
+  offset/paired_predictions.csv, conditional_bias.csv, observed_offsets.csv,
+    observed_age_sensitivity.csv, seed_metrics.csv, summary.json,
+    offset_diagnostic.pdf
+  joint_comparison/ includes the same diagnostic plus matched joint/X-ray
+    performance and a parent-bootstrap MAE improvement interval.
+  relic_pilot/candidate_sample.csv, structures.csv,
+    structure_event_candidates.csv, competing_events.csv,
+    per-halo two-snapshot PDF panels, and component membership NPZ files.
+  logs/ contains Slurm stdout/stderr for each job.
+
+Offset interpretation
+  Positive offsets mean radio predicts an older pseudo-TSC than X-rays.
+  Use held-out single-view predictions averaged across seeds. Resampling is
+  by parent halo, keeping snapshots, projections, and realizations together.
+  Conditional mean summaries give equal weight to each contributing parent.
+  Observed matching uses fixed calipers: 0.2 dex in mass, 0.015 in redshift,
+  factor 2 in X-ray exposure; report four hypothetical true-age bins rather
+  than treating a predicted observed age as truth. Require eight parents.
+  The observed comparison uses the same five models (one fold per seed) as
+  each simulated held-out halo, although headline real predictions average
+  all 25 fold/seed models. This is a bias diagnostic, not age calibration.
+
+Relic pilot interpretation
+  Six halos selected using merger history only: exactly one mass-ratio>=0.1
+  event in the last 2 Gyr, collision age 0.15-1.5 Gyr, two per age bin, seed42.
+  Candidate event ages use continuous T_coll. The legacy per-halo TSC label
+  differs for some events by up to one snapshot cadence; it is not used as
+  the pilot clock. Target indices are checked against the TNG-Cluster list.
+  Regenerate ONLY selected cutouts at 1.4 GHz with the current synchrotron
+  prescription and the existing n_H<=1e-4 selection. Existing radio files
+  are untouched. Use 50 kpc connected voxels; retry 25 kpc for a single
+  detected relic. Apply volume, bright-cell-cleaning, size, Mach, luminosity,
+  and opposite-side selection for inspection; axis alignment is diagnostic,
+  never used to select a pair. Inspect snapshots 91 and 99 and competing
+  events. All associations remain explicitly unverified. No population
+  slope or timing accuracy is inferred from six selected halos.
+  Differences in radio prescription, gas cuts, and temporal coverage mean
+  this is a feasibility pilot, not a completed Lee et al. replication.
+  References: https://arxiv.org/html/2510.21632v1
+              https://www.tng-project.org/data/cluster/
+
+Validation
+  Four small tests passed, including synthetic end-to-end offset/joint
+  analysis, rejection of mismatched folds, parent-level resampling,
+  multi-event exclusion, and 3-D segmentation/bright-cell removal.
+
+Submission verification
+  Corrected preflight completed. X-ray control and dependent analyses queued.
+  Superseded X-ray job 8299657 was cancelled by its failed dependency.
+  Relic pilot completed in 72 seconds: 12 halo/snapshot rows, six PDFs,
+  12 membership archives; 5/6 z=0 halos have candidate opposite-side pairs.
+  Event associations remain unvalidated; no scientific timing claim made.

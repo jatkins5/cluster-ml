@@ -1,0 +1,91 @@
+{
+  "selected_halos": [
+    2380799,
+    5873398,
+    12871237,
+    17129688,
+    17469179,
+    19262770
+  ],
+  "sample_rule": "one mass-ratio>=0.1 event in last 2 Gyr; age 0.15-1.5 Gyr; two per age bin; seed 42",
+  "snapshots": [
+    91,
+    99
+  ],
+  "radio_model": "synch",
+  "frequency_ghz": 1.4,
+  "max_nh": 0.0001,
+  "spectral_table_sha256": "85aefdbaf6036c1f248e9e9c093080bdfb34f2d0ac2482ffebdd02dd76fd0153",
+  "inputs": [
+    {
+      "path": "/oscar/data/idellant/Chuiyang/TNGCluster_Cutout/snap91/cutout_sub1298224_FOF2400125.hdf5",
+      "size": 3320785408,
+      "mtime_ns": 1790605500161667805
+    },
+    {
+      "path": "/oscar/data/idellant/Chuiyang/TNGCluster_Cutout/snap99/cutout_sub1237366_FOF2380799.hdf5",
+      "size": 3761429888,
+      "mtime_ns": 1771010669234472898
+    },
+    {
+      "path": "/oscar/data/idellant/Chuiyang/TNGCluster_Cutout/snap91/cutout_sub3282270_FOF5955841.hdf5",
+      "size": 2107156224,
+      "mtime_ns": 1790609805632692613
+    },
+    {
+      "path": "/oscar/data/idellant/Chuiyang/TNGCluster_Cutout/snap99/cutout_sub3129256_FOF5873398.hdf5",
+      "size": 2334025728,
+      "mtime_ns": 1771017962146982947
+    },
+    {
+      "path": "/oscar/data/idellant/Chuiyang/TNGCluster_Cutout/snap91/cutout_sub7181191_FOF13003373.hdf5",
+      "size": 1215007104,
+      "mtime_ns": 1790619568908444422
+    },
+    {
+      "path": "/oscar/data/idellant/Chuiyang/TNGCluster_Cutout/snap99/cutout_sub6844091_FOF12871237.hdf5",
+      "size": 1352639616,
+      "mtime_ns": 1771035628683397251
+    },
+    {
+      "path": "/oscar/data/idellant/Chuiyang/TNGCluster_Cutout/snap91/cutout_sub9602324_FOF17264091.hdf5",
+      "size": 633289216,
+      "mtime_ns": 1790627588080874862
+    },
+    {
+      "path": "/oscar/data/idellant/Chuiyang/TNGCluster_Cutout/snap99/cutout_sub9152984_FOF17129688.hdf5",
+      "size": 704616960,
+      "mtime_ns": 1771044943634249654
+    },
+    {
+      "path": "/oscar/data/idellant/Chuiyang/TNGCluster_Cutout/snap91/cutout_sub9784782_FOF17604137.hdf5",
+      "size": 687494784,
+      "mtime_ns": 1790628085167522915
+    },
+    {
+      "path": "/oscar/data/idellant/Chuiyang/TNGCluster_Cutout/snap99/cutout_sub9327315_FOF17469179.hdf5",
+      "size": 737119744,
+      "mtime_ns": 1771045749704611601
+    },
+    {
+      "path": "/oscar/data/idellant/Chuiyang/TNGCluster_Cutout/snap91/cutout_sub10775915_FOF19410314.hdf5",
+      "size": 340031744,
+      "mtime_ns": 1790630814231325740
+    },
+    {
+      "path": "/oscar/data/idellant/Chuiyang/TNGCluster_Cutout/snap99/cutout_sub10275590_FOF19262770.hdf5",
+      "size": 377375360,
+      "mtime_ns": 1771050106172089219
+    }
+  ],
+  "limitations": [
+    "Two snapshots do not establish event association; manual inspection required.",
+    "Current synchrotron prescription and density cut differ from a full Lee reproduction.",
+    "No population slope or timing accuracy is inferred from this selected six-halo sample.",
+    "Existing cutout spatial/zoom coverage is assumed; verify before a full catalogue."
+  ],
+  "sources": [
+    "https://arxiv.org/html/2510.21632v1",
+    "https://www.tng-project.org/data/cluster/"
+  ]
+}

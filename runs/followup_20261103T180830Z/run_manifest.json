@@ -1,0 +1,61 @@
+{
+  "git_revision": "a0a445f4b205703003f929d3aecb4ac19c6ac684",
+  "jobs": {
+    "pairing": 8299937,
+    "xray_control": 8299941,
+    "relic_pilot": 8299973,
+    "offset": 8299974,
+    "joint_comparison": 8299980
+  },
+  "superseded_jobs": {
+    "pairing_missing_helper": 8299652,
+    "xray_invalid_dependency": 8299657
+  },
+  "existing_training_array": 8298678,
+  "radio_tasks": [
+    35,
+    36,
+    37,
+    38,
+    39
+  ],
+  "joint_tasks": [
+    70,
+    71,
+    72,
+    73,
+    74
+  ],
+  "source_sha256": {
+    "code/analyze_radio_xray_offset.py": "4971b24b550dd3b8ad21acd4fdc829cb00fd2e7ebabe055fc109a8b279820ab5",
+    "code/build_radio_cells.py": "6d9debcbd4c5112b4d81c3b344ddfa982932641d11a7f63b8bdfb4e2f2be77d9",
+    "code/check_syn_pairing.py": "a8130d95455d1225443f5a510482073a93f55202e14618c7bcb7429d13db96b3",
+    "code/forward_model_lotss.py": "906442e4a163320bd3cbf61923e690a6c73207e5262629f13775e5bd53a18c4c",
+    "code/minkowski_functionals.py": "98c8f3f6aac290dab40ca3e0952d3cefb6af62efa43cc2364a7199d72342388d",
+    "code/pilot_relic_association.py": "f24981677c54e0633c1a49e4189572e1e703a429d2125d65848c1d24949d1be2",
+    "code/test_paper_followups.py": "de82a580e41e0afff054853bdff400d1ab7401f266927eba72c224b2f749a5b4",
+    "code/train_cnn_mock.py": "6dd44012cdf7c9ceb2bbc8c7c75e54d0d3f886d57e44621eb83677f593c5c5a8",
+    "code/train_cnn_pooled.py": "d6467cf346c43f05eccbfc9aa527d47d82c3e5ba1edab929a56f39646d34e8db"
+  },
+  "scripts_sha256": {
+    "submit_relic_pilot.sh": "c1f9cb2327652f9873ed649b4e030b55731e2c42525cddee32c9827954019e22",
+    "submit_syn_offset.sh": "7b0040b1f2f5df0b2ebfcfed595a18a1ad941dca3cd95eb05b8437827745bbf7",
+    "submit_syn_pairing.sh": "c374ca14db42b94b9a5efae2f3384ebcc8555146cd7f7f11f7dcf73ab9edb098",
+    "submit_syn_xray_control.sh": "8780371110318c13f55fa8faf2a0c0f3f9c83ee211fd1706d7a539c1bc996366"
+  },
+  "validation": "4 scientific-integrity tests passed; shell syntax and Python compilation passed; actual data pairing check passed",
+  "verified_status": {
+    "pairing": "COMPLETED",
+    "xray_control": "PENDING",
+    "relic_pilot": "COMPLETED",
+    "offset": "PENDING",
+    "joint_comparison": "PENDING",
+    "superseded_xray": "CANCELLED"
+  },
+  "relic_first_pass": {
+    "halos": 6,
+    "snapshot_rows": 12,
+    "z0_candidate_pairs": 5,
+    "validated_event_associations": 0
+  }
+}
