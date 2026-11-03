@@ -352,6 +352,34 @@ class ViewScalarCNN(nn.Module):
         return self.head(z).squeeze(1)
 
 
+class JointViewScalarCNN(nn.Module):
+    """Two image encoders with invariant scalars fused per observation.
+
+    Used by spatial_pilot.py. Masked controls use the identical architecture.
+    Each scalar vector belongs to one realization and projection, and joins
+    that pair's embeddings before averaging views. No scalar is shared from
+    a different projection when evaluating a single observation.
+    """
+
+    def __init__(self, n_view, embed_dim=256):
+        super().__init__()
+        base = JointPooledCNN(embed_dim)
+        self.radio, self.xray, self.head = base.radio, base.xray, base.head
+        self.fuse = nn.Sequential(nn.Linear(2 * embed_dim + n_view, 2 * embed_dim),
+                                  nn.ReLU(inplace=True))
+
+    def forward(self, radio, xray, vs):
+        B, P = radio.shape[:2]
+        if xray.shape[:2] != (B, P) or vs.shape[:2] != (B, P):
+            raise ValueError("image pairs and view scalars must have matching views")
+        def embed(net, x):
+            return net.pool(net.encoder(x.reshape(B * P, *x.shape[2:]))).flatten(1)
+        z = torch.cat([embed(self.radio, radio), embed(self.xray, xray),
+                       vs.reshape(B * P, -1)], dim=1)
+        z = self.fuse(z).reshape(B, P, -1).mean(dim=1)
+        return self.head(z).squeeze(1)
+
+
 class MockDataset(Dataset):
     """One item per (cluster, realization); each carries its 3 projections.
 
@@ -447,11 +475,10 @@ def run_fold(tr_x, tr_y, sel_x, sel_y, epochs, batch_size, device, delta,
     joint = tr_xr is not None
     if joint and n_scalar:
         raise ValueError("joint radio+X-ray model does not take scalars")
-    if joint and n_view:
-        raise ValueError("per-view scalars are not implemented for the joint model")
     if loss == "class7" and (joint or n_view or tr_cls is None or reps is None):
         raise ValueError("class7 needs the image-only/scalar PooledCNN, tr_cls and reps")
-    model = (JointPooledCNN() if joint
+    model = (JointViewScalarCNN(n_view) if joint and n_view
+             else JointPooledCNN() if joint
              else ViewScalarCNN(n_view, n_scalar) if n_view
              else PooledCNN(n_scalar=n_scalar))
     if loss == "class7":
@@ -466,7 +493,8 @@ def run_fold(tr_x, tr_y, sel_x, sel_y, epochs, batch_size, device, delta,
     model = model.to(device)
     decode = ((lambda o: softmax_np(o.astype(np.float64)) @ reps)
               if loss == "class7" else (lambda o: o))
-    fwd = ((lambda im, xr, sc, vs: model(im, xr)) if joint else
+    fwd = ((lambda im, xr, sc, vs: model(im, xr, vs)) if joint and n_view else
+           (lambda im, xr, sc, vs: model(im, xr)) if joint else
            (lambda im, xr, sc, vs: model(im, vs, sc)) if n_view else
            (lambda im, xr, sc, vs: model(im, sc)))
     opt = torch.optim.AdamW([q for q in model.parameters() if q.requires_grad],
@@ -561,6 +589,13 @@ def predict(model, x, device, scalars=None, batch_size=32, xray=None,
         s = (None if scalars is None else
              torch.tensor(scalars[i:i + batch_size],
                           dtype=torch.float32).to(device))
+        if xray is not None and view_scalars is not None:
+            xb = torch.tensor(xray[i:i + batch_size][:, :, None],
+                              dtype=torch.float32).to(device)
+            vs = torch.tensor(view_scalars[i:i + batch_size],
+                              dtype=torch.float32).to(device)
+            out.append(model(b, xb, vs).cpu().numpy())
+            continue
         if view_scalars is not None:
             vs = torch.tensor(view_scalars[i:i + batch_size],
                               dtype=torch.float32).to(device)

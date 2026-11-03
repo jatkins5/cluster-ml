@@ -199,6 +199,7 @@ def main():
               f"mock level {p_mock:.4f} counts/ks/block")
 
     out_img, names, keys, zs, texp, cover = [], [], [], [], [], []
+    catalogue_centres, peak_shifts = [], []
     for tgt, grp in obs.groupby(obs["target"]):
         k = key(tgt)
         ra0, dec0, z = pos[k]
@@ -289,6 +290,11 @@ def main():
         zs.append(z)
         texp.append(float(np.median(t_ks[good])))
         cover.append(float(m.sum() / aperture_mask(z).sum()))
+        catalogue_centres.append((ra0, dec0))
+        # Original peak location relative to the catalogue-centred grid.
+        # Positive x points west; positive y points north. These are the
+        # values SUBTRACTED from event positions above, not applied shifts.
+        peak_shifts.append((shift_x, shift_y))
         print(f"  {tgt:<18} z={z:.4f}  {len(grp)} obs  "
               f"exposure {texp[-1]:.1f} ks  counts in aperture "
               f"{counts[m].sum():.3g}  aperture exposed {cover[-1]:.0%}  "
@@ -323,6 +329,10 @@ def main():
         o.create_dataset("z", data=np.array(zs))
         o.create_dataset("exposure_ks", data=np.array(texp))
         o.create_dataset("aperture_exposed", data=np.array(cover))
+        o.create_dataset("catalogue_radec_deg", data=np.array(catalogue_centres))
+        shift = o.create_dataset("peak_offset_xy_kpc",
+                                 data=np.array(peak_shifts) * block_kpc())
+        shift.attrs["axes"] = "x=west, y=north; peak minus catalogue centre"
         g.attrs["stretch_scale"] = a
         g.attrs["train_h5"] = args.train_h5
     print(f"\nwrote {args.output}: {imgs.shape}")
