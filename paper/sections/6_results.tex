@@ -102,12 +102,27 @@ We distinguish the pooled-view score, which combines all three projections, from
 For single projections, the radio-only ensemble of five models achieved $R^2 = 0.072$ with a box size of 1 Mpc, and $R^2=0.203$ with a box size of 3 Mpc.
 The corresponding scores for the pooled input models, averaged over the different seeds, were $0.142\pm0.021$ and $0.238\pm0.019$.
 The experiment sensitive to arcsinh morphology, which retained the total physical flux while compressing the spatial intensity distribution, gave a similar single-projection score of $R^2=0.207$ for the 3 Mpc box.
+\suggestion{Delete the preceding sentence beginning \emph{The experiment
+sensitive to arcsinh morphology}: it describes the same experiment and
+repeats the score given in the following paragraph.}
 
 In a test of the sensitivity of the compressed morphology, we redistributed the same physical total source flux according to an arcsinh-compressed spatial profile, followed by beam convolution and background injection.
 This experiment yielded a single-view ensemble score of $R^2=0.207$ for the 3 Mpc box.
 This source profile is distinct from the final $\operatorname{arcsinh}(S/\sigma_{\rm rms})$ transformation, which was applied to all processed inputs.
-\suggestion{Use \emph{compressed-morphology sensitivity test}
-for the corresponding table row as well.}
+\suggestion{Replace the preceding three sentences with:
+To test sensitivity to the brightness contrast of the simulated radio
+emission, we applied an arcsinh compression to the source profile and
+rescaled it to retain the same total physical flux before beam
+convolution and background injection. This reduces the relative
+contribution of the brightest regions and increases that of fainter
+regions. The resulting single-view ensemble score was $R^2=0.207$
+for the 3\,Mpc box, compared with 0.203 for the adopted source profile.
+This modification of the injected source is separate from the final
+$\operatorname{arcsinh}(S/\sigma_{\rm rms})$ preprocessing applied to
+all processed inputs.
+\par
+Here compression refers to brightness contrast, rather than a reduction
+in spatial size. Use the clearer table wording suggested below.}
 While the models predicting on larger boxes performed better, injection placements were also changed, so the effect of field size was not completely isolated.
 
 Despite significantly decreased performance, the radio images retained useful information beyond noisy mass measurements.
@@ -182,6 +197,12 @@ We did not conduct a matched comparison of one- and two-epoch training, so the b
   {\footnotesize $^a$ Phenomenological sensitivity arm: physical total flux,
   arcsinh-compressed morphology. $^b$ The same fixed blurred-mass draw for
   every run.}
+  \suggestion{Rename the row currently labelled
+  \emph{Radio, 3\,Mpc, arcsinh morphology} to
+  \emph{Radio, 3\,Mpc, reduced source contrast}, retaining footnote marker
+  $a$ and the numerical entries. Replace footnote $a$ with:
+  Source profile compressed using arcsinh and rescaled to preserve the
+  total physical flux before beam convolution and background injection.}
 \end{table*}
 \begin{figure*}
   \centering
