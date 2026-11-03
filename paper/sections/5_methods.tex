@@ -84,22 +84,8 @@ For each radio projection, we threshold the image data at 12 logarithmically-spa
 At each threshold, we record the number of foreground--background pixel transitions, divided by the total number of image pixels, together with component count, hole count, and Euler characteristic $\chi=N_{\rm comp}-N_{\rm holes}$.
 Only transitions between adjacent pixels are counted.
 Foreground pixels are connected when they share an edge or corner (8-connectivity), while background pixels are connected only when sharing an edge (4-connectivity).
-This convention avoids treating the foreground and background as connected across diagonal contacts.
+This convention avoids treating both foreground and background as connected across the same diagonal contact \citep{ScikitImageEulerNumber}.
 Holes are background components that do not touch the image boundary.
-
-\suggestion{Replace the preceding connectivity sentence and its TODO with:
-Foreground pixels are connected when they share an edge or a corner
-(8-connectivity), whereas background pixels are connected only when
-they share an edge (4-connectivity). This complementary convention
-avoids treating both foreground and background as connected across
-the same diagonal contact. Holes are background components that do
-not touch the image boundary.
-\par
-The choice is a convention for consistent digital topology; the reverse
-4/8 pairing is also possible but would give different descriptors.
-The scikit-image Euler-number documentation explains the complementary
-foreground/background convention:
-\url{https://scikit-image.org/docs/stable/api/skimage.measure.html\#skimage.measure.euler_number}.}
 These calculations yield a vector of 48 scalar descriptors, which are supplied to an XGBoost regressor, with projections grouped by cluster during cross-validation, and their predictions averaged for cluster-level scoring.
 
 To characterize X-ray morphology, we caclulate the concentration, centroid variation, and ellipticity.
