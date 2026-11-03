@@ -3,18 +3,8 @@
 
 Galaxy clusters grow through matter accretion and mergers with other gravitationally-bound systems.
 These interactions change the distribution of gas and dark matter, generate shocks and turbulence in the intracluster medium (ICM), and provide energy for nonthermal particle populations \citep{KravtsovBorgani2012, Sarazin2002}.
-Establishing a cluster's merger history is therefore important for understanding its present structure, and for understanding the evolution of thermal and non-thermal emission.
-A cluster's merger phase also affects its interpretation as a cosmological probe; its state evolves away from equilibrium during interaction, which can alter the relationship between true and hydrostatic mass \citep{Gianfagna2023}.
-Thus, a statistical measurement of recent merger activity would help connect these processes across cluster populations, and improve our understanding of their astrophysical and cosmological properties.
-\suggestion{\emph{Repetition review.} The last three sentences of this
-paragraph repeat the motivation in terms of understanding structure,
-evolution, and astrophysical/cosmological properties. Replace those three
-sentences, beginning \emph{Establishing a cluster's merger history}, with:
-Reconstructing merger histories connects present gas structure and
-nonthermal emission to cluster assembly. It also informs the use of
-clusters as cosmological probes, since departures from equilibrium during
-mergers can alter the relationship between true and hydrostatic mass
-\citep{Gianfagna2023}.}
+Reconstructing merger histories connects the present gas structure and nonthermal emission to the cluster assembly process.
+It also informs the use of clusters as cosmological probes, since departures from equilibrium during mergers can alter the relationship between true and hydrostatic mass \citep{Gianfagna2023}.
 
 Radio and X-ray observations offer different information about the response of the ICM to mergers.
 Thermal X-ray emission traces the distribution and thermodynamic state of gas, revealing cold fronts, disturbed cores, shocks, and displaced gas components \citep{MarkevitchVikhlinin2007}.
@@ -29,7 +19,7 @@ The observable properties of disturbed systems are a function of the merger mass
 Thus, measurements of cluster disturbance require physical calibration before utilization to predict merger history.
 
 Reconstructing individual merger dynamics can produce more direct timing constraints.
-Methods based on subcluster masses, projected separations, and relative velocities allow prediction of of possible trajectories and times since pericentric passage, and comparisons with simulated analagous clusters provide an alternative way of contraining geometry and merger stage \citep{Dawson2013, Wittman2019}.
+Methods based on subcluster masses, projected separations, and relative velocities allow prediction of possible trajectories and times since pericentric passage, and comparisons with simulated analagous clusters provide an alternative way of contraining geometry and merger stage \citep{Dawson2013, Wittman2019}.
 In addition, halo sparsity---the ratio of masses measured within different overdensity radii---has been investigated as an indicator of the time since major merger \citep{RichardsonCorasaniti2022}.
 These approaches constrain related aspects of cluster assembly history, but their timing variables depend on the definition of a merger event.
 Halo coalescence, first pericentric passage, and merger-history scores define different timing variables, and thus should not be used interchangeably.
@@ -60,31 +50,11 @@ Characterizing a machine learning model's observational applicability thus requi
 
 In this work, we analyze the information about recent merger activity encoded in radio and X-ray images.
 We train CNNs on the TNG-Cluster cosmological magnetohydrodynamical simulations \citep{Nelson2024,Nelson2019}, and construct shock-powered radio images at 144 MHz and synthetic X-ray maps for the 352 clusters at redshift 0, as well as their progenitors at redshift 0.1.
-Our prediction target, which we call \emph{pseudo-TSC}, is a characteristic merging timescale derived from a threshold applied to the merger-history score.
-Pseudo-TSC provides a continuous indicator of recent merger activity, though its interpretation depends on the merging score definition and its finite temporal range.
-We investigate its relationship to catalogue collision times, though we retain the distinction between our proxy and the physical elapsed time since an individually-identified pericentric passage.
+Our prediction target, \emph{pseudo-TSC}, is a timescale for merger activity derived from a threshold on the merger history score.
+Pseudo-TSC allows for a continuous regression target for model training.
 
 We first compare the predictive information in idealized radio and X-ray observations, separately and together, against the predictive power of mass, brightness, and morphological summary statistics.
 We then construct approximate observational forward models for LOFAR and Chandra to determine changes in the available information due to real observational conditions.
 The forward-modelling procedure for radio images injects simulated emission into observed survey fields, while the X-ray procedure includes distance, exposure, and background effects, as well as photon statistics.
 Finally, we apply the trained models to nearby clusters from the Local Volume-Complete Cluster Survey (LoVoCCS, \cite{Fu2022, Fu2024}), predicting merger times for 26 clusters in radio and 15 in X-rays.
-Since clusters with available X-ray data are a subset of those with radio data, we can assess consistency between the two predictions.
-However, independent constraints on merger history are needed to establish their absolute accuracy.
-Together, these experiments assess the predictive information retained retained by observable cluster images, as well as the requirements for interpreting predictions as physical merger times.
-\suggestion{\emph{Repetition review.} The closing paragraphs repeat both
-the definition/limitations of pseudo-TSC and the question posed earlier
-about information retained under realistic observing conditions.
-Replace the three sentences beginning \emph{Our prediction target} with:
-Our target, \emph{pseudo-TSC}, is a merger-activity timescale derived from
-a threshold on the merger-history score; its definition and relationship
-to catalogue collision times are given in Section~\ref{sec:sims}.
-\par
-Replace the final three sentences, beginning \emph{Since clusters with
-available X-ray data}, with:
-The overlapping sample allows a comparison of radio and X-ray predictions,
-while independent merger constraints are needed to assess their accuracy.
-\par
-This leaves one brief statement of the observational-validation limit
-in the Introduction. Also remove the duplicated \emph{of} in
-\emph{prediction of of possible trajectories}; the replacement above
-removes the duplicated \emph{retained} at the end.}
+The overlapping sample allows for comparison of radio and X-ray predictions, though independent merger constraints are needed to assess their absolute accuracy.

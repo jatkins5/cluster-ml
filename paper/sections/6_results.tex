@@ -1,25 +1,9 @@
 \section{Results}
 \label{sec:results}
 
-We evaluated the degree to which pseudo-TSC labels can be recovered from simulated radio and X-ray images, including whether the performance changed when simulated forward-modelling was added, and whether additional inputs or variations on the training objective improved performance.
-All simulation scores are out-of-fold (OOF) predictions.
-Unless otherwise stated, listed uncertainties describe the standard deviation across five training seeds.
-Confidence intervals on paired model differences are calculated using parent-halo bootstrapping, described in section~\ref{sec:methods}.
-Errors expressed in Gyrs quantify pseudo-TSC recovery on held-out simulated clusters.
-The strong rank correlation between pseudo-TSC and catalogue collision times supports its interpretation as a merger activity indicator; thus, these errors measure useful information about merger history, but are not calibrated uncertainties about the date of a physical collision.
-\suggestion{\emph{Repetition review.} Replace this entire opening
-paragraph, beginning \emph{We evaluated the degree}, with two conventions
-that refer to the full definitions:
-All simulation scores quantify out-of-fold recovery of pseudo-TSC,
-as defined in Section~\ref{sec:sims}. Unless otherwise stated, quoted
-scatter is the standard deviation across five training seeds; intervals
-on paired model differences use the parent-halo bootstrap described in
-Section~\ref{sec:methods}.
-\par
-The detailed proxy-versus-collision-age qualification can live with
-the label definition, and the limits of the uncertainty estimates with
-the statistical methods. Neither needs to be re-established before
-each result.}
+All simulation scores quantify OOF recovery of pseudo-TSC, as defined in section~\ref{sec:sims}.
+Unless otherwise stated, quoted scatter is the standard deviation across five training seeds.
+Intervals on paired model differences use the parent-halo bootstrap described in section~\ref{sec:methods}.
 
 \subsection{Radio-only}
 
@@ -36,16 +20,13 @@ However, the scalar features predicted the CNN prediction with $R^2=0.732$, and 
 
 Normalizing each radio projection to a common integrated emission value reduced the mean CNN score to $R^2=0.414 \pm 0.040$.
 Performance decreased in all five random seeds, with a mean paired change of $-0.071$ and a paired-seed p-value of $0.019$.
-Therefore, explicit amplitude information is helpful for prediction, but not the only component.
-Note that amplitude normalization does not isolate morphology specifically from all information related to luminosity: the original integrated emission predicted the output of the normalized-map model at $R^2=0.602$.
-Thus, morphology, brightness, and cluster properties remain correlated within the simulated population.
+Amplitude contributes to prediction, but the remaining signal is still associated with luminosity: the original integrated emission predicts the normalized map model's output with $R^2=0.602$.
 
 Part of the signal could also be recovered from a representation of the morphology.
 An XGBoost decision tree model applied to 48 Minkowski-functional measurements predicted pseudo-TSC at $R^2 = 0.304$ for individual projections, and at $R^2 = 0.415$ after averaging predictions across all three cluster projections.
-At the threshold selecting approximately the brightest 50\% of image pixels, the number of connected components had a Spearman correlation $\rho=0.62$ with pseudo-TSC.
-This threshold was the lowest-intensity one considered, corresponding to the highest area fraction.
+At the lowest intensity threshold, selecting approximately the brightest 50\% of pixels, the component count had Spearman correlation $\rho=0.62$ with pseudo-TSC.
 Older proxy ages were thus associated with more fragmented emission.
-A similar analysis applied to clean maps at 1.4 GHz gave similar results, with scores differing by no more than 0.02.
+Repeating the analysis at 1.4 GHz changed the scores by no more than 0.02.
 
 \begin{figure*}
   \centering
@@ -65,34 +46,14 @@ A similar analysis applied to clean maps at 1.4 GHz gave similar results, with s
   pseudo-TSC on the same 352 clusters and folds -- ridge regression on
   halo mass, on total radio flux, and on five scalars (mass, \rfive, total
   flux, mean and filling fraction of the stretched map); the pooled CNN on
-  flux-normalised maps (morphology only) and on full maps (mean and s.d.\
+  flux-normalised maps (equal integrated emission) and on full maps (mean and s.d.\
   over 5 seeds); the mean of the 5 seeds' predictions; and the five scalars
   plus that mean. Right: $R^2$ within terciles of \mfive; a mass-only
   model scores 0.04, $-0.02$ and $-0.11$ there; the scalars fail in the high-mass
   tercile, the CNN does not.}
   \label{fig:baselines}
 \end{figure*}
-\suggestion{\emph{Repetition review.} In the amplitude-normalization
-paragraph above, replace the last three sentences, beginning
-\emph{Therefore, explicit amplitude information}, with:
-Amplitude contributes to prediction, but the remaining signal is still
-associated with luminosity: the original integrated emission predicts
-the normalized-map model's output with $R^2=0.602$.
-\par
-This keeps the evidence and its immediate qualification together;
-leave the wider interpretation of correlated mass, brightness, and
-structure to the Discussion. In this figure's caption, replace
-\emph{(morphology only)} with \emph{(equal integrated emission)}.
-The current caption otherwise makes exactly the stronger claim that
-the prose repeatedly qualifies.
-\par
-In the Minkowski-functional paragraph, combine the two threshold
-sentences as:
-At the lowest intensity threshold, selecting approximately the brightest
-50 per cent of pixels, the component count has Spearman correlation
-$\rho=0.62$ with pseudo-TSC.
-Replace its final sentence with:
-Repeating the analysis at 1.4\,GHz changed the scores by no more than 0.02.}
+
 \begin{figure*}
   \centering
   \includegraphics[width=\textwidth]{fig_tsc_pred.pdf}
@@ -121,27 +82,14 @@ The original X-ray count rates are much smaller than unity, so applying the arcs
 Using $\operatorname{arcsinh}(x/a)$ with a global scale $a$ compresses bright cores and increases the relative visibility of faint spatial structure, while preserving overall brightness differences between clusters.
 
 Combining the stretched X-ray images with the 144 MHz radio maps yields a mean $R^2 = 0.545$.
-The paired increment over just radio was $0.059 \pm 0.025$, with all five seeds showing improvement ($p = 0.007$).
-This result supports the existence of complementary information between X-ray and radio data.
-However, note that the quoted significance describes variation across training seeds, and not uncertainty across independently-sampled halo populations.
-\suggestion{\emph{Repetition review.} The statistical caveat is now
-defined in the proposed Methods convention. Replace the three sentences
-beginning \emph{The paired increment over just radio} with:
-The mean paired increment over radio alone was $0.059\pm0.025$, with
-improvement in all five seeds (paired-seed $p=0.007$).
-This supports complementary information in the clean radio and X-ray
-inputs.
-\par
-Naming the paired-seed test retains the scope of the evidence without
-repeating its full interpretation here.}
+The mean paired increment over radio alone was $0.059\pm0.025$, with improvement in all five seeds (paired-seed $p=0.007$).
+This supports the hypothesis that there is complementary information in the clean radio and X-ray inputs.
 
 \subsection{With Forward-Modelling}
 \label{sec:flux}
 
 Post-processing the radio images with a forward model substantially reduced the information that could be extracted.
 Results in table \ref{tab:realistic} are obtained with radio emission cropped and rebinned in linear units with flux conservation, while X-ray photon sampling follows the exposure conventions of the processed observations.
-These models were trained on snapshots 99 and 91 and evaluated on all 352 clusters at snapshot 99.
-We distinguish the pooled-view score, which combines all three projections, from the single-view score, which evaluates each projection separately after averaging the five model predictions.
 
 For single projections, the radio-only ensemble of five models achieved $R^2 = 0.072$ with a box size of 1 Mpc, and $R^2=0.203$ with a box size of 3 Mpc.
 The corresponding scores for the pooled input models, averaged over the different seeds, were $0.142\pm0.021$ and $0.238\pm0.019$.
@@ -151,66 +99,30 @@ This reduces the relative contribution of the brightest regions compared to fain
 This injected source modification is separate from the final $\operatorname{arcsinh}(S/\sigma_{\rm rms})$ preprocessing applied to all inputs.
 While the models predicting on larger boxes performed better, injection placements were also changed, so the effect of field size was not completely isolated.
 
+The joint radio/mass and radio/X-ray comparisons below use different fold partitions between their respective conditions.
+Their bootstrap intervals therefore describe the fitted-model contrasts, including partition differences, rather than isolating the effect of adding radio inputs.
+The mass comparison uses the same fixed noisy-mass draw in both conditions.
+
 Despite significantly decreased performance, the radio images retained useful information beyond noisy mass measurements.
 The mass-only model achieved a single-observation ensemble score of $R^2 = 0.207$, which increased to $0.306$ when the 3 Mpc radio image was also provided.
 The mean paired difference was $+0.099$, with a $95\%$ confidence interval of $[+0.039, +0.158]$.
-Both experiments used the same fixed noisy mass measurements, but the specific fold partitions differed; thus, the confidence interval describes the contrast between the fitted models and the partitions, rather than a fully-matched radio contribution estimate.
 
 X-ray images showed much stronger performance under forward-modelling, achieving a single-observation ensemble $R^2 = 0.406$.
 Adding the radio images with 1 Mpc box size increased the score to $0.436$, a mean difference of $+0.031$.
 However, this difference was not significant, with a $95\%$ confidence interval of $[-0.014, +0.076]$.
-This comparison also used different fold partitions.
-\suggestion{\emph{Repetition review.} The two consecutive comparisons
-repeat the same fold-partition limitation. State it once immediately
-before the paragraph beginning \emph{Despite significantly decreased
-performance}, so it applies to both:
-The radio-plus-mass and radio-plus-X-ray comparisons below use different
-fold partitions between their respective conditions. Their bootstrap
-intervals therefore describe the fitted-model contrasts, including
-partition differences, rather than isolating the effect of adding
-radio inputs. The mass comparison uses the same fixed noisy-mass draw
-in both conditions.
-\par
-Then delete the sentence beginning \emph{Both experiments used the same
-fixed noisy mass measurements} and the sentence \emph{This comparison
-also used different fold partitions}. Keep both numerical results and
-their intervals. This qualification should remain adjacent to these
-comparisons, since it does not apply to every experiment in the paper.}
 
-A separate experiment tested whether training on individual X-ray views improved performance when inference was restricted to a single observation.
-Both conditions used identical folds and single-view inner validation scoring.
-Pooled-observation training achieved an ensemble $R^2 = 0.425$ and mean absolute error (MAE) of $0.649$ Gyr, compared with $R^2=0.421$ and MAE of $0.659$ Gyr for single-view training.
-The paired $R^2$ difference was $-0.004$, with a $95\%$ confidence interval of $[-0.027, +0.019]$.
-Therefore, single-view training showed no ensemble improvement in this experiment.
-This comparison uses a persistant parent-halo fold assignment and identical inner-selection halos in both conditions, with checkpoint selection based on single-view predictions.
-The experiments in Table ~\ref{tab:realistic} used the group-fold construction and pooled-view checkpoint selection.
-Consequently, their scores are reported as separate experiments.
-\suggestion{\emph{Repetition review.} The single-view-training paragraph
-states the matching of folds twice and spreads the protocol distinction
-over several sentences. Replace that paragraph with:
-We separately compared pooled-view and single-view X-ray training using
-the same persistent parent-halo folds, identical inner-selection halos,
-and single-view checkpoint scoring. Pooled-view training achieved
-ensemble $R^2=0.425$ and MAE 0.649\,Gyr, compared with $R^2=0.421$ and
-MAE 0.659\,Gyr for single-view training. The paired $R^2$ difference was
-$-0.004$ (95 per cent interval $[-0.027,+0.019]$), providing no evidence
-of improvement. This protocol differs from the group-fold construction
-and pooled-view checkpoint selection used in Table~\ref{tab:realistic},
-so the scores constitute a separate comparison.
-\par
-Keep this final distinction: the similar-looking scores refer to
-different evaluation protocols.}
+We separately compared pooled-view and single-view X-ray training using the same persistent parent-halo folds, identical inner-selection halos, and single-view checkpoint scoring.
+Pooled-view training achieved ensemble $R^2=0.425$ and MAE 0.649 Gyr, compared with $R^2=0.421$ and MAE 0.659 Gyr for single-view training.
+The paired $R^2$ difference was $-0.004$ (95 per cent interval $[-0.027,+0.019]$), providing no evidence of improvement.
+This protocol differs from the group-fold construction and pooled-view checkpoint selection used in Table~\ref{tab:realistic}, so the scores constitute a separate comparison.
 
-The performance on X-ray data also depended on exposure.
-In the depth experiment, the mean pooled-view $R^2$ increased from 0.312 at 5 ks to 0.365 at 20 ks and 0.450 at 50 ks.
-Further increases were not as large, reaching 0.476 at 150 ks and 0.499 at 500 ks.
-These exposures are expressed in Cycle-22-equivalent units.
-This experiment used three seeds, and only trained on data from snapshot 99, so its scores are not directly interchangable with the single-observation, five-model results stated previously.
-The trend in accuracy with exposure time describes sensitivity within the approximate count and background model; observation-specific detector footprints are not reproduced.
+In a separate exposure experiment, the mean pooled-view $R^2$ increased from 0.312 at 5 ks to 0.365 at 20 ks and 0.450 at 50 ks, with smaller subsequent increases to 0.476 at 150 ks and 0.499 at 500 ks.
+Exposures are in Cycle-22-equivalent units.
+This experiment used three seeds and trained only on snapshot-99 data, unlike the five-model, two-epoch single-observation results in Table~\ref{tab:realistic}.
+It measures depth sensitivity within the background model, but doesn't isolate the benefit of adding snapshot-91 data.
 
 Figure \ref{fig:tsc_pred} shows that the recovered age range is systematically compressed for the forward-modelled data.
 The youngest mergers are predicted about 0.35 Gyr too old, while systems at the 4 Gyr maximum were predicted about 1.2-1.4 Gyr below the maximum.
-Thus, substantial bias exists near the limits of the label distribution, especially near the 4 Gyr maximum.
 
 The simulated radio power also varied systematically with the merger state and the mass.
 After applying the density cut, the total 144 MHz power had a fitted mass slope of $2.67\pm0.16$ and scatter of $0.78$ dex.
@@ -219,35 +131,6 @@ Residuals from the total-power relation decreased with pseudo-TSC, with Spearman
 Thus, recently disturbed systems tend to be brighter at a fixed mass.
 The normalization was set globally, anchored to the observed halo-power relation; the simulated slope was not imposed.
 Comparisons with observed halo and relic relations remain contextual, as frequency, source definition, fitting method, and selection differ, and the slope alone does not establish agreement with one particular source population.
-
-The principal forward-modelled comparisons in Table~\ref{tab:realistic} are between models trained on images from both snapshot 99 and 91.
-In contrast, the exposure experiment was trained on snapshot-99 data alone.
-We did not conduct a matched comparison of one- and two-epoch training, so the benefit of the additional epoch has not been isolated.
-\suggestion{\emph{Repetition review.} Consolidate the exposure experiment
-and its repeated snapshot/estimator qualifications. Replace the paragraph
-beginning \emph{The performance on X-ray data also depended on exposure}
-with:
-In a separate exposure experiment, mean pooled-view $R^2$ rose from
-0.312 at 5\,ks to 0.365 at 20\,ks and 0.450 at 50\,ks, with smaller
-subsequent gains to 0.476 at 150\,ks and 0.499 at 500\,ks.
-Exposures are Cycle-22-equivalent. This experiment used three seeds
-and snapshot-99-only training, unlike the five-model, two-epoch
-single-observation results in Table~\ref{tab:realistic}.
-It measures depth sensitivity within the count/background model;
-it does not isolate the benefit of adding snapshot 91.
-\par
-Delete the later three-sentence paragraph immediately above this
-suggestion, beginning \emph{The principal forward-modelled comparisons}.
-The detector-footprint limitations remain in Section~\ref{sec:xray}.
-Retain the estimator distinction in Figure~\ref{fig:xray_depth}'s
-caption so the figure is independently interpretable.
-\par
-In the age-bias paragraph, delete its final sentence beginning
-\emph{Thus, substantial bias exists}: the preceding sentence already
-quantifies both endpoint biases. At the start of this subsection,
-delete the two sentences beginning \emph{These models were trained}
-and \emph{We distinguish the pooled-view score}; Methods and
-Table~\ref{tab:realistic}'s caption already define those conventions.}
 
 \begin{table*}
   \centering
@@ -285,29 +168,13 @@ Table~\ref{tab:realistic}'s caption already define those conventions.}
   \caption{The simulation's own 144\,MHz power against \mfive, coloured by
   pseudo-TSC. Left: total power of the shock cells within $\pm4$\,\rfive\
   (arbitrary zero point): slope $2.67 \pm 0.16$, scatter 0.78\,dex,
-  consistent with the radio-relic relation (slope 2.83, de Gasperin et
-  al.\ 2014) and shallower than the radio-halo one (3.55, Cuciti et al.\
-  2023); both reference slopes drawn through the median. Middle: power
-  inside the 3\,Mpc box the injected mocks carry, from the linear emission
+  reference slopes of 2.83 for radio relics \todo{cite de Gasperin 2014} and 3.55 for radio halos \citep{Cuciti2023} are drawn through the median for context; source definitions and selections differ.
+  Middle: power inside the 3\,Mpc box the injected mocks carry, from the linear emission
   (one global constant, fixed on total power, puts it in W\,Hz$^{-1}$):
   slope $2.36 \pm 0.19$, scatter 0.93\,dex. Right: residuals from the total-power fit fall with merger age
-  (Spearman $-0.33$): recent mergers are over-luminous for their mass, the
-  sign seen in observed samples.}
+  (Spearman $-0.33$): recent mergers are over-luminous for their mass.}
   \label{fig:pm}
 \end{figure*}
-\suggestion{\emph{Repetition review.} The body carefully limits the
-comparison with observed power--mass relations, but this caption
-reintroduces an agreement claim that would need the caveat repeated.
-Replace the clause from \emph{consistent with the radio-relic relation}
-through \emph{both reference slopes drawn through the median} with:
-reference slopes of 2.83 for radio relics (de Gasperin et al.\ 2014)
-and 3.55 for radio halos (Cuciti et al.\ 2023) are drawn through the
-median for context; source definitions and selections differ.
-\par
-At the end, delete \emph{the sign seen in observed samples}, leaving
-the measured result that recent mergers are over-luminous at fixed mass
-in these simulations. This makes the caption's claim consistent with
-the body without another long qualification.}
 
 \subsection{Loss, output head and contrastive pretraining}
 \label{sec:loss_head}
@@ -324,16 +191,7 @@ Its categorical log score was 1.649 compared with 1.888 for the reference.
 Its normalized ranked probability score was 0.125 compared with 0.160.
 Its Brier score for the no-crossing category was 0.068 compared with 0.088.
 All three paired conditional intervals favored the model.
-These results establish probabilistic skill relative to the baseline model, but do not establish calibrated uncertainty in physical collision times.
-\suggestion{\emph{Repetition review.} Replace the preceding sentence with:
-The images therefore provide probabilistic information about the
-pseudo-TSC classes beyond the fitting-sample frequencies.
-\par
-The physical collision-age qualification belongs with the label
-definition; the distinct question of probability calibration and
-coverage belongs in the Discussion's uncertainty paragraph.
-Improved probability scores alone should not be described as calibrated
-uncertainty.}
+The images therefore provide probabilistic information about the pseudo-TSC classes beyond the fitting-sample frequencies.
 
 A pilot study using contrastive pretraining showed that this method performed significantly worse than the Huber loss control.
 Rotations and reflections were applied to individual observations to construct positive pairs, followed by an encoder with weights frozen during downstream training.
@@ -364,23 +222,10 @@ After controlling for redshift, the partial-rank correlation was 0.71, with a Fr
 Controlling instead for weak-lensing mass gave a partial correlation of 0.54 among the 11 systems with available masses, with $p=0.11$.
 This latter comparison does not establish agreement independent of mass.
 
-Despite the correlated rankings between the predictions derived from radio and X-ray data, the two sources systematically disagreed in their absolute predictions.
-The radio model assigned older proxy ages than the X-ray model to 14 of the 15 clusters with both sources, with a median paired offset of 0.44 Gyr.
-Their respective median predictions were 1.10 and and 0.83 Gyr.
-Applying the forward-model did not remove this offset, and its origin remains unidentified.
-Without independent constraints on the merger time, the agreement tests consistency of the inferred ordering, but the systematic offset between the predictions shows that the proxy age scales are not interchangeable.
-\suggestion{\emph{Repetition review.} Replace the paragraph beginning
-\emph{Despite the correlated rankings} with:
-Radio assigned older proxy ages to 14 of the 15 systems, with a median
-paired offset of 0.44\,Gyr; the radio and X-ray medians were 1.10 and
-0.83\,Gyr, respectively. The origin of this offset remains unidentified.
-The correlated rankings show cross-band consistency, but the age scales
-are not interchangeable, and neither has been validated against
-independent merger-time constraints.
-\par
-This is the appropriate location for the observational-accuracy
-qualification removed from Observations and Methods. It also removes
-the duplicated \emph{and} in the median-age sentence.}
+Radio assigned older proxy ages to 14 of the 15 systems, with a median paired offset of 0.44 Gyr.
+The radio and X-ray medians were 1.10 and 0.83 Gyr, respectively.
+The origin of this offset remains unidentified.
+The correlated rankings show cross-band consistency, but the age scales are not interchangable, and neither has been validated against independent constraints on the merger time.
 
 \begin{figure}
   \centering

@@ -13,65 +13,24 @@ The radio power assigned to each image is proportional to its integrated linear 
     &= A_\text{rad} \sum_{p \in \text{box}} w_p
 \end{align*}
 where $w_p$ is the total emission weight in pixel $p$.
-We fixed the global normalization $A_\text{rad}$ by matching the median total power of the snapshot-99 images to the median power predicted at its cluster masses by the relation in \cite{Cuciti2023}:
+We set $A_\text{rad}$ by matching the median logarithmic total power of the full snapshot-99 maps to the median logarithmic power predicted at their cluster masses using thr relation in \cite{Cuciti2023}:
 \begin{equation}\label{eq:power-relation}
     \log_{10} \! \left( \frac{P_{150}}{10^{24.5}\, \text{W Hz}^{-1}} \right)
     = 1.1 + 3.55 \log_{10}\! \left( \frac{M_{500}}{10^{14.9} M_\odot} \right).
 \end{equation}
-This normalization is used globally, for every cluster from both snapshots, as a normalization of radio halos at 150 MHz for the 144 MHz shock emission maps.
-Replace the normalization explanation with:
-We set a global multiplicative constant by matching the median logarithmic
-total power of the full snapshot-99 maps to the median logarithmic power
-predicted at their cluster masses by equation~\ref{eq:power-relation}.
+The same constant is applied to every cluster in both snapshots, transferring the 150 MHz radio-halo power scale to the 144 MHz shock-emission maps.
 Flux densities are calculated using the luminosity distance and a spectral index of $\alpha = 1.2$, defined by $S_\nu \propto \nu^{-\alpha}$ \citep{Cuciti2023}.
-\suggestion{\emph{Repetition review.} Both the old normalization wording
-and its intended replacement are present, including the editorial
-instruction \emph{Replace the normalization explanation with}.
-Retain equation~\ref{eq:power-relation}. Replace its introductory sentence
-beginning \emph{We fixed the global normalization} with:
-We set $A_{\rm rad}$ by matching the median logarithmic total power of
-the full snapshot-99 maps to the median logarithmic power predicted at
-their cluster masses by the relation of \citet{Cuciti2023}:
-\par
-Replace everything between that equation and \emph{Flux densities are
-calculated} with:
-The same constant is applied to every cluster at both snapshots,
-transferring the 150\,MHz radio-halo power scale to the 144\,MHz
-shock-emission maps.
-\par
-Keep the flux-density sentence. This removes the duplicate normalization
-explanation without changing the unresolved radio-prescription issue
-in Section~\ref{sec:hybrid-radio}.}
 
 For each simulated cluster, we generated three observational realizations, drawing a redshift value from the radio target sample and independently selecting a background from 201 80' LoTSS DR3 fields.
 Background positions were sampled 1-3 degrees from the survey targets; usable 80' fields were cropped to the angular size appropriate for the selected redshift and then resampled.
 We draw real redshifts to ensure we sample from the observed redshift distribution.
 Using real background fields supplies realistic observed noise correlations, unrelated radio sources, and imaging artifacts.
 Each realization consists of the three orthogonal simulation projections, which had the same forward-modelling process applied.
-We convolved the simulated emission with a circular 9" Gaussian restoring beam, which matches the true beam size for 22 of the 26 targets, with the rest having 6" beam sizes; we did not homogenize all images to a common restoring beam.
+We convolved the simulated emission maps with a circular 9" Gaussian restoring beam; the four observed targets with native 6" beams retained that resolution.
 We converted the output to Jy per beam, and added this to the corresponding resampled field.
+After injection, we apply the compact-source masking and arcsinh-stretch transformation used for observations (section~\ref{sec:obs}), estimating $\sigma_\text{rms}$ before masking each injected image.
 
-Compact sources were then masked using the same procedure for injected mocks and observations.
-We classified connected emission by using half-peak area relative to the assumed beam area, taking components occupying at most ten beam half-power areas at $5\sigma_\text{rms}$ as being compact sources.
-These were replaced with the surrounding annular median plus Gaussian noise.
-Finally, we applied normalization as $\operatorname{arcsinh}(S/\sigma_\text{rms})$, with $\sigma_\text{rms}$ estimated by sigma clipping before masking.
-\suggestion{\emph{Repetition review.} Replace the four sentences beginning
-\emph{Compact sources were then masked} with a reference to the shared
-procedure, whose full definition belongs in Section~\ref{sec:obs}:
-After injection, we apply the compact-source masking and
-$\operatorname{arcsinh}(S/\sigma_{\rm rms})$ transformation used for the
-observations (Section~\ref{sec:obs}), estimating $\sigma_{\rm rms}$ before
-masking each injected image.
-\par
-In the preceding paragraph, delete \emph{We draw real redshifts to ensure
-we sample from the observed redshift distribution}: the first sentence
-already specifies that sampling. Replace the beam sentence, whose
-target counts are also given in Observations, with:
-We convolve the simulated emission with a circular 9-arcsec Gaussian
-restoring beam; the four observed targets with native 6-arcsec beams
-retain that resolution.}
-
-We assessed the realism of this simulated images using area fraction, perimeter, connected-component count, and Euler characteristic at ten logarithmically-spaced thresholds between 1 and $20\sigma_\text{rms}$.
+Realism of the simulated images was evaluated using area fraction, perimeter, connected-component count, and Euler characteristic at ten logarithmically-spaced thresholds between 1 and $20\sigma_\text{rms}$.
 We measured morphology agreement as
 \newcommand{\median}{\operatorname{median}}
 \begin{equation}
@@ -127,22 +86,11 @@ Source counts are reduced by binomial thinning, with retainment probability:
     f_{L_X} f_{N_H}
     \right]
 \end{equation}
-where $T_\text{eq}$ is the target Chandra ACIS-I equivalent exposure time, 2 Ms is the original mock exposure, $D_L(z)$ is the luminosity distance at the assigned observing redshift $z$, $z_\text{mock}$ is the original observing redshift for the mock (0.05 for snapshot-99 and 0.0994 for snapshot-91), $f_{L_X}$ is a dimensionless global source-brightness correction of 0.358, and $f_{N_H}$ is a dimensionless absorption correction, calculated from the predicted source count rate through the target's Galactic hydrogen column divided by that through the original mock column, $N_H = 10^{20}$ cm$^{-2}$.
-We evaluate the distance factor relative to each mock dataset's original observing redshift.
-This placement approximates the redshift dependence through count scaling.
-\suggestion{\emph{Repetition review.} The equation's variable definitions
-repeat the brightness and absorption recipes given below. Keep the
-symbol definitions here and the recipes in those later paragraphs.
-Replace the prose from \emph{where $T_\text{eq}$} through
-\emph{This placement approximates} with:
-Here $T_{\rm eq}$ is the target's Cycle-22-equivalent exposure, and
-2\,Ms is the original mock exposure. $D_L$ is the luminosity distance,
-$z$ is the assigned observing redshift, and $z_{\rm mock}$ is the
-original observing redshift: 0.05 for snapshot 99 and 0.0994 for
-snapshot 91. The dimensionless factors $f_{L_X}$ and $f_{N_H}$ correct
-source brightness and Galactic absorption, respectively, as described
-below. This placement approximates redshift dependence by scaling
-counts.}
+
+Here, $T_\text{eq}$ is the target's Cycle-22-equivalent exposure, and 2 Ms is the original mock exposure.
+$D_L$ is the luminosity distance, $z$ is the assigned observing redshift, and $z_\text{mock}$ is the original observing redshift (0.05 for snapshot-99 and 0.0994 for snapshot-91).
+The dimensionless factors $f_{L_X}$ and $f_{N_H}$ correct source brightness and Galactic absorption, respectively, as described below.
+This placement approximates redshift through count scaling.
 
 Detected photons can come from either the source and sky background, or from instrumental particles.
 The former counts scale with the Cycle-22-equivalent exposure, $T_\text{eq}$, while the latter scale with detector livetime $T_\text{live}$.
@@ -167,31 +115,14 @@ Target-dependent galactic absorption is applied using a count-rate ratio relativ
 This ratio was calculated using an absorbed APEC spectrum with $kT = 5$ keV and metallicity $0.3 Z_\odot$, weighted by the Cycle-22 effective area.
 This scalar approximation reduces the source count rate by approximately 2\% at the sample median.
 
-We use a common aperture of approximately 485 kpc radius at $z \geq 0.05$, and reduce its physical radius at lower redshifts to remain within an 8' angular radius.
-Pixels outside the aperture are set to zero.
-Both mock and observed count rates are transformed using $\operatorname{arcsinh}(R/a)$, with the same scale $a$ across both snapshots and observations.
+We apply the same redshift-dependent aperture, exterior zero mask, and $\operatorname{arcsinh}(R/a)$ transform as for the observed images (section~\ref{sec:obs}), using one scale $a$ for both snapshots and all observations.
 
 As a diagnostic, we measured the robust high-pass variance relative to the mean rate in the outer 60-100\% of the aperture radius, and compared the values for the mocks and real observations.
 Across 14 targets with matched mocks, the median real-to-mock ratio was 1.12, with a 16th-84th percentile range of 0.81-1.20.
 A1750 lacks a matched mock for this comparison.
 A763 is an outlier, with a ratio of 0.07.
 
-Recovering counts from exposure-corrected images is imperfect where exposure varies across dither edges and chip gaps.
 The mocks also do not reproduce each real observation's exposure footprint, roll angle, or full spectral response, and interpolation of gaps in the observed images can create correlated noise and altered variance.
-\suggestion{\emph{Repetition review.} The aperture and final transform
-repeat Section~\ref{sec:obs}. Replace the three sentences beginning
-\emph{We use a common aperture} with:
-We apply the same redshift-dependent aperture, exterior zero mask, and
-$\operatorname{arcsinh}(R/a)$ transform as for the observed images
-(Section~\ref{sec:obs}), using one scale $a$ across both snapshots and
-observations.
-\par
-The count-recovery qualification is already attached to the regridding
-procedure in Section~\ref{sec:sims}. Delete the sentence beginning
-\emph{Recovering counts from exposure-corrected images}.
-Keep the remaining sentence here, starting \emph{The mocks do not
-reproduce}, since detector footprints, roll angles, spectral response,
-and interpolation effects are additional limitations.}
 
 \begin{figure}
   \centering
