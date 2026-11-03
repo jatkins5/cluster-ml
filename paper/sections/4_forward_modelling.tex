@@ -24,6 +24,24 @@ We set a global multiplicative constant by matching the median logarithmic
 total power of the full snapshot-99 maps to the median logarithmic power
 predicted at their cluster masses by equation~\ref{eq:power-relation}.
 Flux densities are calculated using the luminosity distance and a spectral index of $\alpha = 1.2$, defined by $S_\nu \propto \nu^{-\alpha}$ \citep{Cuciti2023}.
+\suggestion{\emph{Repetition review.} Both the old normalization wording
+and its intended replacement are present, including the editorial
+instruction \emph{Replace the normalization explanation with}.
+Retain equation~\ref{eq:power-relation}. Replace its introductory sentence
+beginning \emph{We fixed the global normalization} with:
+We set $A_{\rm rad}$ by matching the median logarithmic total power of
+the full snapshot-99 maps to the median logarithmic power predicted at
+their cluster masses by the relation of \citet{Cuciti2023}:
+\par
+Replace everything between that equation and \emph{Flux densities are
+calculated} with:
+The same constant is applied to every cluster at both snapshots,
+transferring the 150\,MHz radio-halo power scale to the 144\,MHz
+shock-emission maps.
+\par
+Keep the flux-density sentence. This removes the duplicate normalization
+explanation without changing the unresolved radio-prescription issue
+in Section~\ref{sec:hybrid-radio}.}
 
 For each simulated cluster, we generated three observational realizations, drawing a redshift value from the radio target sample and independently selecting a background from 201 80' LoTSS DR3 fields.
 Background positions were sampled 1-3 degrees from the survey targets; usable 80' fields were cropped to the angular size appropriate for the selected redshift and then resampled.
@@ -37,6 +55,21 @@ Compact sources were then masked using the same procedure for injected mocks and
 We classified connected emission by using half-peak area relative to the assumed beam area, taking components occupying at most ten beam half-power areas at $5\sigma_\text{rms}$ as being compact sources.
 These were replaced with the surrounding annular median plus Gaussian noise.
 Finally, we applied normalization as $\operatorname{arcsinh}(S/\sigma_\text{rms})$, with $\sigma_\text{rms}$ estimated by sigma clipping before masking.
+\suggestion{\emph{Repetition review.} Replace the four sentences beginning
+\emph{Compact sources were then masked} with a reference to the shared
+procedure, whose full definition belongs in Section~\ref{sec:obs}:
+After injection, we apply the compact-source masking and
+$\operatorname{arcsinh}(S/\sigma_{\rm rms})$ transformation used for the
+observations (Section~\ref{sec:obs}), estimating $\sigma_{\rm rms}$ before
+masking each injected image.
+\par
+In the preceding paragraph, delete \emph{We draw real redshifts to ensure
+we sample from the observed redshift distribution}: the first sentence
+already specifies that sampling. Replace the beam sentence, whose
+target counts are also given in Observations, with:
+We convolve the simulated emission with a circular 9-arcsec Gaussian
+restoring beam; the four observed targets with native 6-arcsec beams
+retain that resolution.}
 
 We assessed the realism of this simulated images using area fraction, perimeter, connected-component count, and Euler characteristic at ten logarithmically-spaced thresholds between 1 and $20\sigma_\text{rms}$.
 We measured morphology agreement as
@@ -97,6 +130,19 @@ Source counts are reduced by binomial thinning, with retainment probability:
 where $T_\text{eq}$ is the target Chandra ACIS-I equivalent exposure time, 2 Ms is the original mock exposure, $D_L(z)$ is the luminosity distance at the assigned observing redshift $z$, $z_\text{mock}$ is the original observing redshift for the mock (0.05 for snapshot-99 and 0.0994 for snapshot-91), $f_{L_X}$ is a dimensionless global source-brightness correction of 0.358, and $f_{N_H}$ is a dimensionless absorption correction, calculated from the predicted source count rate through the target's Galactic hydrogen column divided by that through the original mock column, $N_H = 10^{20}$ cm$^{-2}$.
 We evaluate the distance factor relative to each mock dataset's original observing redshift.
 This placement approximates the redshift dependence through count scaling.
+\suggestion{\emph{Repetition review.} The equation's variable definitions
+repeat the brightness and absorption recipes given below. Keep the
+symbol definitions here and the recipes in those later paragraphs.
+Replace the prose from \emph{where $T_\text{eq}$} through
+\emph{This placement approximates} with:
+Here $T_{\rm eq}$ is the target's Cycle-22-equivalent exposure, and
+2\,Ms is the original mock exposure. $D_L$ is the luminosity distance,
+$z$ is the assigned observing redshift, and $z_{\rm mock}$ is the
+original observing redshift: 0.05 for snapshot 99 and 0.0994 for
+snapshot 91. The dimensionless factors $f_{L_X}$ and $f_{N_H}$ correct
+source brightness and Galactic absorption, respectively, as described
+below. This placement approximates redshift dependence by scaling
+counts.}
 
 Detected photons can come from either the source and sky background, or from instrumental particles.
 The former counts scale with the Cycle-22-equivalent exposure, $T_\text{eq}$, while the latter scale with detector livetime $T_\text{live}$.
@@ -132,6 +178,20 @@ A763 is an outlier, with a ratio of 0.07.
 
 Recovering counts from exposure-corrected images is imperfect where exposure varies across dither edges and chip gaps.
 The mocks also do not reproduce each real observation's exposure footprint, roll angle, or full spectral response, and interpolation of gaps in the observed images can create correlated noise and altered variance.
+\suggestion{\emph{Repetition review.} The aperture and final transform
+repeat Section~\ref{sec:obs}. Replace the three sentences beginning
+\emph{We use a common aperture} with:
+We apply the same redshift-dependent aperture, exterior zero mask, and
+$\operatorname{arcsinh}(R/a)$ transform as for the observed images
+(Section~\ref{sec:obs}), using one scale $a$ across both snapshots and
+observations.
+\par
+The count-recovery qualification is already attached to the regridding
+procedure in Section~\ref{sec:sims}. Delete the sentence beginning
+\emph{Recovering counts from exposure-corrected images}.
+Keep the remaining sentence here, starting \emph{The mocks do not
+reproduce}, since detector footprints, roll angles, spectral response,
+and interpolation effects are additional limitations.}
 
 \begin{figure}
   \centering

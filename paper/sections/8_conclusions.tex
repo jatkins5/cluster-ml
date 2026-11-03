@@ -36,3 +36,47 @@ These results establish the feasibility of recovering a continuous indicator of 
 The principal challenges for estimating merger timing are now to establish the robustness of the emission models, calibrate predictions against independent constraints, and improve the matching of simulated and observed samples.
 Validation must also address the compression of the predicted age range, as well as uncertainty beyond variation between training runs.
 With these developments, inference from cluster images could support systematic analyses of connections between intracluster gas structure, merger history, and radio emission across large cluster populations.
+\suggestion{\emph{Repetition review.} The 1\,Mpc joint-model null result
+is repeated in consecutive paragraphs, and the ending restates the
+accuracy/validation qualification several times. A shorter replacement
+for the entire Conclusions text is below. It retains brief limitations
+because the Conclusions, like the abstract and captions, should remain
+understandable on their own.
+\par
+We trained convolutional neural networks on TNG-Cluster radio and
+X-ray maps to infer pseudo-TSC, a score-derived indicator of recent
+merger activity, and applied the models to LoVoCCS observations.
+For clean inputs pooling three projections per cluster, mean
+out-of-fold $R^2$ was 0.485 for radio, 0.511 for X-rays, and 0.545 for
+joint inputs. Radio predictions remained informative within mass bins
+and after equalizing integrated emission, although correlations among
+mass, luminosity, and structure prevent a complete separation of their
+contributions.
+\par
+The gas-phase audit showed that a median 99 per cent of unfiltered
+radio weight arose above $n_{\rm H}=10^{-4}$\,cm$^{-3}$, including in cold
+gas. This motivated restricting the emitting gas to the diffuse
+environment targeted by the shock model and illustrates the need to
+check which gas phases dominate synthetic observables.
+\par
+Under forward modelling, five-model ensembles scored $R^2=0.203$ for
+individual 3\,Mpc radio observations and 0.406 for X-rays.
+Adding radio to noisy mass measurements was promising but needs
+confirmation with matched folds. Adding 1\,Mpc radio inputs to X-rays
+gave no statistically significant improvement; a matched joint test
+using 3\,Mpc radio inputs remains necessary.
+A separate exposure experiment found diminishing X-ray performance
+gains beyond approximately 50\,ks.
+\par
+Application to LoVoCCS yielded radio predictions for 26 clusters and
+X-ray predictions for 15. In the overlapping sample, the rankings
+correlated at $\rho=0.61$, but radio assigned older ages to 14 of
+15 systems, with a median offset of 0.44\,Gyr.
+This demonstrates consistency of ordering alongside an unresolved
+difference in proxy-age scales.
+\par
+The experiments establish recoverable merger-history information in
+simulated cluster observations. Physical collision-age inference
+still requires independent merger constraints, robust emission and
+observing models, and uncertainty calibration that accounts for the
+compressed predicted age range and the 4\,Gyr label cap.}

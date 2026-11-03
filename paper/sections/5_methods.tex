@@ -21,6 +21,17 @@ We apply the same transformation to the validation, test, and observed datasets.
 In the clean-map CNN experiments, each image channel is standardized using the mean and standard deviation of the outer fold's fitting images, excluding the inner-validation and outer-test images.
 We apply the same transformation to that fold's validation and test inputs.
 The forward-modelled CNN experiments use the stored arcsinh-stretched inputs described in section~\ref{sec:fwd}, without an additional transformation.
+\suggestion{\emph{Repetition review.} The old image-standardization
+description remains immediately above its corrected replacement.
+Delete the two sentences beginning \emph{Before training, we normalize}
+and \emph{We apply the same transformation to the validation, test, and
+observed datasets}. Retain the clean-map-specific paragraph here;
+the old version also incorrectly extends image standardization to
+the forward-modelled experiments.
+\par
+Delete the later sentence beginning \emph{Observationally forward-modelled
+data was preprocessed}: this paragraph and the opening already refer
+to Section~\ref{sec:fwd}.}
 
 We train models on two types of inputs: idealized pooled-view datasets, in which the three projections of a cluster are combined, and single-view datasets, for which the model is only given one orthogonal projection.
 For the latter, we measure the ensemble average performance for five models initialized with five different random seeds.
@@ -58,6 +69,34 @@ For paired model comparisons, we use a bootstrap \citep{EfronTibshirani1993}, re
 We state the 2.5th and 97.5th percentiles of the resulting metric differences as conditional 95\% intervals.
 The same sampled halos are used for both compared models.
 These confidence intervals condition on fitted runs, and thus do not include uncertainty from retraining on new halo populations.
+\suggestion{\emph{Repetition review.} Make these two paragraphs the single
+definition of the statistical uncertainty conventions. Replace the text
+from \emph{We measured performance using} through the preceding sentence
+with:
+We calculate $R^2$ from the combined out-of-fold predictions.
+Unless otherwise stated, experiments use five shared training seeds,
+and quoted seed scatter is the standard deviation of the per-seed
+scores. Paired-seed tests describe variation across training runs
+on the same halo sample.
+\par
+For paired model differences, we resample parent halos with replacement
+4000 times, drawing all views and realizations of a halo together and
+using the same draws for both models
+\citep{EfronTibshirani1993,DavisonHinkley1997}.
+We report the 2.5th and 97.5th percentiles as 95 per cent intervals.
+These intervals are conditional on the fitted models and do not include
+retraining on new halo populations. Neither seed scatter nor these
+intervals represents a per-cluster predictive uncertainty.
+\par
+Later in the probability-score paragraph, replace its final sentence
+beginning \emph{The mean scores on the same held-out observations} with:
+We compare mean scores on the same held-out observations using this
+paired bootstrap.
+\par
+The Results can then identify each test as a paired-seed test or a
+parent-halo bootstrap without repeating the full limitations. Keep
+the separate Freedman--Lane assumptions at the end of Methods:
+they concern a different inference procedure.}
 
 For an observation with true class $y$ and predicted class probabilities $p_c$, the categorical log score is $-\ln p_y$.
 The normalized ranked probability score is
@@ -119,6 +158,25 @@ We select gas within a cube of half-width $2R_{500}$ about the \texttt{GroupPos}
 The experiments that have access to all three cluster projections provide a benchmark in which several views of the same cluster are available, which can be compared with the model performance on the realistic case individual observed images from a single viewing direction.
 The latter can be interpreted alongside the corresponding observationally forward-modelled tests.
 Because the observed clusters lack independent pseudo-TSC labels, agreement between radio and X-ray predictions provides a consistency check rather than a direct accuracy measurement.
+\suggestion{\emph{Repetition review.} Three further deletions would remove
+repeated framing while retaining the procedures:
+\par
+Delete \emph{These comparisons tested whether the raw image data provided
+extra predictive power over summary statistics of a cluster's scale,
+emission amplitude, and simple properties of the intensity distribution}.
+The scalar-baseline paragraph's first sentence already states this aim.
+\par
+Delete \emph{Note that this normalization did not remove correlations
+between mass, morphology, and luminosity}. The Results give the
+quantitative evidence for that limitation and the Discussion interprets
+it; the normalization recipe itself remains here.
+\par
+Delete the entire three-sentence paragraph immediately above, beginning
+\emph{The experiments that have access to all three cluster projections}.
+Pooled and single-view inputs were already defined earlier in Methods,
+and the interpretation of observed radio--X-ray agreement belongs beside
+the measurements in Section~\ref{sec:lovoccs}. Retain the following
+partial-rank and permutation-test definitions.}
 
 We rank the two prediction vectors and the nuisance variable once, and regress each ranked prediction on an intercept and the ranked nuisance variable.
 Their residual correlation is the partial-rank statistic.

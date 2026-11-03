@@ -21,6 +21,23 @@ Components occupying at most ten such beam areas are masked by replacing them wi
 The same procedure is applied to the field-injected mocks.
 The resulting images are then ``arcsinh-stretched'', by applying $\operatorname{arcsinh}(S/\sigma_\text{rms})$, where $S$ is the pixel value and $\sigma_\text{rms}$ is a scale estimated by \emph{sigma-clipping} before masking: on the resampled image, we perform five iterations of clipping pixels more than three standard deviations from the current median; we take the remaining standard deviation as the scale; retain that scale through compact-source masking; and then apply the arcsinh-stretch.
 The median value of the scale on the resampled 3 Mpc cutouts is 0.143 mJy per beam.
+\suggestion{\emph{Repetition review.} This paragraph explains the
+arcsinh transform twice, and the masking recipe is repeated in
+Section~\ref{sec:fwd}. Keep the full shared recipe here. Replace the
+paragraph beginning \emph{To suppress contamination} through the median
+noise-scale sentence with:
+On each resampled image, we estimate $\sigma_{\rm rms}$ using five
+iterations of clipping pixels more than three standard deviations from
+the current median. The standard deviation of the retained pixels is
+then held fixed during masking and intensity transformation.
+We identify connected emission above $5\sigma_{\rm rms}$ and mask
+components whose half-peak area is at most ten assumed beam half-power
+areas. Masked pixels are replaced by the surrounding annular median
+plus Gaussian noise with standard deviation $\sigma_{\rm rms}$.
+We apply the same procedure to observations and field-injected mocks,
+then transform both using $\operatorname{arcsinh}(S/\sigma_{\rm rms})$.
+The median $\sigma_{\rm rms}$ on the observed 3\,Mpc cutouts is
+0.143\,mJy\,beam$^{-1}$.}
 
 The archival Chandra dataset contains 55 public observations of 19 of our radio targets, comprising 25 ACIS-I observations of 15 targets and 30 ACIS-S observations.
 We use the 25 ACIS-I observations, matching the detector configuration of our simulated observations.
@@ -48,6 +65,13 @@ between the upper and lower mass bounds, divided by the median
 estimate of $M_{200\mathrm{c}}$.
 These masses are used for the mass-conditioned analysis, as well as comparisons at fixed mass values.
 Because the observed clusters lack independent merger-time labels, agreement between their radio and X-ray predictions is used to check consistency.
+\suggestion{\emph{Repetition review.} Delete the preceding sentence.
+The Introduction already states the purpose of comparing bands, and
+Section~\ref{sec:lovoccs} can give the interpretation beside the measured
+agreement and offset. The Observations section can end this paragraph
+with the uses of the weak-lensing masses. In the earlier particle
+background paragraph, remove the duplicated \emph{the} in
+\emph{restore the the reference}.}
 
 \begin{figure*}
   \centering
