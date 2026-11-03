@@ -20,59 +20,20 @@ sensitivity to simulation physics. Our approximate forward model
 addresses some of these effects but does not reproduce every observed
 detector footprint or establish robustness across simulation suites.}
 
-Properly interpreting the regression target is essential.
-Pseudo-TSC is defined as the interpolated window size at which the merger score reaches a specific threshold.
-Its strong rank correlation with the catalogue collision metric supports its use as an indicator of recent merger activity.
-However, it is not calibrated as a direct time since pericentric passage.
-The catalogue comparison includes minor mergers, with median mass ratio of approximately 1:11 for events defining the most recent collision time.
-The 4 Gyr cap limits the proxy's age resolution, since the endpoint value can't distinguish histories with scores remaining below the threshold throughout the sampled window.
-Predictions near the cap value are not intrinsically invalid, but cannot be interpreted as resolving collision times beyond that window.
-\suggestion{\emph{Repetition review.} This paragraph repeats the label
-definition, catalogue comparison, minor-merger mass ratio, and cap
-interpretation from Section~\ref{sec:sims}. Replace it with the
-implication for the results:
-The strong association between pseudo-TSC and the catalogue clock
-supports using the predictions to study relative merger activity.
-The 4\,Gyr endpoint groups histories that the sampled window cannot
-resolve (Section~\ref{sec:sims}), making the compression of predictions
-near that endpoint especially important.
-\par
-The broader requirements for physical-age calibration can be stated
-once in the uncertainty paragraph below.
-Separately, if the existing ERGO-ML suggestion above is adopted, place
+The strong association between pseudo-TSC and the catalogue collision metric supports using the predictions to study relative merger activity.
+The 4 Gyr endpoint groups histories that the sampled window cannot resolve (section~\ref{sec:sims}), making compression of predictions near that endpoint especially important.
+
+\suggestion{
+if the existing ERGO-ML suggestion above is adopted, place
 one shared qualification after the Arendt and ERGO-ML comparisons:
 Differences in prediction targets, image construction, sample selection,
 and evaluation prevent direct accuracy comparisons with either study.
 This would replace the similar qualification currently made separately
 for each study; the unresolved substantive literature comparison remains.}
 
-
-The radio experiments indicate that both emission amplitude and spatial structure contribute to predictive accuracy.
-Integrated emission is already a strong predictor of merger activity, and normalizing the radio maps to a common total emission reduces CNN performance.
-Nevertheless, the normalized images retain substantial predictive information, as do the explicit morphological descriptors.
-The CNN also remains predictive within mass bins, suggesting the presence of information in addition to the overall mass-age association.
-
-However, our results do not provide a complete separation of information content between morphology, luminosity, and mass; they remain correlated within the simulated population, and the normalized-image predictions still correlate with the original luminosity.
-Residual radio power at fixed mass decreases with pseudo-TSC in our simulated sample ($\rho = -0.33$), so brightness carries information about recent activity.
-This is qualitatively consistent with time-dependent shock-powered radio light curves \citep{Nuza2024}.
-However, its observational usefulness depends on whether this relation transfers to real clusters.
-\suggestion{\emph{Repetition review.} The two paragraphs beginning
-\emph{The radio experiments indicate} repeat the normalization and
-mass-bin results, then state the correlation caveat again.
-Replace both with:
-Integrated emission carries substantial merger-history information,
-but it does not account for all of the radio CNN's performance:
-normalized maps, explicit morphological descriptors, and tests within
-mass bins remain predictive (Section~\ref{sec:results}).
-These tests do not separate morphology, luminosity, and mass into
-independent contributions, because those properties remain correlated
-in the simulated population. The decline of residual radio power with
-pseudo-TSC at fixed mass is qualitatively consistent with the evolving
-shock-powered radio light curves of \citet{Nuza2024}.
-\par
-The later observational-model and validation paragraphs address transfer
-to real clusters; another general transfer qualification is unnecessary
-at the end of this paragraph.}
+Integrated emission carries substantial merger history information, but it does not account for all of the radio CCN's performance; normalized maps, explicit morphological descriptors, and tests within mass bins remain predictive (Section~\ref{sec:results}).
+These tests do not separate morphology, luminosity, and mass into independent contributions, because those properties remain correlated in the simulated population. 
+The decline of residual radio power with pseudo-TSC at fixed mass is qualitatively consistent with the evolving shock-powered radio light curves of \citet{Nuza2024}.
 
 Before the density cut, a median of approximately 99\% of the radio weight arises in gas with $n_\text{H} > 10^{-4}$ cm$^{-3}$, including in a substantial cold component.
 The cold, dense gas is consistent with stripped satellite material, but we did not investigate its origin.
@@ -84,170 +45,45 @@ The radio amplitude is anchored to an observed radio-halo relation, although the
 Thus, agreement in overall brightness is partly imposed, rather than an independent validation of the emission model.
 Interpreting residual differences requires comparisons between matched source definitions, mass distributions, apertures, and selection.
 
-The adopted forward-modelled radio inputs yield substantially lower predictive scores than the clean-map benchmarks.
-This comparison combines changes in resolution, aperture, background, and observing depth, and thus does not isolate the contribution from any one effect.
-The improved performance of the 3 Mpc images is consistent with the presence of useful information outside the central cluster region.
-These sensitivities reinforce the conclusion of \cite{Bottrell2019} that realistic image construction is important to determine whether features learned from simulations remain useful in observational conditions.
+The decline from clean-map to forward-modelled radio performance combines changes in resolution, aperture, background, and observing depth.
+It reinforces the importance of observational realism emphasized by \citet{Bottrell2019}, while leaving the contribution of each change unresolved.
 
-Radio and X-ray images provide complementary information in the clean-map experiments, but radio does not appear to provide additional benefit over X-ray alone after applying the forward-modelling pipeline.
-However, the comparison uses a 1 Mpc radio aperture and different fold partitions, which somewhat limit its interpretation.
-The apparent improvement from adding the 3 Mpc radio image to a noisy mass measurement is encouraging, but also requires a comparison with identical partitions.
+Although the clean bands are complementary, adding the 1 \,Mpc radio input to X-rays did not give a demonstrated gain under forward modeling.
+That comparison and the encouraging radio/mass result require matched folds, and the joint model still needs a test using the larger radio aperture.
 \todo{should run 3Mpc box size, and also rerun with the fold partitions fixed}
 
-The matched optical experiment provides clearer results, showing that, while idealized galaxy-structure features improve prediction beyond mass, redshift, and richness, adding them to X-ray images yields no demonstrated further gain.
-These comparisons find no demonstrated incremental gain the tested observational band combinations.
-However, since aperture, observing depth, and model choice limit the power of these comparisons, we can't conclude that the observationally-degraded bands contain completely identical information.
-\suggestion{\emph{Repetition review.} Three nearby paragraphs restate
-limited gains and then repeatedly qualify them.
-Replace the paragraph beginning \emph{The adopted forward-modelled radio
-inputs} with:
-The decline from clean-map to forward-modelled radio performance combines
-changes in resolution, aperture, background, and observing depth.
-It reinforces the importance of observational realism emphasized by
-\citet{Bottrell2019}, while leaving the contribution of each change
-unresolved.
-\par
-Replace the paragraph beginning \emph{Radio and X-ray images provide
-complementary information} with:
-Although the clean bands are complementary, adding the 1\,Mpc radio
-input to X-rays gave no demonstrated gain under forward modelling.
-That comparison and the encouraging radio-plus-mass result require
-matched folds, and the joint model still needs a test using the larger
-radio aperture.
-\par
-Keep the existing TODO about the 3\,Mpc aperture and fixed folds.
-Replace the three sentences beginning \emph{The matched optical experiment}
-with:
-In the matched optical experiment, idealized galaxy-structure features
-improved prediction beyond mass, redshift, and richness, but added no
-demonstrated gain to the X-ray inputs. These null incremental gains
-apply to the tested inputs and models; they do not establish that the
-observing bands contain identical information.
-\par
-This retains the specific limits while removing the intervening
-sentence that repeats \emph{no demonstrated incremental gain}.}
+In the matched optical experiment, idealized galaxy-structure features improved prediction beyond mass, redshift, and richness, but added no demonstrated gain to the X-ray inputs.
+However, this conclusion can only apply to the actually-tested inputs and models; we cannot conclude that the observationally-degraded bands contain completely identical information.
 
-\cite{Lee2025} associate identified relics with particular merger events and construct a relation between relic separation and merger timing, including a strong relation for double-relics.
-In contrast, our diagnostic measures the outermost thresholded peak in projected maps and compares its distance with the most recent catalogue collision.
-Our outermost-peak diagnostic did not find a positive relation with the catalogue collision measure in the simulated sample.
-This was a test of an inexpensive projected image statistic, rather than a reproduction of the three-dimensional relic identification and event association used by \citet{Lee2025}.
+\citet{Lee2025} relate identified relics to specific merger events, finding a strong relationship between relic separation and merger time for single- and double-relics.
+However, when we located the outermost thresholded peak in our projected maps, we did not find a positive relation to the most recent catalogue collision (figure~\ref{fig:relic_null}).
+That peak need not belong to the most recent event when several collisions contribute to the present-day cluster emission.
+Testing the event-associated relation would therefore require matching the \citet{Lee2025} three-dimensional relic selection, merger association, and sample cuts.
 \todo{can we do this?}
-A detected peak need not have been generated from the most recent merger event, especially when several collisions contribute to the radio morphology.
-This result establishes that this simple peak statistic is ineffective for our sample.
-Testing their relation would require matching the relic selection, merger association, and relevant sample cuts.
-\suggestion{\emph{Repetition review.} The relic paragraph says twice
-that the peak statistic failed and several times that it differs from
-the event-associated relic analysis. Replace its prose with:
-\citet{Lee2025} relate identified relics to specific merger events and
-find a strong separation--timing relation for double relics.
-Our outermost thresholded peak in a projected map shows no positive
-relation to the most recent catalogue collision
-(Figure~\ref{fig:relic_null}). That peak need not belong to the most
-recent event when several collisions contribute to the image.
-Testing the event-associated relation therefore requires matching
-their three-dimensional relic selection, merger association, and
-sample cuts.
-\par
-Retain the existing \emph{can we do this?} TODO; this is an editorial
-consolidation, not a resolution of that proposed analysis.}
 
-Several aspects of the observational model require approximations.
-Image-plane radio injection, while including real background structure and imaging artifacts, does not reproduce the recovery of diffuse emissions using interferometric sampling and reconstruction.
-Agreement in the morphological summary statistics of area fraction, perimeter, number of components, and Euler characteristic, does not establish full equivalence between mocks and real observations of all morphological indicators that may be used by the CNN, such as relative positions and orientations of components.
+Agreement in the selected morphological summaries (section~\ref{sec:fwd}) does not establish agreement in all features available to the CNN, including component positions and orientations.
+Unmodelled interferometric flux recovery and observation-specific X-ray response can therefore still affect transfer to observed clusters.
+The joint model also locks the relative radio--Xray positional offsets removed by independent centering.
 
-The X-ray forward model approximates the spectral response and background, but does not reproduce each observation's detector footprint, exposure structure, and roll angle.
-Independent centering of the observed radio and X-ray images also removes their relative positional offsets.
-
-The exposure experiment indicates that X-ray performance improves with greater depth, though with diminishing returns: the mean pooled-view $R^2$ increases from 0.312 at 5 ks exposure to 0.450 at 50 ks, then reaches 0.499 at 500 ks.
-\suggestion{\emph{Repetition review.} The paragraphs beginning
-\emph{Several aspects of the observational model} and
-\emph{The X-ray forward model} largely repeat Section~\ref{sec:fwd}.
-Keep their implications here, with a reference for the technical details:
-Agreement in the selected morphological summaries
-(Section~\ref{sec:fwd}) does not establish agreement in all features
-available to the CNN, including component positions and orientations.
-Unmodelled interferometric flux recovery and observation-specific
-X-ray response can therefore still affect transfer to observed clusters.
-The joint model also lacks the relative radio--X-ray positional offsets
-removed by independent centering.
-\par
-Replace the following exposure sentence, which repeats three Results
-values, with:
-Greater X-ray depth improves performance with diminishing returns in
-the separate exposure experiment (Figure~\ref{fig:xray_depth}).
-\par
-Keep the subsequent proposed diagnostic of the observed radio--X-ray
-offset and its TODO: it is a concrete next analysis, not a repeated
-general qualification.}
+Greater X-ray depth improves performance with diminishing returns in the exposure experiment (figure~\ref{fig:xray_depth}).
 
 The systematic radio--X-ray offset in the LoVoCCS predictions (section~\ref{sec:lovoccs}) could arise from modality-dependent emission physics, brightness calibration, aperture and centering choices, or differences in regression bias.
 A useful diagnostic would compare the two models' residuals for matched simulated observations at fixed mass, observing redshift, and pseudo-TSC, then test whether the observed offset is consistent with those biases.
 \todo{would be pretty quick to run this probably}
 
-While we were able to estimate some sources of uncertainty, others are more difficult to characterize.
-The regression compresses the merger age range, systematically assigning older estimates to the youngest systems, and younger estimates to objects at the 4 Gyr age cap.
-Scatter in predicted pseudo-TSC over different seeds measures variation between fitted networks.
-Additional uncertainties arise from the finite halo sample, viewing direction, the mapping from pseudo-TSC to a particular collision, the emission model, and differences between simulated and observed selection and instrument response.
-We have not shown these to be negligible; nevertheless, performance on the held-out sample demonstrates recovery of the merger history indicator, though uncertainties are not fully calibrated.
-The distributional model's image-conditioned class probabilities outperform the baseline of fitting-sample frequency under categorical log score, ranked probability score, and no-crossing Brier score, despite providing no improvement in ensemble point prediction.
-Calibration, coverage, and robustness under simulation-observation differences still require evaluation, especially for the no-crossing category.
-\suggestion{\emph{Repetition review.} Use this as the single Discussion
-paragraph distinguishing measured statistical variation from the
-remaining calibration problem. Replace the paragraph beginning
-\emph{While we were able to estimate} with:
-The uncertainty measures in Section~\ref{sec:methods} describe variation
-across training seeds and halo resampling conditional on fitted models.
-They do not include retraining on new halo populations, and a
-per-cluster age uncertainty would additionally need to account for
-viewing direction, the mapping from pseudo-TSC to a particular collision,
-and differences in emission physics and sample selection between
-simulations and observations.
-Regression compresses the predicted age range
-(Figure~\ref{fig:tsc_pred}); the distributional head improves probability
-scores for pseudo-TSC classes without improving point predictions
-(Section~\ref{sec:loss_head}).
-Calibration and coverage of those probabilities, especially for the
-no-crossing category, remain untested. Interpreting predictions as
-physical collision ages requires independent merger constraints and
-validation of transfer to observed clusters.
-\par
-This keeps distinct issues distinct: seed variation, conditional
-bootstrap uncertainty, probability calibration, and physical-age
-calibration are not interchangeable caveats.}
+The uncertainty measures in section~\ref{sec:methods} describe variation across training seeds and halo resampling conditional on fitted models.
+They do not include retraining on new halo populations, and a per-cluster age uncertainty would additionally need to account for viewing direction, the mapping from pseudo-TSC to a particular collision, and differences in emission physics and sample selection between simulations and observations.
+Regression compresses the predicted age range (figure~\ref{fig:tsc_pred}); the distributional head improves probability scores for pseudo-TSC classes without improving point predictions (section~\ref{sec:loss_head}).
+Calibration and coverage of those probabilities, especially for the no-crossing category, remain untested.
+Interpreting predictions as physical collision ages requires independent merger constraints and validation of transfer to observed clusters.
 
-Our exploratory negative results help identify where more work needs to be done to improve performance.
-The frozen contrastive encoder experiment substantially underperforms the supervised control, but the cause has not been isolated.
-Its positive pairs are rotations and reflections of the same observation, and the encoder is frozen during downstream training.
-Alternative pair construction, objectives, or encoder fine-tuning would require controlled comparisons.
-Thus, this pilot does not eliminate contrastive learning performing better under other conditions \citep{Chadayammuri2026}.
+The contrastive pilot's poor performance applies to the tested frozen-encoder configuration (section~\ref{sec:loss_head}).
+Its cause remains unresolved; alternative pair construction and encoder fine-tuning require controlled comparisons before broader conclusions about contrastive learning can be drawn \citep{Chadayammuri2026}.
 
 Using the diffusion model to generate synthetic data did not provide any performance improvement.
 Because the data generation was not isolated from downstream test clusters, however, the comparison does not provide an independent estimate of the effect of augmentation, and the leakage does not establish why the observed difference was small.
 \todo{can we make an independent estimate somehow?}
 The comparison to CAMELS data combines a change in simulation domain with a change in merger-label definition, preventing attribution of its negative outcome to either factor.
-These experiments motivate future work on more closely-matched experiments.
-\suggestion{\emph{Repetition review.} The negative-results discussion
-repeats the contrastive setup from Results and concludes twice that
-other configurations need testing. Replace the paragraph beginning
-\emph{Our exploratory negative results} with:
-The contrastive pilot's poor performance applies to the tested
-frozen-encoder configuration (Section~\ref{sec:loss_head}).
-Its cause remains unresolved; alternative pair construction and encoder
-fine-tuning require controlled comparisons before broader conclusions
-about contrastive learning can be drawn \citep{Chadayammuri2026}.
-\par
-Replace the two sentences beginning \emph{Using the diffusion model}
-with:
-The diffusion-augmentation experiment does not independently measure
-the effect of augmentation because its generator was not isolated from
-the downstream test clusters (Figure~\ref{fig:aug}).
-\par
-Retain the associated TODO and the following CAMELS sentence, which
-identifies a different confounding factor. Delete the final sentence
-\emph{These experiments motivate future work on more closely-matched
-experiments}; it adds no specific next step. Keep the short limitations
-in the appendix captions, where readers need them to interpret the
-figures independently.}
 
 Next steps should therefore focus on making the inference more physically interpretable and observationally testable.
 The radio prescription needs to be reconciled with the generated maps \todo{what does this mean?}, and sensitivity to the emitting-gas selection, fold assignment, and observing conditions should be established.
@@ -260,24 +96,6 @@ Once resolved, replace this sentence with:
 Sensitivity to the emitting-gas selection, fold assignment, and
 observing conditions should be established before treating the inferred
 proxy-age scale as robust across different modelling choices.}
-Matching simulation outputs to observed selection and instrument response would strengthen conclusions about transferability, and consistent collision labels between simulation suites would test dependence on their differing physical models.
-External dynamical constraints for real merging systems would allow the predicted ordering and timescale to be tested separately.
-Weak-lensing and spectroscopic modelling of A3376 \citep{MonteiroOliveira2017}, for example, constrains a specific subcluster encounter independently of our image-based regression.
-Such validation would require identifying whether the encounter corresponds to the history measured by our proxy, and matching the observing model to the validation data.
-Additionally, independent simulation suits would provide a complementary test of sensitivity to simulation physics.
-Such validation is necessary before image-based merger time estimates can be used quantitatively to study merger-driven particle acceleration.
-\suggestion{\emph{Repetition review.} The final six sentences,
-beginning \emph{Matching simulation outputs}, return several times to
-independent validation and simulation-to-observation matching.
-Replace those six sentences with:
-Validation should combine matched observing models with tests across
-independent simulation suites using consistent collision labels.
-For real clusters, external dynamical constraints can test the inferred
-ordering and timescale; weak-lensing and spectroscopic modelling of
-A3376 \citep{MonteiroOliveira2017} provides one example.
-Such comparisons must identify whether the constrained encounter is
-the event represented by the proxy before using inferred ages to study
-merger-driven particle acceleration.
-\par
-Leave the preceding radio-prescription TODO and its existing suggestion
-intact: that methodological mismatch still requires substantive work.}
+Validation should combine matched observing models with tests across independent simulation suites using consistent collision labels.
+For real clusters, external dynamical constraints can test the inferred ordering and timescale; weak-lensing and spectroscopic modelling of A3376 \citep{MonteiroOliveira2017} provides one example.
+Such comparisons must identify whether the constrained encounter is the event represented by the proxy before using inferred ages to study merger-driven particle acceleration.
