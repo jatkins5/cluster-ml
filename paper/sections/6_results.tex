@@ -101,28 +101,10 @@ We distinguish the pooled-view score, which combines all three projections, from
 
 For single projections, the radio-only ensemble of five models achieved $R^2 = 0.072$ with a box size of 1 Mpc, and $R^2=0.203$ with a box size of 3 Mpc.
 The corresponding scores for the pooled input models, averaged over the different seeds, were $0.142\pm0.021$ and $0.238\pm0.019$.
-The experiment sensitive to arcsinh morphology, which retained the total physical flux while compressing the spatial intensity distribution, gave a similar single-projection score of $R^2=0.207$ for the 3 Mpc box.
-\suggestion{Delete the preceding sentence beginning \emph{The experiment
-sensitive to arcsinh morphology}: it describes the same experiment and
-repeats the score given in the following paragraph.}
 
-In a test of the sensitivity of the compressed morphology, we redistributed the same physical total source flux according to an arcsinh-compressed spatial profile, followed by beam convolution and background injection.
-This experiment yielded a single-view ensemble score of $R^2=0.207$ for the 3 Mpc box.
-This source profile is distinct from the final $\operatorname{arcsinh}(S/\sigma_{\rm rms})$ transformation, which was applied to all processed inputs.
-\suggestion{Replace the preceding three sentences with:
-To test sensitivity to the brightness contrast of the simulated radio
-emission, we applied an arcsinh compression to the source profile and
-rescaled it to retain the same total physical flux before beam
-convolution and background injection. This reduces the relative
-contribution of the brightest regions and increases that of fainter
-regions. The resulting single-view ensemble score was $R^2=0.207$
-for the 3\,Mpc box, compared with 0.203 for the adopted source profile.
-This modification of the injected source is separate from the final
-$\operatorname{arcsinh}(S/\sigma_{\rm rms})$ preprocessing applied to
-all processed inputs.
-\par
-Here compression refers to brightness contrast, rather than a reduction
-in spatial size. Use the clearer table wording suggested below.}
+To test sensitivity of the brightness contrast of the simulated radio emission, we applied an arcsinh compression to the source profile, then rescaled it to retain the same total physical flux before beam convolution and background injection.
+This reduces the relative contribution of the brightest regions compared to fainter regions.
+This injected source modification is separate from the final $\operatorname{arcsinh}(S/\sigma_{\rm rms})$ preprocessing applied to all inputs.
 While the models predicting on larger boxes performed better, injection placements were also changed, so the effect of field size was not completely isolated.
 
 Despite significantly decreased performance, the radio images retained useful information beyond noisy mass measurements.
@@ -271,7 +253,6 @@ Despite the correlated rankings between the predictions derived from radio and X
 The radio model assigned older proxy ages than the X-ray model to 14 of the 15 clusters with both sources, with a median paired offset of 0.44 Gyr.
 Their respective median predictions were 1.10 and and 0.83 Gyr.
 Applying the forward-model did not remove this offset, and its origin remains unidentified.
-\todo{simulation issues? maybe something that affects one but not the other}
 Without independent constraints on the merger time, the agreement tests consistency of the inferred ordering, but the systematic offset between the predictions shows that the proxy age scales are not interchangeable.
 
 \begin{figure}
