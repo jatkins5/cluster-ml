@@ -45,10 +45,13 @@ def fail(msg):
     raise SystemExit(msg)
 
 
-def load(pat, seeds=SEEDS):
+R_EXPECT, P_EXPECT = 3, 3        # the realistic sets: 3 realizations x 3 projections
+
+
+def load(pat, seeds=SEEDS, R=R_EXPECT, P=P_EXPECT):
     ds = [dict(np.load(pat.format(s) if "/" in pat else f"cnn_preds/{pat.format(s)}", allow_pickle=True))
           for s in seeds]
-    validate_set(ds, pat, seeds)
+    validate_set(ds, pat, seeds, R=R, P=P)
     return ds
 
 
@@ -56,8 +59,9 @@ def prov(d):
     return json.loads(str(d["provenance"])) if "provenance" in d else None
 
 
-def validate_set(ds, name, seeds=SEEDS):
-    """Per-artifact and across-seed validation of one model's seed set."""
+def validate_set(ds, name, seeds=SEEDS, R=R_EXPECT, P=P_EXPECT):
+    """Per-artifact and across-seed validation of one model's seed set, bound
+    to the declared R realizations x P projections (realistic archives)."""
     r = ds[0]
     for i, (d, s) in enumerate(zip(ds, seeds)):
         tag = f"{name} seed {s}"
@@ -65,17 +69,21 @@ def validate_set(ds, name, seeds=SEEDS):
             if k in r and (k not in d or not np.array_equal(d[k], r[k])):
                 fail(f"{tag}: {k} differs from the first seed")
         if "label" in d:                                 # clean (train_cnn_pooled) archive
+            if d["label"].ndim != 1 or not np.isfinite(d["label"]).all():
+                fail(f"{tag}: clean labels must be finite and 1-D")
             if d["oof_pred"].shape != d["label"].shape or not np.isfinite(d["oof_pred"]).all():
                 fail(f"{tag}: oof_pred must match label shape and be finite")
         else:                                            # realistic (train_cnn_mock) archive
             n = len(d["tsc"])
-            ns = len(d["oof_sample"])
-            if n == 0 or ns % n:
-                fail(f"{tag}: {ns} samples not a multiple of {n} rows")
-            R = ns // n
-            if d["oof_cluster"].shape != (n,) or d["y_sample"].shape != (ns,) \
-                    or d["oof_single"].ndim != 2 or d["oof_single"].shape[0] != ns:
-                fail(f"{tag}: prediction shapes inconsistent with {n} rows x R={R}")
+            ns = n * R
+            if d["tsc"].ndim != 1 or n == 0:
+                fail(f"{tag}: row target must be 1-D and non-empty")
+            if d["oof_sample"].shape != (ns,) or d["y_sample"].shape != (ns,) \
+                    or d["oof_cluster"].shape != (n,) or d["oof_single"].shape != (ns, P):
+                fail(f"{tag}: shapes oof_sample {d['oof_sample'].shape}, oof_single {d['oof_single'].shape}, "
+                     f"oof_cluster {d['oof_cluster'].shape} != the declared {n} rows x R={R} x P={P}")
+            if "sim_logm_input" in d and d["sim_logm_input"].size and d["sim_logm_input"].shape != (n,):
+                fail(f"{tag}: mass inputs shape {d['sim_logm_input'].shape} != ({n},)")
             for k in ("oof_cluster", "oof_sample", "oof_single", "obs_pred"):
                 if k in r and d[k].shape != r[k].shape:
                     fail(f"{tag}: {k} shape {d[k].shape} != first seed's {r[k].shape}")
@@ -84,7 +92,8 @@ def validate_set(ds, name, seeds=SEEDS):
                     fail(f"{tag}: non-finite {k}")
             if not np.allclose(d["y_sample"], np.repeat(d["tsc"], R)):
                 fail(f"{tag}: y_sample is not the row target expanded over realizations")
-            for k, exp in (("sample_group", np.repeat(d["group_id"], R)),
+            for k, exp in (("sample_halo", np.repeat(d["halo_id"], R)),
+                           ("sample_group", np.repeat(d["group_id"], R)),
                            ("sample_snap", np.repeat(d["snap"], R)),
                            ("sample_realization", np.tile(np.arange(R), n))):
                 if k in d and not np.array_equal(d[k], exp):
@@ -100,7 +109,9 @@ def validate_set(ds, name, seeds=SEEDS):
         if p is not None:
             if int(p["config"]["seed"]) != s:
                 fail(f"{tag}: recorded seed {p['config']['seed']} != {s}")
-            if bool(d.get("provenance_changed_during_run", False)):
+            if "provenance_changed_during_run" not in d:
+                fail(f"{tag}: provenance present but the changed-during-run flag is missing")
+            if bool(d["provenance_changed_during_run"]):
                 fail(f"{tag}: sources/inputs changed during the run")
     if "obs_name" in r:
         keys = [key(n) for n in r["obs_name"]]
@@ -111,7 +122,14 @@ def validate_set(ds, name, seeds=SEEDS):
 def _inner(d):
     if "sel_groups_flat" not in d or "sel_groups_fold" not in d:
         return None
-    return set(zip(d["sel_groups_fold"].astype(int).tolist(), d["sel_groups_flat"].astype(int).tolist()))
+    g, f = np.asarray(d["sel_groups_flat"]), np.asarray(d["sel_groups_fold"])
+    if g.ndim != 1 or f.ndim != 1 or len(g) != len(f):
+        fail(f"inner-selection arrays must be 1-D and equal length ({g.shape} vs {f.shape})")
+    for a in (g, f):
+        af = a.astype(np.float64)
+        if not np.isfinite(af).all() or not np.array_equal(af, np.round(af)):
+            fail("inner-selection entries must be finite integers")
+    return set(zip(f.astype(int).tolist(), g.astype(int).tolist()))
 
 
 def split_status(da, db):
@@ -161,7 +179,7 @@ def check_matched(da, db, st, kind, name):
         fail(f"{name}: unexpected mass inputs in a non-mass contrast")
 
 
-def check_contract(da, db, allowed, name, matched, joint_x=None):
+def check_contract(da, db, allowed, name, matched, joint_x=None, allowed_inputs=None):
     """Provenance and configuration: identical defining sources and common
     settings; only `allowed` keys may differ between arms. joint_x=(control,
     joint) additionally requires the joint's X-ray input to be the control's
@@ -171,16 +189,31 @@ def check_contract(da, db, allowed, name, matched, joint_x=None):
         if matched:
             fail(f"{name}: labelled matched but provenance unavailable")
         return "provenance unavailable (legacy archive)"
+    ai = tuple(allowed_inputs if allowed_inputs is not None else
+               (("dataset", "xray_dataset") if joint_x else ()))
     if not matched:                     # descriptive: report, never certify
         try:
-            return _contract(pa, pb, allowed, name, joint_x)
+            return _contract(pa, pb, allowed, name, joint_x, ai)
         except SystemExit as e:
             return f"descriptive; provenance differs: {e}"
-    return _contract(pa, pb, allowed, name, joint_x)
+    return _contract(pa, pb, allowed, name, joint_x, ai)
 
 
-def _contract(pa, pb, allowed, name, joint_x):
+def _contract(pa, pb, allowed, name, joint_x, allowed_inputs):
     ref = pa[0]
+    # input hashes (review R28-1): present, constant within each arm, common
+    # inputs equal between arms (only the declared differing inputs excepted)
+    for arm_i, arm in enumerate((pa, pb)):
+        for i, p in enumerate(arm):
+            if not p.get("inputs_sha256"):
+                fail(f"{name}: arm {arm_i} run {i} has no input-hash record")
+            if p["inputs_sha256"] != arm[0]["inputs_sha256"]:
+                fail(f"{name}: arm {arm_i} input hashes differ between seeds (run {i})")
+    ia = {k: v for k, v in pa[0]["inputs_sha256"].items() if k not in allowed_inputs}
+    ib = {k: v for k, v in pb[0]["inputs_sha256"].items() if k not in allowed_inputs}
+    if ia != ib:
+        diff = sorted(k for k in set(ia) | set(ib) if ia.get(k) != ib.get(k))
+        fail(f"{name}: common input hashes differ between arms {diff}")
     strip = lambda c, extra: {k: v for k, v in c.items() if k not in FREE | extra}
     for i, p in enumerate(pa + pb):
         if p["sha256"] != ref["sha256"]:
@@ -195,12 +228,13 @@ def _contract(pa, pb, allowed, name, joint_x):
         fail(f"{name}: undeclared configuration differences {diff}")
     if joint_x is not None:
         ctrl, joint = (pa, pb) if joint_x == "b_is_joint" else (pb, pa)
-        if joint[0]["config"].get("xray_dataset") != ctrl[0]["config"].get("dataset"):
-            fail(f"{name}: joint X-ray input is not the control's dataset")
-        jh = (joint[0].get("inputs_sha256") or {}).get("xray_dataset")
-        ch = (ctrl[0].get("inputs_sha256") or {}).get("dataset")
-        if jh is None or ch is None or jh != ch:
-            fail(f"{name}: joint X-ray input hash != control dataset hash ({jh} vs {ch})")
+        for i, (c_, j_) in enumerate(zip(ctrl, joint)):      # every seed
+            if j_["config"].get("xray_dataset") != c_["config"].get("dataset"):
+                fail(f"{name}: seed index {i}: joint X-ray input is not the control's dataset")
+            jh = (j_.get("inputs_sha256") or {}).get("xray_dataset")
+            ch = (c_.get("inputs_sha256") or {}).get("dataset")
+            if jh is None or ch is None or jh != ch:
+                fail(f"{name}: seed index {i}: joint X-ray input hash != control dataset hash ({jh} vs {ch})")
     return "provenance checked"
 
 
@@ -304,33 +338,84 @@ def paired(lab, a, b):
           f"({int((b > a).sum())}/5 seeds higher)")
 
 
+# ---- the declared comparisons, shared by main() and validate_all() ----
+CLEAN_OLDNEW = [("pooled CNN, snapshot 99", "pooled_nh4_144_inner_s{}.npz", "pooled_syn_inner_s{}.npz"),
+                ("pooled CNN, 99+91", "pooled_s9991_inner_s{}.npz", "pooled_syn_s9991_inner_s{}.npz"),
+                ("shape-only (flux-normalised)", "pooled_shape144_inner_s{}.npz", "pooled_shape_syn_inner_s{}.npz"),
+                ("no density cut", "pooled_nocut144_inner_s{}.npz", "pooled_nocut_syn_inner_s{}.npz"),
+                ("clean joint radio + X-ray", "joint144_clean_inner_s{}.npz", "joint_syn_clean_inner_s{}.npz")]
+CLEAN_WITHIN = [("full flux -> shape-only", "pooled_syn_inner_s{}.npz", "pooled_shape_syn_inner_s{}.npz"),
+                ("no cut -> density cut", "pooled_nocut_syn_inner_s{}.npz", "pooled_syn_inner_s{}.npz"),
+                ("radio -> clean joint radio + X-ray", "pooled_syn_inner_s{}.npz", "joint_syn_clean_inner_s{}.npz")]
+_ROWS = [("radio, physical 1 Mpc", "phys_b1000_sfimg"), ("radio, physical 2 Mpc", "phys_b2000_sfimg"),
+         ("radio, physical 3 Mpc", "phys_b3000_sfimg"), ("radio, arcsinh arm 1 Mpc", "asinh_b1000_sfimg"),
+         ("radio, arcsinh arm 3 Mpc", "asinh_b3000_sfimg"), ("radio 1 Mpc + X-ray", "phys_b1000_joint"),
+         ("radio 2 Mpc + X-ray", "phys_b2000_joint"), ("radio 3 Mpc + X-ray", "phys_b3000_joint")]
+OLDNEW = [(lab, f"fix_{t}_s{{}}_preds.npz", f"syn_{t}_s{{}}_preds.npz") for lab, t in _ROWS] + [
+    ("mass only (fixed measurement)", "r4_massonly_s{}_preds.npz", "syn_massonly_s{}_preds.npz"),
+    ("radio 3 Mpc + mass (fixed measurement)", "r4_imgmass_b3000_s{}_preds.npz", "syn_imgmass_b3000_s{}_preds.npz")]
+CTRL = "runs/followup_20261103T180830Z/preds/xray_b3000_s{}_preds.npz"
+# label, a, b, contrast keyword arguments
+INCREMENTS = [
+    ("radio 3 Mpc + mass - mass only [matched]", "syn_massonly_s{}_preds.npz", "syn_imgmass_b3000_s{}_preds.npz",
+     dict(kind="mass", matched=True, allowed=("no_image",))),
+    ("radio 1 Mpc + X-ray - X-ray [descriptive]", "fix_x_s{}_preds.npz", "syn_phys_b1000_joint_s{}_preds.npz",
+     dict(allowed=("dataset", "xray_dataset"))),
+    ("radio 3 Mpc + X-ray - matched 3 Mpc X-ray control [matched]", CTRL, "syn_phys_b3000_joint_s{}_preds.npz",
+     dict(matched=True, allowed=("dataset", "xray_dataset"), joint_x="b_is_joint"))]
+REAL_SETS = ["fix_x_s{}_preds.npz", "fix_phys_b3000_sfimg_s{}_preds.npz", "syn_phys_b3000_sfimg_s{}_preds.npz",
+             "syn_massonly_s{}_preds.npz", "syn_imgmass_b3000_s{}_preds.npz", "syn_phys_b1000_joint_s{}_preds.npz"]
+
+
+def validate_all():
+    """Every declared comparison's validators, without bootstrap or analysis."""
+    for lab, a, b in CLEAN_OLDNEW + CLEAN_WITHIN:
+        clean_pair(a, b)
+        print(f"  clean {lab}: {CLEAN_STATUS[(a, b)]}")
+    for lab, a, b in OLDNEW:
+        da, db = load(a), load(b)
+        same_rows(da, db, lab)
+        st = split_status(da, db)
+        print(f"  old->new {lab}: {fmt(st)}; "
+              f"{check_contract(da, db, ('dataset', 'xray_dataset', 'mass_seed', 'fold_manifest'), lab, False)}")
+    for lab, a, b, kw in INCREMENTS:
+        da, db = load(a), load(b)
+        same_rows(da, db, lab)
+        st = split_status(da, db)
+        if kw.get("matched"):
+            check_matched(da, db, st, kw.get("kind", "plain"), lab)
+        print(f"  increment {lab}: {fmt(st)}; "
+              f"{check_contract(da, db, kw.get('allowed', ()), lab, kw.get('matched', False), kw.get('joint_x'))}")
+    for pat in REAL_SETS:
+        load(pat)
+    print(f"  real-target sets validated: {len(REAL_SETS)}")
+    print(f"VALIDATED: {len(CLEAN_OLDNEW) + len(CLEAN_WITHIN)} clean contrasts, {len(OLDNEW)} old->new rows, "
+          f"{len(INCREMENTS)} increments")
+
+
+RNG = None
+
+
 def main():
+    global RNG
+    # one shared permutation generator, advanced across fl() calls as in the
+    # pre-refactor analysis (review R28), so Monte Carlo p-values reproduce
+    RNG = np.random.default_rng(0)
     print("======== clean simulation (per-seed R2, paired seeds; old HB07 -> new synch)")
-    for lab, o, n_ in (("pooled CNN, snapshot 99", "pooled_nh4_144_inner_s{}.npz", "pooled_syn_inner_s{}.npz"),
-                       ("pooled CNN, 99+91", "pooled_s9991_inner_s{}.npz", "pooled_syn_s9991_inner_s{}.npz"),
-                       ("shape-only (flux-normalised)", "pooled_shape144_inner_s{}.npz", "pooled_shape_syn_inner_s{}.npz"),
-                       ("no density cut", "pooled_nocut144_inner_s{}.npz", "pooled_nocut_syn_inner_s{}.npz"),
-                       ("clean joint radio + X-ray", "joint144_clean_inner_s{}.npz", "joint_syn_clean_inner_s{}.npz")):
+    for lab, o, n_ in CLEAN_OLDNEW:
         paired(lab, *clean_pair(o, n_))
         print(f"    ({CLEAN_STATUS[(o, n_)]})")
     print("  within the NEW model:")
-    full, shape = clean_pair("pooled_syn_inner_s{}.npz", "pooled_shape_syn_inner_s{}.npz")
-    paired("full flux -> shape-only", full, shape)
-    print(f"    shape-only = {shape.mean() / full.mean():.0%} of the full model's R2")
-    paired("no cut -> density cut", *clean_pair("pooled_nocut_syn_inner_s{}.npz", "pooled_syn_inner_s{}.npz"))
-    paired("radio -> clean joint radio + X-ray", *clean_pair("pooled_syn_inner_s{}.npz", "joint_syn_clean_inner_s{}.npz"))
+    for lab, o, n_ in CLEAN_WITHIN:
+        a_, b_ = clean_pair(o, n_)
+        paired(lab, a_, b_)
+        if lab.startswith("full flux"):
+            print(f"    shape-only = {b_.mean() / a_.mean():.0%} of the full model's R2")
 
     print("\n======== realistic (snapshot-99 scoring)")
-    rows = [("radio, physical 1 Mpc", "phys_b1000_sfimg"), ("radio, physical 2 Mpc", "phys_b2000_sfimg"),
-            ("radio, physical 3 Mpc", "phys_b3000_sfimg"), ("radio, arcsinh arm 1 Mpc", "asinh_b1000_sfimg"),
-            ("radio, arcsinh arm 3 Mpc", "asinh_b3000_sfimg"), ("radio 1 Mpc + X-ray", "phys_b1000_joint"),
-            ("radio 2 Mpc + X-ray", "phys_b2000_joint"), ("radio 3 Mpc + X-ray", "phys_b3000_joint")]
-    oldnew = [(lab, f"fix_{t}_s{{}}_preds.npz", f"syn_{t}_s{{}}_preds.npz") for lab, t in rows] + [
-        ("mass only (fixed measurement)", "r4_massonly_s{}_preds.npz", "syn_massonly_s{}_preds.npz"),
-        ("radio 3 Mpc + mass (fixed measurement)", "r4_imgmass_b3000_s{}_preds.npz", "syn_imgmass_b3000_s{}_preds.npz")]
     print(f"  {'model':<40}{'old pooled':>16}{'new pooled':>16}{'old 1v-5':>10}{'new 1v-5':>10}"
           f"{'new 1v-1':>10}{'new rho(M)':>12}   new-old 1v-5 [95%] (descriptive)")
-    for lab, o, n_ in oldnew:
+    for lab, o, n_ in OLDNEW:
         so, sn = scores(load(o)), scores(load(n_))
         dv, iv, st = contrast(o, n_, allowed=("dataset", "xray_dataset", "mass_seed", "fold_manifest"))
         print(f"  {lab:<40}{so[0]:>9.3f}±{so[1]:.3f}{sn[0]:>9.3f}±{sn[1]:.3f}{so[2]:>10.3f}{sn[2]:>10.3f}"
@@ -338,22 +423,15 @@ def main():
     sx = scores(load("fix_x_s{}_preds.npz"))
     print(f"  {'X-ray (unchanged; reference)':<40}{sx[0]:>9.3f}±{sx[1]:.3f}{'':>16}{sx[2]:>10.3f}{'':>10}"
           f"{sx[3]:>10.3f}{sx[4]:>+12.2f}")
-    print("  paper increments, NEW model (1v-5, paired halo bootstrap):")
-    dv, iv, st = contrast("syn_massonly_s{}_preds.npz", "syn_imgmass_b3000_s{}_preds.npz", kind="mass",
-                          matched=True, allowed=("no_image",))
-    print(f"    radio 3 Mpc + mass - mass only [matched]     {dv:+.3f} [{iv[0]:+.3f}, {iv[1]:+.3f}]   ({st})")
-    dv, iv, st = contrast("fix_x_s{}_preds.npz", "syn_phys_b1000_joint_s{}_preds.npz",
-                          allowed=("dataset", "xray_dataset"))
-    print(f"    radio 1 Mpc + X-ray - X-ray [descriptive]    {dv:+.3f} [{iv[0]:+.3f}, {iv[1]:+.3f}]   ({st})")
-    print("  SEPARATE ANALYSIS (review R26-B): radio 3 Mpc + X-ray vs the matched 3 Mpc X-ray control")
-    ctrl = "runs/followup_20261103T180830Z/preds/xray_b3000_s{}_preds.npz"
-    sc, sj = scores(load(ctrl)), scores(load("syn_phys_b3000_joint_s{}_preds.npz"))
-    for snap99, lab in ((True, "snapshot 99"), (False, "both snapshots")):
-        dv, iv, st = contrast(ctrl, "syn_phys_b3000_joint_s{}_preds.npz", matched=True,
-                              allowed=("dataset", "xray_dataset"), joint_x="b_is_joint", snap99=snap99)
-        print(f"    {lab}: X-ray control 1v-5 {sc[2]:.3f}; joint 1v-5 {sj[2]:.3f}; joint - X-ray "
-              f"{dv:+.3f} [{iv[0]:+.3f}, {iv[1]:+.3f}]   ({st})" if snap99 else
-              f"    {lab}: joint - X-ray {dv:+.3f} [{iv[0]:+.3f}, {iv[1]:+.3f}]")
+    print("  increments, NEW model (1v-5, paired halo bootstrap):")
+    for lab, a_, b_, kw in INCREMENTS:
+        dv, iv, st = contrast(a_, b_, **kw)
+        print(f"    {lab:<62} {dv:+.3f} [{iv[0]:+.3f}, {iv[1]:+.3f}]   ({st})")
+        if kw.get("joint_x"):
+            sc, sj = scores(load(a_)), scores(load(b_))
+            dv2, iv2, _ = contrast(a_, b_, snap99=False, **kw)
+            print(f"      (X-ray control 1v-5 {sc[2]:.3f}, joint {sj[2]:.3f}; both snapshots: "
+                  f"{dv2:+.3f} [{iv2[0]:+.3f}, {iv2[1]:+.3f}])")
 
     print("\n======== real clusters: radio 3 Mpc vs X-ray (25-model ensembles)")
     wl = pd.read_csv("lovoccs_wl_masses.csv").set_index("key")
@@ -365,9 +443,9 @@ def main():
         a = np.array([r[k] for k in both]); b = np.array([x[k] for k in both])
         z = np.array([rz[k] for k in both])
         rho, p = stats.spearmanr(a, b)
-        pz, ppz = fl(a, b, z)
+        pz, ppz = fl(a, b, z, rng=RNG)
         m = np.array([k in wl.index for k in both])
-        pm, ppm = fl(a[m], b[m], np.array([wl.loc[k, "log_m500c"] for k in np.array(both)[m]]))
+        pm, ppm = fl(a[m], b[m], np.array([wl.loc[k, "log_m500c"] for k in np.array(both)[m]]), rng=RNG)
         d = a - b
         print(f"  {lab}: n={len(both)} Spearman {rho:+.2f} (p={p:.3f}); partial | z {pz:+.2f} (FL p={ppz:.3f}); "
               f"partial | WL mass {pm:+.2f} (FL p={ppm:.3f}, n={m.sum()}); radio - X-ray median "
@@ -389,4 +467,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+    validate_all() if "--validate-only" in sys.argv else main()

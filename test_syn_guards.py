@@ -62,7 +62,7 @@ MASS = np.linspace(14.1, 15.1, N)
 print("== matched mass contrast")
 mo, im = arm(mass=MASS, cfg_extra={"no_image": True}), arm(mass=MASS)
 for x in (mo, im):
-    C.validate_set(x, "fixture")
+    C.validate_set(x, "fixture", R=R, P=P)
 st = C.split_status(mo, im)
 C.check_matched(mo, im, st, "mass", "mass pair")
 print(f"    valid: {C.check_contract(mo, im, ('no_image',), 'mass pair', True)}; {C.fmt(st)}")
@@ -94,7 +94,7 @@ expect(C.check_contract, mo, [run(s, mass=MASS, prov=False) for s in SEEDS], ("n
 bad_seed = copy.deepcopy(im)
 p_ = json.loads(str(bad_seed[1]["provenance"])); p_["config"]["seed"] = 99
 bad_seed[1]["provenance"] = np.array(json.dumps(p_))
-expect(C.validate_set, bad_seed, "fixture", what="recorded seed differs from the file's seed")
+expect(C.validate_set, bad_seed, "fixture", R=R, P=P, what="recorded seed differs from the file's seed")
 
 print("== matched joint vs X-ray control")
 ctrl = arm(cfg_extra={"dataset": "xray_fix_b3000_s9991.h5"}, inputs={"dataset": "XH"})
@@ -124,7 +124,7 @@ def clean(seed, shift=0.0):
 
 
 sets = {"A": [clean(s) for s in SEEDS], "B": [clean(s, 0.05) for s in SEEDS]}
-loader = lambda pat, seeds=SEEDS: (C.validate_set(sets[pat], pat, seeds), sets[pat])[1]
+loader = lambda pat, seeds=SEEDS: (C.validate_set(sets[pat], pat, seeds, R=R, P=P), sets[pat])[1]
 expect(C.clean_pair, "A", "B", loader=loader, what="clean arm cohort differs consistently across all seeds")
 sets["B"] = [clean(s) for s in SEEDS]
 a_, b_ = C.clean_pair("A", "B", loader=loader)
@@ -136,19 +136,47 @@ sets["G"] = [dict(clean(s), group_id=np.arange(N)[::-1].copy()) for s in SEEDS]
 expect(C.clean_pair, "G", "A", loader=loader, what="clean cohorts with different group_id")
 bad = arm()
 bad[0]["oof_single"] = bad[0]["oof_single"][:, :1]
-expect(C.validate_set, bad, "fixture", what="single-view array with one projection in one seed")
+expect(C.validate_set, bad, "fixture", R=R, P=P, what="single-view array with one projection in one seed")
 bad = arm()
 bad[3]["oof_single"] = bad[3]["oof_single"].copy(); bad[3]["oof_single"][0, 0] = np.nan
-expect(C.validate_set, bad, "fixture", what="non-finite single-view prediction")
+expect(C.validate_set, bad, "fixture", R=R, P=P, what="non-finite single-view prediction")
 bad = arm()
 bad[2]["obs_pred"] = np.array([1.0, np.inf])
-expect(C.validate_set, bad, "fixture", what="non-finite real-target prediction")
+expect(C.validate_set, bad, "fixture", R=R, P=P, what="non-finite real-target prediction")
 bad = arm()
 for d in bad:
     d["obs_pred"] = np.array([1.0])
-expect(C.validate_set, bad, "fixture", what="real-target prediction length != obs_name")
+expect(C.validate_set, bad, "fixture", R=R, P=P, what="real-target prediction length != obs_name")
 bad = arm()
 for d in bad:
     d["sample_snap"] = d["sample_snap"][::-1].copy()
-expect(C.validate_set, bad, "fixture", what="sample_snap inconsistent with the row expansion")
+expect(C.validate_set, bad, "fixture", R=R, P=P, what="sample_snap inconsistent with the row expansion")
+print("== R28: input hashes for every run, declared dimensions")
+jb = arm(cfg_extra={"xray_dataset": "xray_fix_b3000_s9991.h5"}, inputs={"dataset": "D", "xray_dataset": "XH"})
+p_ = json.loads(str(jb[1]["provenance"])); p_["inputs_sha256"]["xray_dataset"] = "OTHER"
+jb[1]["provenance"] = np.array(json.dumps(p_))
+expect(C.check_contract, ctrl, jb, ("dataset", "xray_dataset"), "x", True, "b_is_joint",
+       what="joint X-ray hash differs in a non-first seed")
+im_d = arm(mass=MASS, inputs={"dataset": "D2"})
+expect(C.check_contract, mo, im_d, ("no_image",), "x", True, what="mass arms with different dataset hashes")
+nf = arm()
+del nf[2]["provenance_changed_during_run"]
+expect(C.validate_set, nf, "fixture", R=R, P=P, what="changed-during-run flag missing")
+one = arm()
+for d in one:
+    d["oof_single"] = d["oof_single"][:, :1]
+expect(C.validate_set, one, "fixture", R=R, P=P, what="one projection in EVERY seed (declared P=3)")
+expect(C.validate_set, arm(), "fixture", R=3, P=P, what="realization count differs from the declared R")
+short = np.linspace(14.1, 15.1, N - 1)
+expect(C.validate_set, arm(mass=short), "fixture", R=R, P=P, what="wrong-length mass vector")
+ui = arm()
+for d in ui:
+    d["sel_groups_fold"] = np.arange(F - 1)
+expect(C.split_status, ui, arm(), what="unequal inner-array lengths")
+sh = arm()
+for d in sh:
+    d["sample_halo"] = d["sample_halo"][::-1].copy()
+expect(C.validate_set, sh, "fixture", R=R, P=P, what="sample_halo inconsistent with the row expansion")
+cl = [{"halo_id": np.arange(N), "label": np.full((N, 1), 1.0), "oof_pred": np.full((N, 1), 1.0)} for s in SEEDS]
+expect(C.validate_set, cl, "fixture", R=R, P=P, what="2-D clean labels")
 print("ALL COMPARE_SYN GUARD CHECKS PASSED")
