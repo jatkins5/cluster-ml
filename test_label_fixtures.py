@@ -41,6 +41,7 @@ def write(d, sn, keys, a, b, snap_now=None):
         f["FOF_Halo_ID_At99"] = np.asarray(keys)
         f["tsc_gyr"], f["tsc_gyr_from_Tcoll"] = np.asarray(a, float), np.asarray(b, float)
         f.attrs["snap_now"] = sn if snap_now is None else snap_now
+        f.attrs["unit"] = "Gyr"
 
 
 print("== 1. constructed join")
@@ -64,6 +65,25 @@ bad = os.path.join(tmp, "neg"); write(bad, 99, [10, 11, 12, 13], [1, -1, 1, 1], 
 expect(ValueError, load_catalogue_tsc, bad, snap, grp, what="negative value")
 bad = os.path.join(tmp, "snapnow"); write(bad, 99, [10, 11, 12, 13], [1] * 4, [1] * 4, snap_now=91); write(bad, 91, [10, 11, 12, 13], [1] * 4, [1] * 4)
 expect(ValueError, load_catalogue_tsc, bad, snap, grp, what="snap_now mismatch")
+for nm, vals in (("+inf", [1, np.inf, 1, 1]), ("-inf", [1, -np.inf, 1, 1])):
+    bad = os.path.join(tmp, "inf" + nm); write(bad, 99, [10, 11, 12, 13], vals, [1] * 4); write(bad, 91, [10, 11, 12, 13], [1] * 4, [1] * 4)
+    expect(ValueError, load_catalogue_tsc, bad, snap, grp, what=f"{nm} time")
+
+
+def write_raw(d, sn, keys, a, b, unit="Gyr"):
+    os.makedirs(d, exist_ok=True)
+    with h5py.File(os.path.join(d, f"TSC_eachhalo_snap{sn}.hdf5"), "w") as f:
+        f["FOF_Halo_ID_At99"] = np.asarray(keys)
+        f["tsc_gyr"], f["tsc_gyr_from_Tcoll"] = np.asarray(a, float), np.asarray(b, float)
+        f.attrs["snap_now"], f.attrs["unit"] = sn, unit
+
+
+bad = os.path.join(tmp, "unit"); write_raw(bad, 99, [10, 11, 12, 13], [1] * 4, [1] * 4, unit="Myr"); write_raw(bad, 91, [10, 11, 12, 13], [1] * 4, [1] * 4)
+expect(ValueError, load_catalogue_tsc, bad, snap, grp, what="units not Gyr")
+bad = os.path.join(tmp, "fkeys"); write_raw(bad, 99, [10.0, 11.5, 12.0, 13.0], [1] * 4, [1] * 4); write_raw(bad, 91, [10, 11, 12, 13], [1] * 4, [1] * 4)
+expect(ValueError, load_catalogue_tsc, bad, snap, grp, what="non-integral parent ids")
+bad = os.path.join(tmp, "len"); write_raw(bad, 99, [10, 11, 12, 13], [1] * 3, [1] * 3); write_raw(bad, 91, [10, 11, 12, 13], [1] * 4, [1] * 4)
+expect(ValueError, load_catalogue_tsc, bad, snap, grp, what="unequal key/value lengths")
 
 print("== 2. real join (xray_fix_s9991.h5 rows)")
 with h5py.File("xray_fix_s9991.h5") as f:
@@ -76,14 +96,16 @@ for sn in (99, 91):
 assert int(np.isnan(r["tsc_gyr_from_Tcoll"][1][xs == 99]).sum()) == 6
 assert int(np.isnan(r["tsc_gyr_from_Tcoll"][1][xs == 91]).sum()) == 15
 
-print("== 3. compare_labels.check on a synthetic matrix")
+print("== 3. compare_labels.check on a synthetic five-fold matrix")
 MAN = "f" * 64
-N, R, P = 6, 3, 3
-pseudo = np.array([0.1, 0.5, 1.0, 2.0, 4.0, 0.3])
-tsc_raw = np.array([0.0, 0.6, np.nan, 2.2, 5.0, 0.25])
+N, R, P, F = 10, 3, 3, 5
+pseudo = np.array([0.1, 0.5, 1.0, 2.0, 4.0, 0.3, 0.8, 1.5, 3.0, 0.2])
+tsc_raw = np.array([0.0, 0.6, np.nan, 2.2, 5.0, 0.25, 0.9, 1.4, 3.5, 0.1])
 tco_raw = tsc_raw + np.where(np.isfinite(tsc_raw), 0.01, 0)
-capf = lambda v: np.where(np.isfinite(v), np.minimum(v, 4.0), 4.0)
-target = {"pseudo": pseudo, "tsc": capf(tsc_raw), "tsc_tcoll": capf(tco_raw)}
+capf = lambda v: np.where(np.isnan(v), 4.0, np.minimum(v, 4.0))
+target = {"pseudo": pseudo, "tsc_tcoll": capf(tco_raw)}
+row_fold = np.arange(N) % F
+inner_of = {f: (f + 1) % F for f in range(F)}
 
 
 def make(m, lab, s):
@@ -93,10 +115,17 @@ def make(m, lab, s):
                 inputs_sha256={"dataset": "d", "catalog": "c", "tsc_snap99": "t9", "tsc_snap91": "t1"})
     y = target[lab]
     rg = np.random.default_rng(s)
-    return dict(sample_halo=np.repeat(np.arange(N), R), sample_group=np.repeat(np.arange(N), R),
-                sample_snap=np.repeat([99, 99, 99, 91, 91, 91], R), sample_realization=np.tile(np.arange(R), N),
+    grp = np.arange(N)
+    sn = np.r_[np.full(5, 99), np.full(5, 91)]
+    return dict(sample_halo=np.repeat(np.arange(N), R), sample_group=np.repeat(grp, R),
+                sample_snap=np.repeat(sn, R), sample_realization=np.tile(np.arange(R), N),
+                group_id=grp, snap=sn,
                 y_sample=np.repeat(y, R).astype(np.float32), tsc=y.astype(np.float32),
-                fold_of=np.repeat(np.arange(N) % 5, R), sel_groups_flat=np.zeros(0), sel_groups_fold=np.zeros(0),
+                fold_of=np.repeat(row_fold, R).astype(np.int16),
+                sel_groups_flat=np.array([inner_of[f] for f in range(F)]),
+                sel_groups_fold=np.arange(F), tsc_cap=np.array(4.0),
+                fold_best_epoch=np.array([10, 20, 30, 40, 50]), fold_sel_score=np.full(F, 0.3),
+                select_criterion=np.array("inner:single:r2"),
                 truth_pseudo=pseudo, truth_tsc_capped=capf(tsc_raw), truth_tsc_raw=tsc_raw,
                 truth_tcoll_capped=capf(tco_raw), truth_tcoll_raw=tco_raw, label_name=np.array(lab),
                 oof_sample=rg.uniform(0, 4, N * R), oof_single=rg.uniform(0, 4, (N * R, P)),
@@ -104,16 +133,18 @@ def make(m, lab, s):
 
 
 for m in L.MODALITIES:
-    runs = {lab: {s: make(m, lab, s) for s in (42, 43)} for lab in L.LABELS}
-    L.check(runs, m, MAN, 60)
-print("    valid synthetic matrix accepted (both modalities)")
+    L.check({lab: {s: make(m, lab, s) for s in (42, 43)} for lab in L.LABELS}, m, MAN, 60)
+print("    valid synthetic matrix accepted (both modalities, 5 folds, R = P = 3)")
 runs = {lab: {s: make("x", lab, s) for s in (42, 43)} for lab in L.LABELS}
 
 
-def bad_case(what, f, lab="tsc_tcoll", seed=43):
+def bad_case(what, f, lab="tsc_tcoll", seed=43, all_runs=False):
     r_ = copy.deepcopy(runs)
-    f(r_[lab][seed])
-    expect(SystemExit, L.check, r_, "x", MAN, 60, what=what)
+    for l_ in r_:
+        for s_ in r_[l_]:
+            if all_runs or (l_ == lab and s_ == seed):
+                f(r_[l_][s_])
+    expect(SystemExit, L.check, r_, "x", MAN, 60, what=what + (" [ALL runs]" if all_runs else ""))
 
 
 def cfg(k, v):
@@ -126,16 +157,26 @@ def no_hash(d):
     p = json.loads(str(d["provenance"])); p["inputs_sha256"].pop("tsc_snap91"); d["provenance"] = np.array(json.dumps(p))
 
 
+def set_(k, v):
+    return lambda d: d.__setitem__(k, v(d) if callable(v) else v)
+
+
 bad_case("training target is not the declared label",
          lambda d: (d.__setitem__("tsc", pseudo.astype(np.float32)),
                     d.__setitem__("y_sample", np.repeat(pseudo, R).astype(np.float32))))
-bad_case("truth differs between runs", lambda d: d.__setitem__("truth_pseudo", pseudo + 0.1))
+bad_case("truth differs between runs", set_("truth_pseudo", pseudo * 0.9))   # valid range, different values
 bad_case("undeclared config change", cfg("huber_delta", 1.0))
-bad_case("wrong label name", lambda d: d.__setitem__("label_name", np.array("tsc")))
-bad_case("missing TSC-file hash", no_hash)
-bad_case("capped != capped raw", lambda d: d.__setitem__("truth_tcoll_capped",
-                                                         np.minimum(d["truth_tcoll_capped"], 3.0)))
+bad_case("wrong label name", set_("label_name", np.array("pseudo")))
+bad_case("missing TSC-file hash", no_hash, all_runs=True)
 bad_case("wrong dataset for the modality", cfg("dataset", "injected_syn_phys_b3000_s9991.h5"))
+bad_case("+inf raw truth", set_("truth_tcoll_raw", lambda d: np.where(np.arange(N) == 3, np.inf, d["truth_tcoll_raw"])), all_runs=True)
+bad_case("capped != capped raw (reaches the cap check)", set_("truth_tcoll_capped", lambda d: np.minimum(d["truth_tcoll_capped"], 3.0)), all_runs=True)
+bad_case("one projection only", lambda d: (d.__setitem__("oof_single", d["oof_single"][:, :1])), all_runs=True)
+bad_case("checkpoint record invalid", set_("fold_best_epoch", np.zeros(5, int)), all_runs=True)
+bad_case("wrong selection criterion", set_("select_criterion", np.array("final")), all_runs=True)
+bad_case("saved cap != 4", set_("tsc_cap", np.array(5.0)), all_runs=True)
+bad_case("inner halos overlap the outer fold", set_("sel_groups_flat", np.arange(F)), all_runs=True)
+bad_case("row-to-sample mapping inconsistent", set_("sample_snap", lambda d: d["sample_snap"][::-1].copy()), all_runs=True)
 for txt in ("42,43", "42,42,43,44,45"):
     expect(SystemExit, L.parse_seeds, txt, "production", what=f"production seeds {txt!r}")
 print("ALL LABEL FIXTURE CHECKS PASSED")

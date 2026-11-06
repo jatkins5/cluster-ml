@@ -105,23 +105,48 @@ def input_files(args):
 # t_now - T_coll (first pericentre time; finer resolution). Collisions of
 # any mass ratio in the cluster-merger catalogue, at or before the snapshot.
 # NaN = no recorded collision before the snapshot. Both are capped at
-# TSC_CAP (= the pseudo-TSC cap) with NaN -> TSC_CAP: "no collision within
-# 4 Gyr" is one censored class, as for pseudo-TSC.
+# TSC_CAP (= the pseudo-TSC cap) with NaN -> TSC_CAP. The endpoint is the
+# CAPPED time since the last qualifying catalogue collision (Lee et al. 2024
+# selection: first pericentres, colliders above 1e13 Msun), not unrestricted
+# TSC; NaN = no qualifying collision recorded in the catalogue's covered
+# history (ages 4.90-13.80 Gyr, i.e. the full 4-Gyr window at both
+# snapshots; check_tsc_missing.py).
 TSC_CAP = 4.0
 
 
 def load_catalogue_tsc(tsc_dir, snap, group_id):
     """Identity-checked join of the catalogue TSC on (snapshot, z=0 parent
-    FOF id). Returns dict field -> (capped values, raw values) per row."""
+    FOF id). Returns dict field -> (capped values, raw values) per row.
+
+    Rejects (review R22-B): non-1-D or unequal-length arrays, units other
+    than Gyr, a snap_now mismatch, non-finite or non-integral parent ids,
+    duplicate or missing parents, +-inf and negative times. NaN is kept as
+    "no qualifying collision recorded before the snapshot" (verified for
+    these files by check_tsc_missing.py) and only then mapped to the cap."""
     out = {}
     for field in ("tsc_gyr", "tsc_gyr_from_Tcoll"):
         cap, raw = np.empty(len(snap)), np.empty(len(snap))
         for sn in np.unique(snap):
-            with h5py.File(os.path.join(tsc_dir, f"TSC_eachhalo_snap{int(sn)}.hdf5"), "r") as f:
+            path = os.path.join(tsc_dir, f"TSC_eachhalo_snap{int(sn)}.hdf5")
+            with h5py.File(path, "r") as f:
                 if int(f.attrs["snap_now"]) != int(sn):
                     raise ValueError(f"TSC file for snapshot {sn} says snap_now {f.attrs['snap_now']}")
-                keys = f["FOF_Halo_ID_At99"][:].astype(int)
+                unit = f.attrs.get("unit", "")
+                unit = unit.decode() if isinstance(unit, bytes) else str(unit)
+                if unit != "Gyr":
+                    raise ValueError(f"{path}: unit {unit!r} != 'Gyr'")
+                keys_raw = f["FOF_Halo_ID_At99"][:]
                 vals = f[field][:].astype(np.float64)
+            if keys_raw.ndim != 1 or vals.ndim != 1 or len(keys_raw) != len(vals):
+                raise ValueError(f"{path}: keys/{field} must be 1-D and equal length")
+            kf = keys_raw.astype(np.float64)
+            if not np.isfinite(kf).all() or not np.array_equal(kf, np.round(kf)):
+                raise ValueError(f"{path}: parent ids must be finite integers")
+            if np.isinf(vals).any():
+                raise ValueError(f"{path}: infinite {field}")
+            if (vals[np.isfinite(vals)] < 0).any():
+                raise ValueError("negative catalogue TSC")
+            keys = keys_raw.astype(np.int64)
             if len(set(keys)) != len(keys):
                 raise ValueError(f"duplicate parent ids in the snapshot-{sn} TSC file")
             pos = dict(zip(keys, range(len(keys))))
@@ -133,10 +158,8 @@ def load_catalogue_tsc(tsc_dir, snap, group_id):
             if miss:
                 raise ValueError(f"{len(miss)} snapshot-{sn} parents missing from the TSC file")
             v = vals[[pos[g] for g in want]]
-            if (v[np.isfinite(v)] < 0).any():
-                raise ValueError("negative catalogue TSC")
             raw[rows] = v
-            cap[rows] = np.where(np.isfinite(v), np.minimum(v, TSC_CAP), TSC_CAP)
+            cap[rows] = np.where(np.isnan(v), TSC_CAP, np.minimum(v, TSC_CAP))
         out[field] = (cap, raw)
     return out
 

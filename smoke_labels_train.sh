@@ -4,7 +4,7 @@
 #SBATCH --exclude=gpu3001,gpu2504,gpu3103
 #SBATCH -o logs/smoke_labels_train_%j.out
 # One-epoch smoke for the label comparison (diagnostic only): both modalities,
-# three labels, seeds 42,43, then compare_labels.py --mode smoke. Also checks
+# two labels (pseudo, tsc_tcoll), seeds 42,43, then compare_labels.py --mode smoke. Also checks
 # that a call without --label/--tsc-dir still trains on pseudo-TSC.
 # PREPARED; run only after review and the user's go-ahead.
 set -euo pipefail
@@ -18,7 +18,7 @@ $PY train_cnn_mock.py --dataset xray_fix_s9991.h5 $COMMON --seed 42 --out-prefix
 $PY -c "import numpy as np; d=np.load('$T/legacy_preds.npz'); assert str(d['label_name'])=='pseudo' and d['truth_tcoll_capped'].size==0; print('  legacy: pseudo-TSC, no catalogue truths')"
 for S in 42 43; do
   for M in x:xray_fix_s9991.h5 r:injected_syn_phys_b3000_s9991.h5; do
-    for L in pseudo tsc tsc_tcoll; do
+    for L in pseudo tsc_tcoll; do
       $PY train_cnn_mock.py --dataset ${M#*:} $COMMON --seed $S --label $L \
           --tsc-dir /oscar/data/idellant/Chuiyang/TSC_new \
           --out-prefix $T/lbl_${M%%:*}_${L}_s$S > $T/lbl_${M%%:*}_${L}_s$S.log 2>&1

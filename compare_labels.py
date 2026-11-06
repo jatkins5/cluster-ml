@@ -1,27 +1,32 @@
 #!/usr/bin/env python3
-"""Training-label comparison (2026-11-05): pseudo-TSC vs Chuiyang's catalogue
-TSC (TSC_new: tsc_gyr and tsc_gyr_from_Tcoll), each capped at 4 Gyr with
-NaN (no recorded collision) -> 4 Gyr.
+"""Training-label comparison (2026-11-05, review rounds 22-23): pseudo-TSC vs
+Chuiyang's catalogue TSC from T_coll (TSC_new: tsc_gyr_from_Tcoll), as the
+CAPPED time since the last qualifying catalogue collision: finite times above
+4 Gyr and NaN (no qualifying collision recorded in the catalogue's covered
+history; check_tsc_missing.py) both map to 4 Gyr. tsc_gyr (snapshot-based)
+is saved as a truth only.
 
   compare_labels.py --expect-manifest <sha256> [--mode smoke --seeds 42,43 --expect-epochs 1]
 
-Two modalities, three labels each, seeds 42-46:
+Two modalities x two labels, seeds 42-46 (20 runs):
   x_* : X-ray only (xray_fix_s9991.h5; the E5-H anchor protocol)
   r_* : radio, physical 3 Mpc, regenerated radio model (injected_syn_phys_b3000_s9991.h5)
 Within a modality the ONLY declared difference is --label (plus seed and
-output). R2 against a model's own target is not comparable across labels
-(different targets, different variance), so the PRIMARY score is how well
-each model's snapshot-99 single-observation 5-seed ensemble recovers the
-SAME truth -- the capped catalogue TSC from T_coll -- with paired
-parent-halo bootstrap contrasts tcoll - pseudo and tsc - pseudo. The
-reverse (each model against pseudo-TSC truth) and a check restricted to
-uncensored rows (finite raw T_coll <= 4 Gyr) are reported as secondaries.
-Frozen decision rule (proposed for review, before results): adopt the T_coll
-catalogue TSC as the paper's target if, in BOTH modalities, the tcoll-trained
-ensemble's R2 against the T_coll truth is no worse than the pseudo-trained
-ensemble's by more than 0.02 (point estimate). The reason to switch is
-interpretability, so a non-loss suffices; it is a practical rule, not an
-equivalence test.
+output). Each arm selects its checkpoint on ITS OWN training target (inner
+single-observation R2), so this compares complete target-specific
+training/selection pipelines; the common outer truth never influences
+selection. R2 against a model's own target is not comparable across labels,
+so the PRIMARY score is how well each arm's snapshot-99 single-observation
+5-seed ensemble recovers the SAME truth (capped T_coll TSC): R2, Spearman
+and MAE, with paired parent-halo bootstrap contrasts tcoll - pseudo for all
+three, seed s.d. separately, and fold-fitting-label mean/median baselines on
+the same cohort. Secondaries: each arm against the pseudo-TSC truth, and
+Spearman on the finite-below-cap rows (observation and parent-halo counts).
+Prespecified practical tolerance for further exploratory use (not
+noninferiority, not validation of the event definition, and not by itself a
+manuscript decision): the tcoll arm's R2 against the T_coll truth within
+-0.02 of the pseudo arm's, in BOTH modalities (point estimates; intervals
+and MAE reported alongside).
 """
 import argparse
 import json
@@ -34,7 +39,9 @@ from sklearn.metrics import mean_absolute_error, r2_score
 from compare_e0 import IDENT
 
 PRODUCTION_SEEDS = [42, 43, 44, 45, 46]
-LABELS = ("pseudo", "tsc", "tsc_tcoll")
+LABELS = ("pseudo", "tsc_tcoll")      # review R22: tsc_gyr kept as a saved truth only
+R_EXPECT, P_EXPECT, N_FOLD, CAP = 3, 3, 5, 4.0
+SELECT_CRITERION = "inner:single:r2"   # each arm selects on ITS OWN training target
 MODALITIES = {"x": "xray_fix_s9991.h5", "r": "injected_syn_phys_b3000_s9991.h5"}
 TRUTHS = ("truth_pseudo", "truth_tsc_capped", "truth_tsc_raw", "truth_tcoll_capped",
           "truth_tcoll_raw")
@@ -73,6 +80,64 @@ def load(pred_dir, m, seeds):
     return runs
 
 
+def validate_artifact(tag, d, epochs):
+    """Per-file validation before any cross-run comparison (review R22-C)."""
+    tsc = d["tsc"]
+    n = len(tsc)
+    if tsc.ndim != 1 or n == 0:
+        raise SystemExit(f"{tag}: per-row target must be 1-D and non-empty")
+    if len(d["y_sample"]) != n * R_EXPECT:
+        raise SystemExit(f"{tag}: {len(d['y_sample'])} samples != {n} rows x R={R_EXPECT}")
+    if d["oof_sample"].shape != (n * R_EXPECT,) or d["oof_single"].shape != (n * R_EXPECT, P_EXPECT):
+        raise SystemExit(f"{tag}: prediction shapes {d['oof_sample'].shape}/{d['oof_single'].shape} "
+                         f"!= ({n * R_EXPECT},)/({n * R_EXPECT}, {P_EXPECT})")
+    for k in ("group_id", "snap"):
+        if k not in d or d[k].shape != (n,):
+            raise SystemExit(f"{tag}: per-row {k} missing or mis-shaped")
+    if not (np.array_equal(d["sample_group"], np.repeat(d["group_id"], R_EXPECT))
+            and np.array_equal(d["sample_snap"], np.repeat(d["snap"], R_EXPECT))
+            and np.array_equal(d["sample_realization"], np.tile(np.arange(R_EXPECT), n))):
+        raise SystemExit(f"{tag}: row-to-sample parent/snapshot/realization mapping inconsistent")
+    ids = list(zip(d["sample_halo"].tolist(), d["sample_realization"].tolist()))
+    if len(set(ids)) != len(ids):
+        raise SystemExit(f"{tag}: duplicate sample identities")
+    if len(set(zip(d["group_id"].tolist(), d["snap"].tolist()))) != n:
+        raise SystemExit(f"{tag}: duplicate (parent, snapshot) label rows")
+    if float(d["tsc_cap"]) != CAP:
+        raise SystemExit(f"{tag}: saved cap {d['tsc_cap']} != {CAP}")
+    for k in TRUTHS:
+        if d[k].shape != (n,):
+            raise SystemExit(f"{tag}: {k} shape {d[k].shape} != ({n},)")
+    for k in ("truth_tsc_raw", "truth_tcoll_raw"):
+        v = d[k]
+        if np.isinf(v).any() or (v[np.isfinite(v)] < 0).any():
+            raise SystemExit(f"{tag}: {k} has infinite or negative values")
+    for k in ("truth_pseudo", "truth_tsc_capped", "truth_tcoll_capped"):
+        v = d[k]
+        if not np.isfinite(v).all() or v.min() < 0 or v.max() > CAP + 1e-9:
+            raise SystemExit(f"{tag}: {k} must be finite in [0, {CAP}]")
+    for raw, capd in (("truth_tsc_raw", "truth_tsc_capped"), ("truth_tcoll_raw", "truth_tcoll_capped")):
+        exp = np.where(np.isnan(d[raw]), CAP, np.minimum(d[raw], CAP))
+        if not np.array_equal(exp, d[capd]):
+            raise SystemExit(f"{tag}: {capd} != capped {raw} (NaN -> {CAP})")
+    fo = d["fold_of"]
+    if not np.issubdtype(fo.dtype, np.integer) or fo.min() < 0 or fo.max() >= N_FOLD:
+        raise SystemExit(f"{tag}: fold_of must be integer 0..{N_FOLD - 1}")
+    sg, sf = d["sel_groups_flat"], d["sel_groups_fold"]
+    for f in range(N_FOLD):
+        inner = set(sg[sf == f].astype(int).tolist())
+        if not inner:
+            raise SystemExit(f"{tag}: fold {f} has no inner-selection halos")
+        if inner & set(d["sample_group"][fo == f].astype(int).tolist()):
+            raise SystemExit(f"{tag}: fold {f} inner-selection halos overlap its outer halos")
+    be, ss = d.get("fold_best_epoch"), d.get("fold_sel_score")
+    if be is None or ss is None or be.shape != (N_FOLD,) or not np.issubdtype(be.dtype, np.integer) \
+            or be.min() < 1 or be.max() > epochs or ss.shape != (N_FOLD,) or not np.isfinite(ss).all():
+        raise SystemExit(f"{tag}: per-fold checkpoint record missing or invalid")
+    if str(d.get("select_criterion", "")) != SELECT_CRITERION:
+        raise SystemExit(f"{tag}: select_criterion {d.get('select_criterion')} != {SELECT_CRITERION}")
+
+
 def check(runs, m, expect_manifest, epochs):
     lab0, s0 = LABELS[0], next(iter(runs[LABELS[0]]))
     ref = runs[lab0][s0]
@@ -85,6 +150,7 @@ def check(runs, m, expect_manifest, epochs):
                                              "provenance", "provenance_changed_during_run"]:
                 if k not in d:
                     raise SystemExit(f"{tag}: missing {k}")
+            validate_artifact(tag, d, epochs)
             for k in IDENT:
                 if k in ("y_sample", "tsc"):
                     continue                      # the training target differs by arm
@@ -93,14 +159,6 @@ def check(runs, m, expect_manifest, epochs):
             for k in TRUTHS:
                 if not np.array_equal(d[k], ref[k], equal_nan=True):
                     raise SystemExit(f"{tag}: {k} differs between runs")
-            for k in ("truth_pseudo", "truth_tsc_capped", "truth_tcoll_capped"):
-                v = d[k]
-                if v.shape != d["tsc"].shape or not np.isfinite(v).all() or v.min() < 0 or v.max() > 4.0 + 1e-9:
-                    raise SystemExit(f"{tag}: {k} must be finite in [0, 4] per label row")
-            for raw, capd in (("truth_tsc_raw", "truth_tsc_capped"), ("truth_tcoll_raw", "truth_tcoll_capped")):
-                exp = np.where(np.isfinite(d[raw]), np.minimum(d[raw], 4.0), 4.0)
-                if not np.array_equal(exp, d[capd]):
-                    raise SystemExit(f"{tag}: {capd} != capped {raw} (NaN -> 4)")
             if str(d["label_name"]) != lab:
                 raise SystemExit(f"{tag}: label_name {d['label_name']} != {lab}")
             if not np.allclose(d["tsc"], d[TARGET_OF[lab]], atol=1e-6):
@@ -163,46 +221,61 @@ def main():
         runs = load(a.pred_dir, m, seeds)
         ref = check(runs, m, a.expect_manifest, epochs)
         msk = ref["sample_snap"] == 99
-        P = ref["oof_single"].shape[1]
-        R = len(ref["y_sample"]) // len(ref["tsc"])
+        P = P_EXPECT
         g = np.repeat(ref["sample_group"][msk][:, None], P, 1).ravel()
-        tr = {k: np.repeat(np.repeat(ref[k], R)[msk][:, None], P, 1).ravel() for k in TRUTHS}
+        fo = np.repeat(ref["fold_of"][msk][:, None], P, 1).ravel()
+        tr = {k: np.repeat(np.repeat(ref[k], R_EXPECT)[msk][:, None], P, 1).ravel() for k in TRUTHS}
         ens = {lab: np.mean([d["oof_single"][msk].ravel() for d in runs[lab].values()], 0)
                for lab in LABELS}
         per = {lab: [d["oof_single"][msk].ravel() for d in runs[lab].values()] for lab in LABELS}
+        y = tr["truth_tcoll_capped"]
         print(f"\n{tag}== {m}: {ds}; checks passed ({len(LABELS)} labels x seeds {seeds}); "
-              f"snapshot-99 single observations n={len(g)}, {len(np.unique(g))} parent halos")
-        unc = np.isfinite(tr["truth_tcoll_raw"]) & (tr["truth_tcoll_raw"] <= 4.0)
+              f"snapshot-99 single observations n={len(g)}, {len(np.unique(g))} parent halos; "
+              f"checkpoints selected on each arm's own target ({SELECT_CRITERION})")
+        # baselines from each fold's FITTING label rows (train minus inner), each row once
+        rows_g, rows_t = ref["group_id"], {k: ref[k] for k in ("truth_tcoll_capped", "truth_pseudo")}
+        sg, sf, fo_s = ref["sel_groups_flat"], ref["sel_groups_fold"], ref["fold_of"]
+        row_fold = fo_s[::R_EXPECT]
+        for src in ("truth_tcoll_capped", "truth_pseudo"):
+            for stat_name, fn in (("mean", np.mean), ("median", np.median)):
+                pred = np.empty(len(y))
+                for f in range(N_FOLD):
+                    fit = (row_fold != f) & ~np.isin(rows_g, sg[sf == f])
+                    pred[fo == f] = fn(rows_t[src][fit])
+                print(f"  baseline: fitting-row {stat_name} of {src:<18} vs T_coll truth: "
+                      f"R2 {r2_score(y, pred):+.3f}  MAE {mean_absolute_error(y, pred):.3f}")
+        unc = np.isfinite(tr["truth_tcoll_raw"]) & (tr["truth_tcoll_raw"] <= CAP)
         for lab in LABELS:
             e = ens[lab]
-            print(f"  trained on {lab:<10} vs T_coll TSC: R2 {r2_score(tr['truth_tcoll_capped'], e):.3f} "
-                  f"Spearman {stats.spearmanr(tr['truth_tcoll_capped'], e)[0]:.3f} "
-                  f"MAE {mean_absolute_error(tr['truth_tcoll_capped'], e):.3f} | vs pseudo: R2 "
-                  f"{r2_score(tr['truth_pseudo'], e):.3f} Spearman {stats.spearmanr(tr['truth_pseudo'], e)[0]:.3f} "
-                  f"| uncensored rows ({unc.sum()}) Spearman vs raw T_coll "
+            print(f"  trained on {lab:<10} vs T_coll truth: R2 {r2_score(y, e):.3f} "
+                  f"Spearman {stats.spearmanr(y, e)[0]:.3f} MAE {mean_absolute_error(y, e):.3f} "
+                  f"| vs pseudo truth: R2 {r2_score(tr['truth_pseudo'], e):.3f} "
+                  f"Spearman {stats.spearmanr(tr['truth_pseudo'], e)[0]:.3f} "
+                  f"| finite-below-cap rows ({unc.sum()} obs, {len(np.unique(g[unc]))} halos) Spearman "
                   f"{stats.spearmanr(tr['truth_tcoll_raw'][unc], e[unc])[0]:.3f}")
-        y = tr["truth_tcoll_capped"]
-        for b in ("tsc_tcoll", "tsc"):
-            d_r2 = r2_score(y, ens[b]) - r2_score(y, ens["pseudo"])
-            iv = halo_boot(g, lambda s_: r2_score(y[s_], ens[b][s_]) - r2_score(y[s_], ens["pseudo"][s_]), a.boot)
-            ivs = halo_boot(g, lambda s_: stats.spearmanr(y[s_], ens[b][s_])[0]
-                            - stats.spearmanr(y[s_], ens["pseudo"][s_])[0], a.boot)
-            ds_ = [r2_score(y, pb) - r2_score(y, pa) for pa, pb in zip(per["pseudo"], per[b])]
-            sd = f" ± {np.std(ds_, ddof=1):.3f} (s.d.)" if len(ds_) > 1 else ""
-            print(f"  {tag}{b} - pseudo, on the T_coll truth: R2 {d_r2:+.3f} [{iv[0]:+.3f}, {iv[1]:+.3f}]; "
-                  f"Spearman {stats.spearmanr(y, ens[b])[0] - stats.spearmanr(y, ens['pseudo'])[0]:+.3f} "
-                  f"[{ivs[0]:+.3f}, {ivs[1]:+.3f}] (paired halo bootstrap; conditional on the fits); "
-                  f"per-seed R2 diff {np.mean(ds_):+.3f}{sd}")
-            if b == "tsc_tcoll":
-                verdict[m] = d_r2
+        b_, p_ = ens["tsc_tcoll"], ens["pseudo"]
+        d_r2 = r2_score(y, b_) - r2_score(y, p_)
+        d_sp = stats.spearmanr(y, b_)[0] - stats.spearmanr(y, p_)[0]
+        d_ma = mean_absolute_error(y, b_) - mean_absolute_error(y, p_)
+        iv = halo_boot(g, lambda s_: r2_score(y[s_], b_[s_]) - r2_score(y[s_], p_[s_]), a.boot)
+        ivs = halo_boot(g, lambda s_: stats.spearmanr(y[s_], b_[s_])[0] - stats.spearmanr(y[s_], p_[s_])[0], a.boot)
+        ivm = halo_boot(g, lambda s_: mean_absolute_error(y[s_], b_[s_]) - mean_absolute_error(y[s_], p_[s_]), a.boot)
+        ds_ = [r2_score(y, pb) - r2_score(y, pa) for pa, pb in zip(per["pseudo"], per["tsc_tcoll"])]
+        sd = f" ± {np.std(ds_, ddof=1):.3f} (s.d.)" if len(ds_) > 1 else ""
+        print(f"  {tag}tsc_tcoll - pseudo on the T_coll truth: R2 {d_r2:+.3f} [{iv[0]:+.3f}, {iv[1]:+.3f}]; "
+              f"Spearman {d_sp:+.3f} [{ivs[0]:+.3f}, {ivs[1]:+.3f}]; MAE {d_ma:+.3f} "
+              f"[{ivm[0]:+.3f}, {ivm[1]:+.3f}] Gyr (paired halo bootstrap; conditional on the fits); "
+              f"per-seed R2 diff {np.mean(ds_):+.3f}{sd}")
         yp = tr["truth_pseudo"]
-        d_rp = r2_score(yp, ens["pseudo"]) - r2_score(yp, ens["tsc_tcoll"])
-        print(f"  secondary: pseudo - tsc_tcoll on the PSEUDO truth: R2 {d_rp:+.3f}")
+        print(f"  secondary: pseudo - tsc_tcoll on the PSEUDO truth: R2 "
+              f"{r2_score(yp, p_) - r2_score(yp, b_):+.3f}")
+        verdict[m] = d_r2
     if a.mode == "production":
         ok = all(v >= -0.02 for v in verdict.values())
-        print(f"\ndecision rule (frozen before results; tcoll - pseudo on the T_coll truth >= -0.02 "
-              f"in both modalities): {verdict} -> {'adopt' if ok else 'do not adopt'} the T_coll "
-              f"catalogue TSC as the paper's target")
+        print(f"\nprespecified practical tolerance (tcoll - pseudo R2 on the T_coll truth >= -0.02 in "
+              f"both modalities; not noninferiority): {verdict} -> "
+              f"{'within' if ok else 'outside'} the tolerance for further exploratory use of the "
+              f"catalogue label (any manuscript change is a separate decision)")
 
 
 if __name__ == "__main__":
