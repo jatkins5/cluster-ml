@@ -104,7 +104,8 @@ tsc_raw = np.array([0.0, 0.6, np.nan, 2.2, 5.0, 0.25, 0.9, 1.4, 3.5, 0.1])
 tco_raw = tsc_raw + np.where(np.isfinite(tsc_raw), 0.01, 0)
 capf = lambda v: np.where(np.isnan(v), 4.0, np.minimum(v, 4.0))
 target = {"pseudo": pseudo, "tsc_tcoll": capf(tco_raw)}
-row_fold = np.arange(N) % F
+GRP = np.tile(np.arange(5), 2)          # the SAME 5 parents at both snapshots
+row_fold = GRP % F
 inner_of = {f: (f + 1) % F for f in range(F)}
 
 
@@ -115,7 +116,7 @@ def make(m, lab, s):
                 inputs_sha256={"dataset": "d", "catalog": "c", "tsc_snap99": "t9", "tsc_snap91": "t1"})
     y = target[lab]
     rg = np.random.default_rng(s)
-    grp = np.arange(N)
+    grp = GRP
     sn = np.r_[np.full(5, 99), np.full(5, 91)]
     return dict(sample_halo=np.repeat(np.arange(N), R), sample_group=np.repeat(grp, R),
                 sample_snap=np.repeat(sn, R), sample_realization=np.tile(np.arange(R), N),
@@ -134,7 +135,7 @@ def make(m, lab, s):
 
 for m in L.MODALITIES:
     L.check({lab: {s: make(m, lab, s) for s in (42, 43)} for lab in L.LABELS}, m, MAN, 60)
-print("    valid synthetic matrix accepted (both modalities, 5 folds, R = P = 3)")
+print("    valid synthetic matrix accepted (both modalities, 5 parents x 2 snapshots, 5 folds, R = P = 3)")
 runs = {lab: {s: make("x", lab, s) for s in (42, 43)} for lab in L.LABELS}
 
 
@@ -176,7 +177,28 @@ bad_case("checkpoint record invalid", set_("fold_best_epoch", np.zeros(5, int)),
 bad_case("wrong selection criterion", set_("select_criterion", np.array("final")), all_runs=True)
 bad_case("saved cap != 4", set_("tsc_cap", np.array(5.0)), all_runs=True)
 bad_case("inner halos overlap the outer fold", set_("sel_groups_flat", np.arange(F)), all_runs=True)
+def split_parent(d):
+    fo = d["fold_of"].copy(); fo[5 * R:6 * R] = 1       # parent 0's snapshot-91 row -> fold 1
+    d["fold_of"] = fo
+
+
+bad_case("one parent's snapshots in different outer folds", split_parent, all_runs=True)
+bad_case("inner-selection halo is an unknown parent", set_("sel_groups_flat", np.array([1, 2, 3, 4, 77])), all_runs=True)
 bad_case("row-to-sample mapping inconsistent", set_("sample_snap", lambda d: d["sample_snap"][::-1].copy()), all_runs=True)
+print("== 4. cross-modality checks")
+refs = {"x": make("x", "pseudo", 42), "r": make("r", "pseudo", 42)}
+L.check_cross(refs)
+print("    common sources, manifest, label inputs and truths accepted")
+r2 = copy.deepcopy(refs)
+p_ = json.loads(str(r2["r"]["provenance"])); p_["inputs_sha256"]["tsc_snap99"] = "other"
+r2["r"]["provenance"] = np.array(json.dumps(p_))
+expect(SystemExit, L.check_cross, r2, what="radio arm with a different TSC-file hash")
+r3 = copy.deepcopy(refs); r3["r"]["truth_tcoll_raw"] = r3["r"]["truth_tcoll_raw"] * 1.01
+expect(SystemExit, L.check_cross, r3, what="different truths for the same keys")
+r4 = copy.deepcopy(refs)
+p_ = json.loads(str(r4["r"]["provenance"])); p_["sha256"] = {"train_cnn_mock.py": "b"}
+r4["r"]["provenance"] = np.array(json.dumps(p_))
+expect(SystemExit, L.check_cross, r4, what="different defining sources")
 for txt in ("42,43", "42,42,43,44,45"):
     expect(SystemExit, L.parse_seeds, txt, "production", what=f"production seeds {txt!r}")
 print("ALL LABEL FIXTURE CHECKS PASSED")

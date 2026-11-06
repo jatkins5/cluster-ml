@@ -108,9 +108,9 @@ def input_files(args):
 # TSC_CAP (= the pseudo-TSC cap) with NaN -> TSC_CAP. The endpoint is the
 # CAPPED time since the last qualifying catalogue collision (Lee et al. 2024
 # selection: first pericentres, colliders above 1e13 Msun), not unrestricted
-# TSC; NaN = no qualifying collision recorded in the catalogue's covered
-# history (ages 4.90-13.80 Gyr, i.e. the full 4-Gyr window at both
-# snapshots; check_tsc_missing.py).
+# TSC; NaN = no recorded qualifying collision before the snapshot (all
+# event times finite; observed event-time span 4.90-13.80 Gyr, which does
+# not by itself prove each halo's history complete; check_tsc_missing.py).
 TSC_CAP = 4.0
 
 
@@ -121,8 +121,9 @@ def load_catalogue_tsc(tsc_dir, snap, group_id):
     Rejects (review R22-B): non-1-D or unequal-length arrays, units other
     than Gyr, a snap_now mismatch, non-finite or non-integral parent ids,
     duplicate or missing parents, +-inf and negative times. NaN is kept as
-    "no qualifying collision recorded before the snapshot" (verified for
-    these files by check_tsc_missing.py) and only then mapped to the cap."""
+    "no recorded qualifying collision before the snapshot" (all event times
+    in these files are finite; check_tsc_missing.py) and only then mapped to
+    the cap -- a convention for this catalogue-defined target."""
     out = {}
     for field in ("tsc_gyr", "tsc_gyr_from_Tcoll"):
         cap, raw = np.empty(len(snap)), np.empty(len(snap))

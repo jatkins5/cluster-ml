@@ -2,8 +2,12 @@
 """Training-label comparison (2026-11-05, review rounds 22-23): pseudo-TSC vs
 Chuiyang's catalogue TSC from T_coll (TSC_new: tsc_gyr_from_Tcoll), as the
 CAPPED time since the last qualifying catalogue collision: finite times above
-4 Gyr and NaN (no qualifying collision recorded in the catalogue's covered
-history; check_tsc_missing.py) both map to 4 Gyr. tsc_gyr (snapshot-based)
+4 Gyr and NaN (no recorded qualifying collision before the snapshot:
+check_tsc_missing.py) both map to 4 Gyr -- an explicit convention for this
+catalogue-defined target. The catalogue's observed event-time span (ages
+4.90-13.80 Gyr) is not proof that every halo's history is complete;
+catalogue completeness and the file's mass units/selection remain
+unverified limitations. tsc_gyr (snapshot-based)
 is saved as a truth only.
 
   compare_labels.py --expect-manifest <sha256> [--mode smoke --seeds 42,43 --expect-epochs 1]
@@ -14,8 +18,8 @@ Two modalities x two labels, seeds 42-46 (20 runs):
 Within a modality the ONLY declared difference is --label (plus seed and
 output). Each arm selects its checkpoint on ITS OWN training target (inner
 single-observation R2), so this compares complete target-specific
-training/selection pipelines; the common outer truth never influences
-selection. R2 against a model's own target is not comparable across labels,
+training/selection pipelines; outer held-out labels never select
+checkpoints (the T_coll arm uses its own INNER T_coll labels to select). R2 against a model's own target is not comparable across labels,
 so the PRIMARY score is how well each arm's snapshot-99 single-observation
 5-seed ensemble recovers the SAME truth (capped T_coll TSC): R2, Spearman
 and MAE, with paired parent-halo bootstrap contrasts tcoll - pseudo for all
@@ -121,14 +125,31 @@ def validate_artifact(tag, d, epochs):
         if not np.array_equal(exp, d[capd]):
             raise SystemExit(f"{tag}: {capd} != capped {raw} (NaN -> {CAP})")
     fo = d["fold_of"]
-    if not np.issubdtype(fo.dtype, np.integer) or fo.min() < 0 or fo.max() >= N_FOLD:
-        raise SystemExit(f"{tag}: fold_of must be integer 0..{N_FOLD - 1}")
+    if fo.shape != (n * R_EXPECT,) or not np.issubdtype(fo.dtype, np.integer) \
+            or fo.min() < 0 or fo.max() >= N_FOLD:
+        raise SystemExit(f"{tag}: fold_of must be integer 0..{N_FOLD - 1}, one per sample")
+    # parent-fold invariant (review R23): one outer fold per parent across ALL
+    # snapshots and realizations; every fold represented
+    par_fold = {}
+    for g_, f_ in zip(d["sample_group"].astype(int).tolist(), fo.astype(int).tolist()):
+        if par_fold.setdefault(g_, f_) != f_:
+            raise SystemExit(f"{tag}: parent {g_} occupies more than one outer fold")
+    if set(par_fold.values()) != set(range(N_FOLD)):
+        raise SystemExit(f"{tag}: not every outer fold is represented")
     sg, sf = d["sel_groups_flat"], d["sel_groups_fold"]
+    if sg.shape != sf.shape or sg.ndim != 1:
+        raise SystemExit(f"{tag}: inner-selection arrays must be 1-D and equal length")
+    if sf.size and (not np.array_equal(sf, np.round(sf)) or sf.min() < 0 or sf.max() >= N_FOLD):
+        raise SystemExit(f"{tag}: inner-selection fold indices must be integers 0..{N_FOLD - 1}")
+    if not set(sg.astype(int).tolist()) <= set(par_fold):
+        raise SystemExit(f"{tag}: inner-selection halos include unknown parents")
     for f in range(N_FOLD):
         inner = set(sg[sf == f].astype(int).tolist())
-        if not inner:
-            raise SystemExit(f"{tag}: fold {f} has no inner-selection halos")
-        if inner & set(d["sample_group"][fo == f].astype(int).tolist()):
+        outer = {g_ for g_, f_ in par_fold.items() if f_ == f}
+        fit = set(par_fold) - outer - inner
+        if not inner or not outer or not fit:
+            raise SystemExit(f"{tag}: fold {f} has an empty inner, outer or fitting partition")
+        if inner & outer:
             raise SystemExit(f"{tag}: fold {f} inner-selection halos overlap its outer halos")
     be, ss = d.get("fold_best_epoch"), d.get("fold_sel_score")
     if be is None or ss is None or be.shape != (N_FOLD,) or not np.issubdtype(be.dtype, np.integer) \
@@ -192,6 +213,30 @@ def check(runs, m, expect_manifest, epochs):
     return ref
 
 
+def check_cross(refs):
+    """Review R23: the modalities must share the defining sources, manifest and
+    catalogue-label inputs (only the image dataset differs), and the same
+    truths for the same (parent, snapshot) keys."""
+    (m0, a), (m1, b) = list(refs.items())
+    pa, pb = json.loads(str(a["provenance"])), json.loads(str(b["provenance"]))
+    if pa["sha256"] != pb["sha256"]:
+        raise SystemExit(f"{m0} vs {m1}: defining-source hashes differ")
+    if pa["manifest_sha256"] != pb["manifest_sha256"]:
+        raise SystemExit(f"{m0} vs {m1}: manifests differ")
+    for k in ("catalog", "tsc_snap99", "tsc_snap91"):
+        if pa["inputs_sha256"].get(k) != pb["inputs_sha256"].get(k):
+            raise SystemExit(f"{m0} vs {m1}: input hash {k} differs")
+    ka = {(int(g), int(s_)): i for i, (g, s_) in enumerate(zip(a["group_id"], a["snap"]))}
+    kb = {(int(g), int(s_)): i for i, (g, s_) in enumerate(zip(b["group_id"], b["snap"]))}
+    if set(ka) != set(kb):
+        raise SystemExit(f"{m0} vs {m1}: different (parent, snapshot) cohorts")
+    ia = np.array([ka[k] for k in sorted(ka)])
+    ib = np.array([kb[k] for k in sorted(ka)])
+    for k in TRUTHS:
+        if not np.array_equal(a[k][ia], b[k][ib], equal_nan=True):
+            raise SystemExit(f"{m0} vs {m1}: {k} differs for the same keys")
+
+
 def halo_boot(g, stat, n, seed=0):
     rng = np.random.default_rng(seed)
     ug = np.unique(g)
@@ -217,9 +262,15 @@ def main():
     epochs = 60 if a.mode == "production" else a.expect_epochs
     tag = "DIAGNOSTIC (smoke, not a result): " if a.mode == "smoke" else ""
     verdict = {}
+    allruns, refs = {}, {}
+    for m in MODALITIES:
+        allruns[m] = load(a.pred_dir, m, seeds)
+        refs[m] = check(allruns[m], m, a.expect_manifest, epochs)
+    check_cross(refs)
+    print(f"{tag}cross-modality checks passed: common defining sources, manifest, catalogue-label "
+          f"inputs and truths for the same (parent, snapshot) keys")
     for m, ds in MODALITIES.items():
-        runs = load(a.pred_dir, m, seeds)
-        ref = check(runs, m, a.expect_manifest, epochs)
+        runs, ref = allruns[m], refs[m]
         msk = ref["sample_snap"] == 99
         P = P_EXPECT
         g = np.repeat(ref["sample_group"][msk][:, None], P, 1).ravel()
