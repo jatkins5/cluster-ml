@@ -17,6 +17,7 @@ Reports two things:
 """
 import argparse
 import json
+import os
 
 import h5py
 import numpy as np
@@ -93,6 +94,50 @@ def input_files(args):
         out["xray_dataset"] = args.xray_dataset
     if args.label_curves:
         out["label_curves"] = args.label_curves
+    if args.tsc_dir:
+        for sn in (99, 91):
+            out[f"tsc_snap{sn}"] = os.path.join(args.tsc_dir, f"TSC_eachhalo_snap{sn}.hdf5")
+    return out
+
+
+# ---- catalogue TSC labels (2026-11-05; Chuiyang's TSC_new) ----
+# tsc_gyr: t_now - t(snapshot of the last collision); tsc_gyr_from_Tcoll:
+# t_now - T_coll (first pericentre time; finer resolution). Collisions of
+# any mass ratio in the cluster-merger catalogue, at or before the snapshot.
+# NaN = no recorded collision before the snapshot. Both are capped at
+# TSC_CAP (= the pseudo-TSC cap) with NaN -> TSC_CAP: "no collision within
+# 4 Gyr" is one censored class, as for pseudo-TSC.
+TSC_CAP = 4.0
+
+
+def load_catalogue_tsc(tsc_dir, snap, group_id):
+    """Identity-checked join of the catalogue TSC on (snapshot, z=0 parent
+    FOF id). Returns dict field -> (capped values, raw values) per row."""
+    out = {}
+    for field in ("tsc_gyr", "tsc_gyr_from_Tcoll"):
+        cap, raw = np.empty(len(snap)), np.empty(len(snap))
+        for sn in np.unique(snap):
+            with h5py.File(os.path.join(tsc_dir, f"TSC_eachhalo_snap{int(sn)}.hdf5"), "r") as f:
+                if int(f.attrs["snap_now"]) != int(sn):
+                    raise ValueError(f"TSC file for snapshot {sn} says snap_now {f.attrs['snap_now']}")
+                keys = f["FOF_Halo_ID_At99"][:].astype(int)
+                vals = f[field][:].astype(np.float64)
+            if len(set(keys)) != len(keys):
+                raise ValueError(f"duplicate parent ids in the snapshot-{sn} TSC file")
+            pos = dict(zip(keys, range(len(keys))))
+            rows = np.where(snap == sn)[0]
+            want = group_id[rows].astype(int)
+            if len(set(want)) != len(want):
+                raise ValueError(f"duplicate requested parents at snapshot {sn}")
+            miss = [g for g in want if g not in pos]
+            if miss:
+                raise ValueError(f"{len(miss)} snapshot-{sn} parents missing from the TSC file")
+            v = vals[[pos[g] for g in want]]
+            if (v[np.isfinite(v)] < 0).any():
+                raise ValueError("negative catalogue TSC")
+            raw[rows] = v
+            cap[rows] = np.where(np.isfinite(v), np.minimum(v, TSC_CAP), TSC_CAP)
+        out[field] = (cap, raw)
     return out
 
 
@@ -670,6 +715,13 @@ def main():
                     help="dataset with labels/label_score_{all,pre} and meta/ "
                          "(snap, halo_id, group_id), joined read-only for the "
                          "E5 classes; identity metadata, not a predictor input")
+    ap.add_argument("--label", choices=["pseudo", "tsc", "tsc_tcoll"], default="pseudo",
+                    help="training target: pseudo-TSC (legacy default), or the catalogue "
+                         "TSC from --tsc-dir (tsc_gyr / tsc_gyr_from_Tcoll), capped at 4 Gyr "
+                         "with NaN (no recorded collision) -> 4 Gyr")
+    ap.add_argument("--tsc-dir", default=None,
+                    help="directory with TSC_eachhalo_snap{99,91}.hdf5 (Chuiyang's TSC_new); "
+                         "when given, every arm also saves both catalogue truths")
     ap.add_argument("--contrastive-pretrain", action="store_true",
                     help="E4: pretrain the encoder contrastively on each fold's "
                          "FITTING halos (D4 pairs of one observation), then train "
@@ -691,6 +743,10 @@ def main():
                          "measurement must be fixed across seeds and arms")
     if args.no_image and not args.mass:
         raise SystemExit("--no-image without --mass leaves no input at all")
+    if args.label != "pseudo" and not args.tsc_dir:
+        raise SystemExit("--label tsc/tsc_tcoll needs --tsc-dir")
+    if args.label != "pseudo" and args.loss == "class7":
+        raise SystemExit("the seven-class head is defined on pseudo-TSC classes only")
     if args.loss == "class7" and not args.label_curves:
         raise SystemExit("--loss class7 needs --label-curves")
     if args.contrastive_pretrain and (args.xray_dataset or args.view_scalars
@@ -747,12 +803,30 @@ def main():
                                          for s in np.unique(snap))
               + f"; {len(np.unique(group_id))} distinct clusters")
 
+    # Catalogue TSC (2026-11-05): joined for every arm when --tsc-dir is given,
+    # so all models can be scored against the same truths; --label picks the
+    # training target. pseudo_row keeps the dataset's pseudo-TSC.
+    pseudo_row = tsc.astype(np.float64).copy()
+    cat = None
+    if args.tsc_dir:
+        try:
+            cat = load_catalogue_tsc(args.tsc_dir, snap, group_id)
+        except (ValueError, KeyError, OSError) as e:
+            raise SystemExit(f"--tsc-dir: {e}")
+        raw = cat["tsc_gyr_from_Tcoll"][1]
+        print(f"  catalogue TSC joined: NaN (no collision) {int(np.isnan(raw).sum())}, "
+              f"> {TSC_CAP} Gyr {int((raw > TSC_CAP).sum())}, zero {int((raw == 0).sum())}; "
+              f"training label: {args.label}")
+        if args.label != "pseudo":
+            field = "tsc_gyr" if args.label == "tsc" else "tsc_gyr_from_Tcoll"
+            tsc = cat[field][0].astype(np.float32)
+
     # E5: classes from the label curves (identity-checked; rows = (snap, halo))
     cls_row = nocross_row = None
     if args.label_curves:
         try:
             cls_row, nocross_row = load_label_classes(args.label_curves, snap, halo,
-                                                      group_id, tsc)
+                                                      group_id, pseudo_row)
         except ValueError as e:
             raise SystemExit(f"--label-curves: {e}")
         print(f"  label curves joined: classes {np.bincount(cls_row, minlength=N_CLASS).tolist()}"
@@ -999,7 +1073,7 @@ def main():
         if cls_row is not None:
             # fitting (snapshot, halo) rows, each counted once
             try:
-                reps, ccount, clim = class_reps(tsc.astype(np.float64), cls_row,
+                reps, ccount, clim = class_reps(pseudo_row, cls_row,
                                                 np.unique(fit // R))
             except ValueError as e:
                 raise SystemExit(f"fold {k}: {e}")
@@ -1145,6 +1219,13 @@ def main():
              train_view=args.train_view, select_view=args.select_view,
              view_cols=np.array(view_cols), n_view=n_view, n_scalar=n_scalar,
              view_mask=view_mask, global_cols=np.array(global_cols),
+             # catalogue-TSC experiment (2026-11-05): training label and the
+             # common truths per label row (capped and raw)
+             label_name=args.label, tsc_cap=TSC_CAP, truth_pseudo=pseudo_row,
+             truth_tsc_capped=(cat["tsc_gyr"][0] if cat else np.zeros(0)),
+             truth_tsc_raw=(cat["tsc_gyr"][1] if cat else np.zeros(0)),
+             truth_tcoll_capped=(cat["tsc_gyr_from_Tcoll"][0] if cat else np.zeros(0)),
+             truth_tcoll_raw=(cat["tsc_gyr_from_Tcoll"][1] if cat else np.zeros(0)),
              # E5 (review R16)
              loss=args.loss, class_edges=CLASS_EDGES,
              class_of=(cls_row if cls_row is not None else np.zeros(0, np.int64)),
