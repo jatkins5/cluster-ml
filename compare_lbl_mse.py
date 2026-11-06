@@ -7,7 +7,12 @@ trained on the capped catalogue TSC (T_coll), X-ray only.
 Arms: huber = cnn_preds/lbl_x_tsc_tcoll_s{seed}_preds.npz (accepted Phase 3
 artifacts), mse = cnn_preds/lbl_x_tsc_tcoll_mse_s{seed}_preds.npz. Contract:
 every artifact passes compare_labels.validate_artifact (shapes, identities,
-truths, cap, folds, inner sets, checkpoint record); both arms train on
+truths, cap, folds, inner sets, checkpoint record) AND the absolute checks
+of validate_semantics (the frozen compare_labels.REQUIRED_CFG apart from the
+arm's loss, with label tsc_tcoll, the X-ray dataset and config epochs equal
+to the declared budget; exactly the required input-hash keys, non-empty; a
+populated defining-source record; tsc == truth_tcoll_capped; y_sample = tsc
+repeated over 3 realizations; finite predictions); both arms train on
 tsc_tcoll; identities, labels, all truths, outer folds and inner (fold,
 parent) memberships identical across every run; defining-source and input
 hashes identical across every run and unchanged in-run; configuration
@@ -35,6 +40,42 @@ from compare_e0 import IDENT
 ARMS = {"huber": "lbl_x_tsc_tcoll_s{}_preds.npz", "mse": "lbl_x_tsc_tcoll_mse_s{}_preds.npz"}
 FREE = {"seed", "out_prefix", "loss"}
 TRUTHS = L.TRUTHS
+SOURCES = {"train_cnn_mock.py", "train_cnn_pooled.py", "forward_model_lotss.py"}
+
+
+def required_cfg(epochs):
+    """The frozen protocol (review R37-1): compare_labels.REQUIRED_CFG with the
+    arm-specific loss removed, plus the catalogue label, the X-ray dataset and
+    the epoch budget."""
+    req = {k: v for k, v in L.REQUIRED_CFG.items() if k != "loss"}
+    req.update(epochs=epochs, label="tsc_tcoll", dataset=L.MODALITIES["x"])
+    return req
+
+
+def validate_semantics(tag, d, p, epochs):
+    """Absolute per-artifact checks (review R37-1/R37-2), before any cross-run
+    comparison: required configuration, required provenance records, the
+    declared training target and finite predictions."""
+    c = p["config"]
+    for k, v in required_cfg(epochs).items():
+        if c.get(k) != v:
+            raise SystemExit(f"{tag}: protocol requires {k}={v!r}, run has {c.get(k)!r}")
+    ih = p.get("inputs_sha256") or {}
+    if set(ih) != L.REQUIRED_INPUTS or not all(isinstance(v, str) and v for v in ih.values()):
+        raise SystemExit(f"{tag}: input hashes {sorted(ih)} must be exactly {sorted(L.REQUIRED_INPUTS)}, non-empty")
+    sh = p.get("sha256") or {}
+    if not SOURCES <= set(sh) or not all(isinstance(sh[k], str) and sh[k] for k in SOURCES):
+        raise SystemExit(f"{tag}: defining-source record must cover {sorted(SOURCES)} with non-empty hashes")
+    n = len(d["truth_tcoll_capped"])
+    t = np.asarray(d["tsc"], dtype=np.float64)
+    if t.shape != (n,) or not np.allclose(t, d["truth_tcoll_capped"], rtol=0, atol=1e-6):
+        raise SystemExit(f"{tag}: training target tsc != truth_tcoll_capped for the declared label")
+    ys = np.asarray(d["y_sample"], dtype=np.float64)
+    if ys.shape != (n * L.R_EXPECT,) or not np.allclose(ys, np.repeat(t, L.R_EXPECT), rtol=0, atol=1e-6):
+        raise SystemExit(f"{tag}: y_sample is not the target expanded over {L.R_EXPECT} realizations")
+    for k in ("oof_single", "oof_sample"):
+        if not np.isfinite(d[k]).all():
+            raise SystemExit(f"{tag}: non-finite {k}")
 
 
 def load(pred_dir, seeds):
@@ -60,6 +101,7 @@ def check(runs, expect_manifest, epochs):
         for s, d in rr.items():
             tag = f"{arm} seed {s}"
             L.validate_artifact(tag, d, epochs)
+            validate_semantics(tag, d, json.loads(str(d["provenance"])), epochs)
             for k in IDENT + list(TRUTHS) + ["group_id", "snap"]:
                 if not np.array_equal(d[k], ref[k], equal_nan=True):
                     raise SystemExit(f"{tag}: {k} differs from the reference run")
