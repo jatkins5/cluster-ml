@@ -52,6 +52,9 @@ print("\nf(M, T) = w_new / w_old  (rows Mach, columns T [keV])")
 print("  M     " + "".join(f"{t:>11.3g}" for t in Ts))
 for M in Ms:
     print(f"  {M:<6}" + "".join(f"{ratio(M, np.array([t]))[0]:>11.3e}" for t in Ts))
+spread = max(np.ptp([ratio(M, np.array([t]))[0] for t in Ts]) / ratio(M, np.array([1.0]))[0] for M in Ms)
+print(f"\nlargest relative spread of f across the sampled T at fixed Mach: {spread:.4f} "
+      f"(approximately Mach-dependent over these temperatures, not exactly)")
 ref = ratio(4.0, np.array([1.0]))[0]
 print("\nnormalised to M=4, T=1 keV (the shape change that matters for maps):")
 for M in Ms:
@@ -81,6 +84,7 @@ for snap in (99, 91):
                      np.percentile(lr, 95), rho, top_o, top_n, same_top,
                      np.linalg.norm(cn - co), int((~ok).sum())))
     r = np.array(rows)
+    print(f"  same top cell in {int(r[:, 7].sum())} of {len(r)} halos")
     names = ["total ratio new/old", "median log10 cell ratio", "5% log10 ratio",
              "95% log10 ratio", "Spearman(w_old, w_new)", "top-cell fraction old",
              "top-cell fraction new", "same top cell", "weighted-centroid shift [kpc]",

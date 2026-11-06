@@ -7,8 +7,15 @@ Same estimators as paper_realistic_numbers.py: clean models by per-seed R2
 (single observations, 5-seed ensemble) and 1v-1, scored on snapshot 99; old
 vs new realistic contrasts and the paper's within-model increments by paired
 parent-halo bootstrap on 1v-5 (conditional on the fits). Real clusters:
-25-model ensembles, Freedman-Lane partials. Same folds old and new (the
-realistic runs use group_folds; identities are checked before pairing).
+25-model ensembles, Freedman-Lane partials.
+
+Guards (review R26-D): every seed of every set is validated (identities,
+truths, finite predictions, real-target key order); every contrast reports
+outer-fold, inner-set and noisy-mass agreement per seed. Old (fix_*, r4_*)
+and new runs have DIFFERENT outer folds (the old ones predate group_folds)
+and the old/new mass arms have different simulated measurements, so old ->
+new contrasts are descriptive comparisons of fitted pipelines, not
+split-matched ablations; contrasts labelled matched reject any mismatch.
 """
 import numpy as np
 import pandas as pd
@@ -18,11 +25,51 @@ from sklearn.metrics import r2_score
 SEEDS = range(42, 47)
 key = lambda s: "".join(str(s).split()).replace("_", "").upper()
 rng = np.random.default_rng(0)
-load = lambda pat: [np.load(f"cnn_preds/{pat.format(s)}", allow_pickle=True) for s in SEEDS]
+def load(pat):
+    ds = [np.load(pat.format(s) if "/" in pat else f"cnn_preds/{pat.format(s)}", allow_pickle=True)
+          for s in SEEDS]
+    validate_set(ds, pat)
+    return ds
+
+
+def validate_set(ds, name):
+    """All seeds of one set share identities/truths/key order; predictions finite."""
+    r = ds[0]
+    for i, d in enumerate(ds):
+        for k in ("group_id", "halo_id", "snap", "tsc", "y_sample", "label", "obs_name",
+                  "sample_halo", "sample_realization"):
+            if k in r and (k not in d or not np.array_equal(d[k], r[k])):
+                raise SystemExit(f"{name} seed index {i}: {k} differs from the first seed")
+        for k in ("oof_single", "oof_pred", "oof_sample"):
+            if k in d and not np.isfinite(d[k]).all():
+                raise SystemExit(f"{name} seed index {i}: non-finite {k}")
+    if "obs_name" in r:
+        keys = [key(n) for n in r["obs_name"]]
+        if len(set(keys)) != len(keys):
+            raise SystemExit(f"{name}: duplicate normalised real-target keys")
+
+
+def split_status(da, db):
+    """Per-seed agreement of outer folds, inner sets and noisy mass inputs."""
+    out = {}
+    for k, nm in (("fold_of", "outer folds"), ("sel_groups_flat", "inner sets"),
+                  ("sim_logm_input", "mass inputs")):
+        if all(k in a and k in b for a, b in zip(da, db)):
+            out[nm] = sum(np.array_equal(a[k], b[k]) for a, b in zip(da, db))
+        else:
+            out[nm] = None                      # unavailable in at least one archive
+    return out
+
+
+CLEAN_REF = {}
 
 
 def clean_r2(pat):
-    return np.array([r2_score(d["label"], d["oof_pred"]) for d in load(pat)])
+    ds = load(pat)
+    ref = CLEAN_REF.setdefault("ids", (ds[0]["halo_id"], ds[0]["label"]))
+    if not (np.array_equal(ds[0]["halo_id"], ref[0]) and np.array_equal(ds[0]["label"], ref[1])):
+        CLEAN_REF.setdefault("other", []).append(pat)     # e.g. the 99+91 set: compared within its pair only
+    return np.array([r2_score(d["label"], d["oof_pred"]) for d in ds])
 
 
 def paired(lab, a, b):
@@ -32,9 +79,12 @@ def paired(lab, a, b):
           f"({int((b > a).sum())}/5 seeds higher)")
 
 
-def single(ds):
+LAST_STATUS = [""]
+
+
+def single(ds, snap99=True):
     R = len(ds[0]["oof_sample"]) // len(ds[0]["tsc"])
-    ms = np.repeat(ds[0]["snap"], R) == 99
+    ms = (np.repeat(ds[0]["snap"], R) == 99) if snap99 else np.ones(len(ds[0]["oof_sample"]), bool)
     P = ds[0]["oof_single"].shape[1]
     y = np.repeat(ds[0]["y_sample"][ms][:, None], P, 1).ravel()
     sgrp = np.repeat(ds[0]["group_id"], R)          # older files lack sample_group
@@ -68,14 +118,17 @@ def same_rows(a, b):
     return None
 
 
-FOLDS_SAME = {}
-
-
-def boot_diff(pa, pb, n=4000):
+def boot_diff(pa, pb, n=4000, matched=False, snap99=True):
     da, db = load(pa), load(pb)
-    FOLDS_SAME[(pa, pb)] = same_rows(da, db)
-    y, g, sa = single(da)
-    _, _, sb = single(db)
+    same_rows(da, db)
+    st = split_status(da, db)
+    if matched and any(v is not None and v != len(da) for v in st.values()):
+        raise SystemExit(f"{pa} vs {pb}: labelled matched but split/measurement agreement {st}")
+    if matched and st["outer folds"] is None:
+        raise SystemExit(f"{pa} vs {pb}: labelled matched but folds unavailable")
+    LAST_STATUS[0] = ", ".join(f"{k} {'n/a' if v is None else f'{v}/{len(da)}'}" for k, v in st.items())
+    y, g, sa = single(da, snap99)
+    _, _, sb = single(db, snap99)
     ea, eb = np.mean(sa, 0), np.mean(sb, 0)
     ug = np.unique(g)
     idx = {h: np.where(g == h)[0] for h in ug}
@@ -115,18 +168,31 @@ for lab, o, n_ in OLDNEW:
     so, sn = scores(load(o)), scores(load(n_))
     dv, iv = boot_diff(o, n_)
     print(f"  {lab:<40}{so[0]:>9.3f}±{so[1]:.3f}{sn[0]:>9.3f}±{sn[1]:.3f}{so[2]:>10.3f}{sn[2]:>10.3f}"
-          f"{sn[3]:>10.3f}{sn[4]:>+12.2f}   {dv:+.3f} [{iv[0]:+.3f}, {iv[1]:+.3f}]")
+          f"{sn[3]:>10.3f}{sn[4]:>+12.2f}   {dv:+.3f} [{iv[0]:+.3f}, {iv[1]:+.3f}]   ({LAST_STATUS[0]})")
 sx = scores(load("fix_x_s{}_preds.npz"))
 print(f"  {'X-ray (unchanged; reference)':<40}{sx[0]:>9.3f}±{sx[1]:.3f}{'':>16}{sx[2]:>10.3f}{'':>10}"
       f"{sx[3]:>10.3f}{sx[4]:>+12.2f}")
-print("  folds identical old vs new: " + ", ".join(f"{a.split('_s{')[0]}: {v}" for (a, b), v in FOLDS_SAME.items()))
+print("  (old -> new contrasts: descriptive comparisons of fitted pipelines; outer folds and, for the")
+print("   mass arms, the simulated measurements differ -- see the per-row agreement counts)")
 print("  paper increments, NEW model (1v-5, paired halo bootstrap):")
-for lab, a_, b_, old in (("radio 3 Mpc + mass  -  mass only", "syn_massonly_s{}_preds.npz",
-                          "syn_imgmass_b3000_s{}_preds.npz", "+0.099 [0.039, 0.158]"),
-                         ("radio 1 Mpc + X-ray  -  X-ray", "fix_x_s{}_preds.npz",
-                          "syn_phys_b1000_joint_s{}_preds.npz", "+0.031 [-0.014, 0.076]")):
-    dv, iv = boot_diff(a_, b_)
-    print(f"    {lab:<34} {dv:+.3f} [{iv[0]:+.3f}, {iv[1]:+.3f}]   (old: {old})")
+for lab, a_, b_, old, matched in (
+        ("radio 3 Mpc + mass  -  mass only [matched]", "syn_massonly_s{}_preds.npz",
+         "syn_imgmass_b3000_s{}_preds.npz", "+0.099 [0.039, 0.158]", True),
+        ("radio 1 Mpc + X-ray  -  X-ray [descriptive]", "fix_x_s{}_preds.npz",
+         "syn_phys_b1000_joint_s{}_preds.npz", "+0.031 [-0.014, 0.076]", False)):
+    dv, iv = boot_diff(a_, b_, matched=matched)
+    print(f"    {lab:<44} {dv:+.3f} [{iv[0]:+.3f}, {iv[1]:+.3f}]   (old: {old}; {LAST_STATUS[0]})")
+print("  SEPARATE ANALYSIS (review R26-B): radio 3 Mpc + X-ray vs the matched 3 Mpc X-ray control")
+print("  (runs/followup_20261103T180830Z), snapshot-99 single observations:")
+CTRL = "runs/followup_20261103T180830Z/preds/xray_b3000_s{}_preds.npz"
+sc = scores(load(CTRL))
+sj = scores(load("syn_phys_b3000_joint_s{}_preds.npz"))
+dv, iv = boot_diff(CTRL, "syn_phys_b3000_joint_s{}_preds.npz", matched=True)
+print(f"    X-ray 3 Mpc control 1v-5 {sc[2]:.3f}; joint 3 Mpc 1v-5 {sj[2]:.3f}; joint - X-ray "
+      f"{dv:+.3f} [{iv[0]:+.3f}, {iv[1]:+.3f}]   ({LAST_STATUS[0]})")
+dv, iv = boot_diff(CTRL, "syn_phys_b3000_joint_s{}_preds.npz", matched=True, snap99=False)
+print(f"    same, both snapshots (cf. the follow-up summary's mixed-snapshot scores): "
+      f"{dv:+.3f} [{iv[0]:+.3f}, {iv[1]:+.3f}]")
 
 
 def fl(a, b, c, n=100000):
