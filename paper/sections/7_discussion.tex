@@ -50,7 +50,7 @@ It reinforces the importance of observational realism emphasized by \citet{Bottr
 
 Although the clean bands are complementary, adding the 1 \,Mpc radio input to X-rays did not give a demonstrated gain under forward modeling.
 That comparison and the encouraging radio/mass result require matched folds, and the joint model still needs a test using the larger radio aperture.
-\todo{should run 3Mpc box size, and also rerun with the fold partitions fixed}
+\todo{should run 3Mpc box size, and also rerun with the fold partitions fixed - trying to run this now}
 
 In the matched optical experiment, idealized galaxy-structure features improved prediction beyond mass, redshift, and richness, but added no demonstrated gain to the X-ray inputs.
 However, this conclusion can only apply to the actually-tested inputs and models; we cannot conclude that the observationally-degraded bands contain completely identical information.
@@ -59,7 +59,7 @@ However, this conclusion can only apply to the actually-tested inputs and models
 However, when we located the outermost thresholded peak in our projected maps, we did not find a positive relation to the most recent catalogue collision (figure~\ref{fig:relic_null}).
 That peak need not belong to the most recent event when several collisions contribute to the present-day cluster emission.
 Testing the event-associated relation would therefore require matching the \citet{Lee2025} three-dimensional relic selection, merger association, and sample cuts.
-\todo{can we do this?}
+\todo{looking into whether doing this is doable now}
 
 Agreement in the selected morphological summaries (section~\ref{sec:fwd}) does not establish agreement in all features available to the CNN, including component positions and orientations.
 Unmodelled interferometric flux recovery and observation-specific X-ray response can therefore still affect transfer to observed clusters.
@@ -69,7 +69,7 @@ Greater X-ray depth improves performance with diminishing returns in the exposur
 
 The systematic radio--X-ray offset in the LoVoCCS predictions (section~\ref{sec:lovoccs}) could arise from modality-dependent emission physics, brightness calibration, aperture and centering choices, or differences in regression bias.
 A useful diagnostic would compare the two models' residuals for matched simulated observations at fixed mass, observing redshift, and pseudo-TSC, then test whether the observed offset is consistent with those biases.
-\todo{would be pretty quick to run this probably}
+\todo{trying to run this diagnostic at the moment}
 
 The uncertainty measures in section~\ref{sec:methods} describe variation across training seeds and halo resampling conditional on fitted models.
 They do not include retraining on new halo populations, and a per-cluster age uncertainty would additionally need to account for viewing direction, the mapping from pseudo-TSC to a particular collision, and differences in emission physics and sample selection between simulations and observations.
@@ -82,11 +82,11 @@ Its cause remains unresolved; alternative pair construction and encoder fine-tun
 
 Using the diffusion model to generate synthetic data did not provide any performance improvement.
 Because the data generation was not isolated from downstream test clusters, however, the comparison does not provide an independent estimate of the effect of augmentation, and the leakage does not establish why the observed difference was small.
-\todo{can we make an independent estimate somehow?}
+\todo{this may be possible to do, but may be involved - investigating}
 The comparison to CAMELS data combines a change in simulation domain with a change in merger-label definition, preventing attribution of its negative outcome to either factor.
 
 Next steps should therefore focus on making the inference more physically interpretable and observationally testable.
-The radio prescription needs to be reconciled with the generated maps \todo{what does this mean?}, and sensitivity to the emitting-gas selection, fold assignment, and observing conditions should be established.
+The radio prescription needs to be reconciled with the generated maps, and sensitivity to the emitting-gas selection, fold assignment, and observing conditions should be established.
 \suggestion{Resolve the prescription mismatch in the radio Methods
 section before submission; it is not merely future work. The current
 maps use a stored spectral-factor table and coefficient that differ
