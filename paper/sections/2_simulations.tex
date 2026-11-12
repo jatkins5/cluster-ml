@@ -274,11 +274,15 @@ constants and the adopted injection and pitch-angle
 prescriptions. The explicit temperature dependence enters through
 $\tilde e_{\min}(T_{\rm d})$ in $I_{\rm spec}$.
 
+\stale{The following gas-phase and frequency-comparison diagnostics use the previous radio prescription; they have not been repeated for the regenerated weights.}
 The 144 MHz images created from this emission model have a substantial concentration of emission in dense gas, with approximately 99\% of radio weight in gas with $n_\text{H} > 10^{-4}$ cm$^{-3}$.
 Dense gas emission is inconsistent with the assumptions of the shock emission model.
 Thus, we apply a density cut to restrict the model to its applicable domain, eliminating emission from gas with $n_\text{H} > 10^{-4}$ cm$^{-3}$.
 The median fraction of a cluster's emission located in its brightest pixel falls from 25\% to 5.1\% after applying the density cut.
 The corresponding radio-weighted mean Mach-number falls from 61.7 to 4.8.
+\suggestion{Check the cell-versus-pixel terminology here: the phase
+diagnostic and its caption describe the brightest gas cell. Do not call
+this a brightest image pixel without a separate map-level measurement.}
 
 The frequency factor is applied separately to each shock cell, since its spectral index is dependent on Mach number.
 After dividing the 144 MHz weights by a global factor of 12.5, the logarithmic ratio to the 1.4 GHz fluxes has standard deviation 0.035 dex.
@@ -287,7 +291,8 @@ Approximately 5\% of the normalized flux is redistributed between pixels.
 \begin{figure*}
   \centering
   \includegraphics[width=\textwidth]{fig_phase.pdf}
-  \caption{Where the radio weight sits. Density--temperature distribution
+  \caption{\stale{Previous radio prescription; gas-phase fractions, brightest-cell contributions and weighted Mach numbers await regeneration.}
+  Where the radio weight sits. Density--temperature distribution
   of all shock cells (Mach $>1.3$) in the 352 snapshot-99 clusters, each
   cluster normalised to unit total, by number (left) and by 144\,MHz radio
   weight without any cut (right). Most shocks are in the diffuse ICM
