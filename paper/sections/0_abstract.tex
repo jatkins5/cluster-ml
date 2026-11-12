@@ -2,14 +2,23 @@
 Radio and X-ray observations track the response of intracluster gas to merging events, but the merger-history information retained in realistic observing conditions remains uncertain.
 We train convolutional neural networks on synthetic images of 352 systems in TNG-Cluster to infer \emph{pseudo-TSC}, an indicator of recent merger activity derived from the merger score.
 This proxy strongly correlates with catalogue collision times at $z=0$ ($\rho=0.96$).
-Idealized observations combining three orthogonal projections yield mean $R^2$ with calculated pseudo-TSC values of $R^2=0.485$, 0.511, and 0.545 for 144 MHz radio, X-ray, and joint inputs, respectively.
+Idealized observations combining three orthogonal projections yield mean $R^2$ with calculated pseudo-TSC values of $R^2=0.498$, 0.511, and 0.535 for 144 MHz radio, X-ray, and joint inputs, respectively.
 Radio predictions remain informative within mass bins and after normalization of integrated emission, indicating information content beyond total brightness.
 We also find that dense gas, including a significant cold component, dominates the unfiltered synthetic radio images, motivating a density cut to restrict emission to diffuse gas.
 We construct approximate LOFAR and Chandra forward models, and apply them to simulated cluster images at both redshifts, creating a training dataset closer to real-world observations.
-For individual simulated observations, five-model ensembles reach $R^2=0.203$ for radio images of physical size 3 Mpc, and $R^2=0.406$ for X-ray images.
+For individual simulated observations, five-model ensembles reach $R^2=0.196$ for radio images of physical size 3 Mpc, and $R^2=0.406$ for the X-ray reference.
 Adding 1 Mpc radio images to X-rays yields no statistically-significant improvement.
 Applying the CNN to the Local Volume-Complete Cluster Survey (LoVoCCS) yields radio predictions for 26 clusters, and overlapping X-ray predictions for 15 clusters.
-For the overlapping sample, the merger time rankings between radio and X-ray correlate ($\rho=0.61$), but radio assigns systematically older proxy ages, producing a median age offset of 0.44 Gyr.
+For the overlapping sample, the merger time rankings between radio and X-ray correlate ($\rho=0.67$), but radio assigns systematically older proxy ages, producing a median age offset of 0.49 Gyr.
 These results indicate the presence of recoverable information about recent merger activity in simulated cluster observations, and show that X-rays are a stronger predictor than radio under the tested observing conditions.
 However, independent calibration is needed to establish accuracy of the predicted physical collision ages.
+\suggestion{For the final abstract, emphasize the completed matched tests:
+Adding radio to noisy mass measurements improves single-observation
+$R^2$ by $0.129$ (conditional 95 per cent interval $[0.068,0.190]$),
+whereas adding 3\,Mpc radio images to a matched X-ray control gives no resolved
+improvement ($\Delta R^2=-0.002$, $[-0.057,0.057]$).
+The latter control scores 0.403, distinct from the reused 0.406 X-ray
+reference above. Restrict the clean-radio interpretation to the updated
+normalization experiment until the mass-bin and scalar diagnostics have
+been repeated with the regenerated radio prescription.}
 \end{abstract}

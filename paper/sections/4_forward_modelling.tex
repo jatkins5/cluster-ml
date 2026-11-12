@@ -6,6 +6,7 @@
 We recovered the linear emission values from the arcsinh-stretched radio images, and then cropped and rebinned the data onto a 128$\times$128 pixel grid using pixel-overlap weights which conserved the integrated emission.
 The radio-only inputs to our predictive models cover square regions of physical side length 3 Mpc, corresponding to 23.4 kpc per pixel.
 This aperture retains 65\% of the uncropped emission, while the central 1 Mpc section only retains 4\%.
+\stale{These aperture-retention fractions were measured with the previous radio prescription; their regenerated-model values are pending.}
 
 The radio power assigned to each image is proportional to its integrated linear emission:
 \begin{align*}
@@ -38,7 +39,8 @@ We measured morphology agreement as
 \end{equation}
 where $F_{ijk}$ is the collection of values of statistic $j$ measured at threshold $k$ for image $i$, for the observed or mock maps.
 $\sigma_i(F)$ is the standard deviation of $F$ over all images.
-For the 3 Mpc-sized inputs, this was 0.095, compared with 0.158 for an alternative method using arcsinh-compressed emission morphology at the same integrated flux, and 0.635 for background-only fields.
+% Source: logs/syn_inject_8296721.out, radio-realism summary.
+For the 3 Mpc-sized inputs, this was 0.093, compared with 0.159 for an alternative method using arcsinh-compressed emission morphology at the same integrated flux, and 0.635 for background-only fields.
 The comparison includes 3168 mocks and 26 real observations, with the mocks each containing three projections and three realizations of the 352 source clusters.
 This result supports the adopted processing at the level of morphological summaries.
 However, since our source injection is performed in the image plane, it does not measure the recovery of diffuse flux through interferometric sampling and imaging.
@@ -47,7 +49,8 @@ Measuring this precisely would require visibility-domain injection, in e.g. \cit
 \begin{figure*}
   \centering
   \includegraphics[width=\textwidth]{fig_radio_gallery.pdf}
-  \caption{Top: simulated 144\,MHz maps (GroupPos-centred, $n_{\rm H} <
+  \caption{\stale{Previous radio prescription; regenerate the displayed maps from the new inputs.}
+  Top: simulated 144\,MHz maps (GroupPos-centred, $n_{\rm H} <
   10^{-4}$\,cm$^{-3}$ shock cells, $\pm2\,r_{500}$) for four clusters
   spanning merger time. Middle: the same clusters forward-modelled over a
   3\,Mpc box at a LoVoCCS redshift and injected into a real LoTSS DR3
@@ -59,7 +62,8 @@ Measuring this precisely would require visibility-domain injection, in e.g. \cit
 \begin{figure*}
   \centering
   \includegraphics[width=\textwidth]{fig_radio_mf.pdf}
-  \caption{Minkowski functionals of the 3168 injected mocks (3\,Mpc box;
+  \caption{\stale{Previous radio prescription; this plot and its threshold-specific offsets have not been regenerated. The updated scalar realism comparison is given in the text.}
+  Minkowski functionals of the 3168 injected mocks (3\,Mpc box;
   band: 16--84 per cent) against the 26 LoTSS targets over the same box
   (points: median and 16--84 per cent), at thresholds 1--20$\sigma$ of each
   map's noise. Bottom: the median offset of the real maps in units of the
@@ -75,6 +79,11 @@ Measuring this precisely would require visibility-domain injection, in e.g. \cit
 We degraded the 2 Ms ACIS-I Cycle-22 mocks described in section~\ref{sec:sims} to approximate the redshifts and observing depths of the Chandra targets.
 The images cover the observed 0.1-2.0 keV band on a common physical grid, with pixel size of approximately 18.9 kpc.
 The X-ray images inherit their redshift values from the corresponding simulated radio observations.
+\suggestion{Clarify the aperture labels in the comparisons: The separate
+X-ray mock sets use the same physical grid and observing model, but
+match the placement-redshift draws of the corresponding radio-box
+experiment. A control matched to the 3\,Mpc radio inputs is not a
+separate 3\,Mpc X-ray crop.}
 In cases when a true ACIS-I target exists at the assigned redshift, we use the exposure properties of that target; otherwise, those of a randomly-selected ACIS-I target are used.
 
 Source counts are reduced by binomial thinning, with retainment probability:

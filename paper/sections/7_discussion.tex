@@ -2,7 +2,7 @@
 \label{sec:discussion}
 
 Our results show that radio and X-ray observations are informative about recent cluster merger activity, while also demonstrating that the recoverability of this information depends on construction of the observable.
-For individual simulated observations, the five-model ensemble achieves $R^2 = 0.203$ from the 3 Mpc radio images, and $R^2 = 0.406$ from the X-ray images.
+For individual simulated observations, the five-model ensemble achieves $R^2 = 0.196$ from the 3 Mpc radio images, and $R^2 = 0.406$ from the retained X-ray reference.
 These results extend image-based studies of cluster dynamical state toward continuous inference of a proxy for the merger history.
 They also address observational limitations noted by \cite{Arendt2024}, which used idealized X-ray and Compton-y maps for classification.
 Differences in targets, sample selection, and evaluation prevent a direct numerical comparison to their results.
@@ -34,11 +34,23 @@ for each study; the unresolved substantive literature comparison remains.}
 Integrated emission carries substantial merger history information, but it does not account for all of the radio CCN's performance; normalized maps, explicit morphological descriptors, and tests within mass bins remain predictive (Section~\ref{sec:results}).
 These tests do not separate morphology, luminosity, and mass into independent contributions, because those properties remain correlated in the simulated population. 
 The decline of residual radio power with pseudo-TSC at fixed mass is qualitatively consistent with the evolving shock-powered radio light curves of \citet{Nuza2024}.
+\suggestion{The scalar, mass-bin, Minkowski-functional and power--mass
+results cited in this paragraph still use the previous radio
+prescription. Until those diagnostics are updated, distinguish them
+from the regenerated normalization experiment. Suggested current-result
+sentence: Normalizing each radio projection reduces mean $R^2$ from
+0.498 to 0.413, showing that predictive signal remains after equalizing
+integrated emission without isolating morphology from correlated
+luminosity and mass.}
 
 Before the density cut, a median of approximately 99\% of the radio weight arises in gas with $n_\text{H} > 10^{-4}$ cm$^{-3}$, including in a substantial cold component.
 The cold, dense gas is consistent with stripped satellite material, but we did not investigate its origin.
 Our shock emission model assumes non-radiative ICM shocks and neglects Coulomb losses \citep{HoeftBruggen2007}, motivating a check of the gas phases to which it is applied.
-Our density cut is intended to restrict the model to its domain of applicability; our evaluation protocol demonstrates no clean-map accuracy gain after applying the cut ($R^2 = 0.500\to0.485$, paired-seed $p = 0.164$).
+Our density cut is intended to restrict the model to its domain of applicability; the clean-map scores are $R^2 = 0.488\to0.498$ after applying the cut (paired-seed $p = 0.197$).
+\suggestion{Replace a claim of ``no accuracy gain'' with ``no
+statistically resolved gain in this five-seed comparison''; the paired
+change is $+0.010\pm0.015$. The preceding 99 per cent gas-phase statistic
+is historical and has not been updated for the regenerated weights.}
 Sensitivity to the chosen gas selection remains to be quantified.
 
 The radio amplitude is anchored to an observed radio-halo relation, although the simulated emission is powered by shocks, and the X-ray brightness correction is fitted using the observed sample.
@@ -51,6 +63,18 @@ It reinforces the importance of observational realism emphasized by \citet{Bottr
 Although the clean bands are complementary, adding the 1 \,Mpc radio input to X-rays did not give a demonstrated gain under forward modeling.
 That comparison and the encouraging radio/mass result require matched folds, and the joint model still needs a test using the larger radio aperture.
 \todo{should run 3Mpc box size, and also rerun with the fold partitions fixed - trying to run this now}
+\suggestion{Replace the former request for matched reruns with the
+completed results: In the matched 3\,Mpc comparison, adding radio to
+X-rays changes single-observation $R^2$ from 0.403 to 0.401
+($\Delta R^2=-0.002$, conditional 95 per cent interval
+$[-0.057,+0.057]$). Adding radio to noisy mass measurements improves
+$R^2$ from 0.176 to 0.305 ($\Delta R^2=+0.129$,
+$[+0.068,+0.190]$). These comparisons use matching outer and inner
+partitions. The 1\,Mpc joint/X-ray comparison remains descriptive because
+it reuses a reference with different folds. The absence of a resolved
+joint/X-ray gain does not establish that the modalities contain identical
+information. The clean joint increment is also uncertain
+($+0.037\pm0.032$, paired-seed $p=0.064$).}
 
 In the matched optical experiment, idealized galaxy-structure features improved prediction beyond mass, redshift, and richness, but added no demonstrated gain to the X-ray inputs.
 However, this conclusion can only apply to the actually-tested inputs and models; we cannot conclude that the observationally-degraded bands contain completely identical information.
@@ -60,6 +84,11 @@ However, when we located the outermost thresholded peak in our projected maps, w
 That peak need not belong to the most recent event when several collisions contribute to the present-day cluster emission.
 Testing the event-associated relation would therefore require matching the \citet{Lee2025} three-dimensional relic selection, merger association, and sample cuts.
 \todo{looking into whether doing this is doable now}
+\suggestion{Update this TODO to reflect the existing six-halo feasibility
+pilot in \texttt{runs/followup\_20261103T180830Z/}. It found candidate
+opposite-side structures in five halos, but the event associations remain
+unvalidated. It does not yet test a population separation--age relation,
+and the historical projected-peak figure has not been regenerated.}
 
 Agreement in the selected morphological summaries (section~\ref{sec:fwd}) does not establish agreement in all features available to the CNN, including component positions and orientations.
 Unmodelled interferometric flux recovery and observation-specific X-ray response can therefore still affect transfer to observed clusters.
@@ -70,6 +99,14 @@ Greater X-ray depth improves performance with diminishing returns in the exposur
 The systematic radio--X-ray offset in the LoVoCCS predictions (section~\ref{sec:lovoccs}) could arise from modality-dependent emission physics, brightness calibration, aperture and centering choices, or differences in regression bias.
 A useful diagnostic would compare the two models' residuals for matched simulated observations at fixed mass, observing redshift, and pseudo-TSC, then test whether the observed offset is consistent with those biases.
 \todo{trying to run this diagnostic at the moment}
+\suggestion{The matched 3\,Mpc offset diagnostic already exists in
+\texttt{runs/followup\_20261103T180830Z/offset/}. Replace the suggestion
+to launch it with a discussion of that completed analysis after reviewing
+its conditional summaries. It uses both simulation snapshots and tests
+hypothetical true-age bins for observed targets, whose actual collision
+ages are unknown; it is not an age calibration. Do not directly
+substitute its mixed-snapshot mean residual for the median offset of the
+15 observed systems.}
 
 The uncertainty measures in section~\ref{sec:methods} describe variation across training seeds and halo resampling conditional on fitted models.
 They do not include retraining on new halo populations, and a per-cluster age uncertainty would additionally need to account for viewing direction, the mapping from pseudo-TSC to a particular collision, and differences in emission physics and sample selection between simulations and observations.
@@ -81,21 +118,29 @@ The contrastive pilot's poor performance applies to the tested frozen-encoder co
 Its cause remains unresolved; alternative pair construction and encoder fine-tuning require controlled comparisons before broader conclusions about contrastive learning can be drawn \citep{Chadayammuri2026}.
 
 Using the diffusion model to generate synthetic data did not provide any performance improvement.
+\suggestion{Use ``did not demonstrate a reliable improvement in this
+exploratory comparison'' in place of ``did not provide any performance
+improvement.'' The historical point estimate changed slightly, and the
+comparison does not establish equivalence or an independent augmentation
+effect.}
 Because the data generation was not isolated from downstream test clusters, however, the comparison does not provide an independent estimate of the effect of augmentation, and the leakage does not establish why the observed difference was small.
 \todo{this may be possible to do, but may be involved - investigating}
 The comparison to CAMELS data combines a change in simulation domain with a change in merger-label definition, preventing attribution of its negative outcome to either factor.
 
 Next steps should therefore focus on making the inference more physically interpretable and observationally testable.
 The radio prescription needs to be reconciled with the generated maps, and sensitivity to the emitting-gas selection, fold assignment, and observing conditions should be established.
-\suggestion{Resolve the prescription mismatch in the radio Methods
-section before submission; it is not merely future work. The current
-maps use a stored spectral-factor table and coefficient that differ
-from the new analytical derivation. Either describe that implementation
-or regenerate the affected results using the revised prescription.
-Once resolved, replace this sentence with:
-Sensitivity to the emitting-gas selection, fold assignment, and
-observing conditions should be established before treating the inferred
-proxy-age scale as robust across different modelling choices.}
+\suggestion{Update the former prescription-mismatch paragraph: The
+radio maps and CNN comparisons have now been regenerated using the
+synchrotron-coefficient implementation. Under the adopted global flux
+calibration, old and new predictive scores are broadly similar, but
+changed partitions and, for mass-conditioned models, changed noisy
+measurements prevent attributing their differences solely to the
+emission prescription. This does not establish equivalence of the
+models or validate the physical emission calculation. The revised Methods
+derivation should be checked against the implemented lookup table;
+the marked morphology, power--mass and figure diagnostics remain
+pending. Sensitivity to emitting-gas selection and observing conditions
+remains an open scientific question.}
 Validation should combine matched observing models with tests across independent simulation suites using consistent collision labels.
 For real clusters, external dynamical constraints can test the inferred ordering and timescale; weak-lensing and spectroscopic modelling of A3376 \citep{MonteiroOliveira2017} provides one example.
 Such comparisons must identify whether the constrained encounter is the event represented by the proxy before using inferred ages to study merger-driven particle acceleration.

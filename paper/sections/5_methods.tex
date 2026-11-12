@@ -22,6 +22,14 @@ The forward-modelled CNN experiments use the stored arcsinh-stretched inputs des
 
 We train models on two types of inputs: idealized pooled-view datasets, in which the three projections of a cluster are combined, and single-view datasets, for which the model is only given one orthogonal projection.
 For the latter, we measure the ensemble average performance for five models initialized with five different random seeds.
+\suggestion{Clarify training versus evaluation for the main realistic
+matrix: We train with pooled projections and select checkpoints using
+pooled-view inner-validation scores. For single-observation evaluation,
+we provide one projection and one observational realization to each
+model, then average predictions over the five training seeds. This does
+not average multiple mock observations unavailable for a real target.
+The separate fixed-manifest experiments use single-view checkpoint
+selection and should be described separately.}
 
 We used AdamW to optimize the CNN for 60 epochs, with an initial learning rate of $3\times 10^{-4}$, weight decay of $10^{-3}$, a cosine learning-rate schedule, and a batch size of 32.
 We used a Huber loss function:
@@ -100,6 +108,14 @@ We also considered predictive performance within mass bins, and calculated parti
 For analyses in which we conditioned on cluster mass, we concatenated $\log_{10} (M_\text{500c})$ to the image representation before being fed into the regression head.
 To approximate uncertainty associated with weak-lensing masses, we perturbed simulated log-masses with Gaussian noise with widths sampled from the empirical distribution of weak-lensing fractional mass errors.
 We used the available fractional uncertainties on $M_\text{200c}$ estimates to approximate uncertainties in the converted $M_\text{500c}$ values.
+\suggestion{Add the fixed-measurement and pairing detail: Each simulated
+mass measurement is keyed by parent halo, snapshot and a measurement seed
+independent of the training seed. The same measurements are supplied to
+both mass-only and image-plus-mass models and to all five ensemble
+members. The regenerated comparison also uses identical outer folds and
+inner-selection halos in the two arms. Do not describe changes from the
+older mass experiment as fold effects alone, because its measurements
+also differ.}
 
 The idealized optical catalogue contains FoF-member galaxies with stellar particles and intrinsic, dust-free $r$-band absolute magnitude $M_r < -19$.
 Richness measures the subset with $M_r < -20$ inside the projected $R_{500}$ of the gas reference center.

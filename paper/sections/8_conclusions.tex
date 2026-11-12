@@ -2,19 +2,26 @@
 \label{sec:conclusions}
 
 We trained convolutional neural networks (CNNs) on TNG-Cluster radio and X-ray maps to infer pseudo-TSC, a merger-score-derived indicator of recent merger activity, and applied the CNNs to LoVoCCS observations.
-For clean inputs pooling three projections per cluster, mean out-of-fold $R^2$ was 0.485 for radio, 0.511 for X-rays, and 0.545 for joint inputs.
+For clean inputs pooling three projections per cluster, mean out-of-fold $R^2$ was 0.498 for radio, 0.511 for X-rays, and 0.535 for joint inputs.
 Radio predictions remained informative within mass bins and after equalizing integrated emission, although correlations between mass, luminosity, and morphology prevent a complete separation of their contributions.
 
-A median of 99\% of unfiltered radio weight arose in sections of gas with $n_\text{H}=10^{-4}$ cm$^{-3}$, including in cold gas.
+A median of 99\% of unfiltered radio weight arose in gas with $n_\text{H}>10^{-4}$ cm$^{-3}$ under the previous prescription, including in cold gas.
 This motivated restricting the emitting gas to the diffuse environment targeted by the shock model, and illustrates the need to check which gas phases dominate synthetic observables.
 
-Under forward-modelling, five-model ensembles score $R^2=0.203$ for individual 3 Mpc radio observations and 0.406 for X-ray observations.
-Combining radio data with noisy mass measurements was promising, but needs confirmation with matched folds.
-Adding 1 Mpc radio inputs to X-rays gave no statistically-significant improvement; a matched joint test using 3 Mpc radio inputs remains necessary.
+Under forward-modelling, five-model ensembles score $R^2=0.196$ for individual 3 Mpc radio observations and 0.406 for the retained X-ray reference.
+\suggestion{Replace the former statements that matched tests are still
+needed with: In matched comparisons, adding radio to noisy mass
+measurements improves $R^2$ by $0.129$ (conditional 95 per cent interval
+$[0.068,0.190]$), whereas adding 3\,Mpc radio images to a matched X-ray control gives
+no resolved improvement ($\Delta R^2=-0.002$, $[-0.057,0.057]$).
+The matched X-ray control scores 0.403 and is distinct from the retained
+0.406 reference. Retain the normalization result, but defer claims based
+on mass-bin and gas-phase diagnostics until those older radio analyses
+are updated or explicitly retained as historical.}
 A separate exposure experiment found diminishing X-ray performance gains beyond approximately 50 ks.
 
 Application to LoVoCCS yielded radio predictions for 26 clusters and X-ray predictions for 15.
-In the overlapping sample, the rankings correlated at $\rho=0.61$, but radio assigned older ages to 14 of the 15 systems, with a median offset of 0.44 Gyr.
+In the overlapping sample, the rankings correlated at $\rho=0.67$, but radio assigned older ages to 14 of the 15 systems, with a median offset of 0.49 Gyr.
 This demonstrates consistency of ordering alongside an unresolved difference in proxy-age scales.
 
 The experiments establish recoverable merger history information in simulated cluster observations.
