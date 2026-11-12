@@ -133,6 +133,7 @@ assert st2["cut_status"] == "empty cut" and np.isnan(st2["top_cut"]) and np.isna
 print("    no cells below the cut -> 'empty cut', statistics unavailable")
 
 print("== run directory and manifest")
+R.Run.git_dirty = lambda self: ""          # fixture-only: treat helpers as committed
 d = os.path.join(TMP, "run")
 R.TASKS["ok_t"] = lambda run, a: run.record("ok_t", {"x": 1})
 R.TASKS["bad_t"] = lambda run, a: (_ for _ in ()).throw(R.Fail("planted"))
@@ -160,10 +161,18 @@ assert all(ag.values())
 dm2 = cat["d_max"].copy(); dm2[0, 0] = 1.1
 mr2 = cat["mass_ratio"].copy(); mr2[0] = 0.3
 assert not R.relic_agreement(cat, dm2, cat["n_relics"], cat["merger_tsc"], cat["mass_ratio"], cat["mass_ratio"],
-                             hid4)["d_max_values"]
+                             hid4)["d_max"]
 assert not R.relic_agreement(cat, cat["d_max"], cat["n_relics"], cat["merger_tsc"], cat["mass_ratio"], mr2,
                              hid4)["legacy_vs_current_mass_ratio"]
-print("    relic agreement flags a changed peak distance and a legacy/current mass-ratio mismatch")
+dm3 = cat["d_max"].copy(); dm3[1, 0] = np.inf
+ag3 = R.relic_agreement(cat, cat["d_max"], cat["n_relics"], cat["merger_tsc"], cat["mass_ratio"], cat["mass_ratio"], hid4)
+ag4 = R.relic_agreement(dict(cat, d_max=dm3), cat["d_max"], cat["n_relics"], cat["merger_tsc"], cat["mass_ratio"],
+                        cat["mass_ratio"], hid4)
+assert all(ag3.values()) and not ag4["no_infinities"] and not ag4["d_max"]
+assert not R.relic_agreement(cat, cat["d_max"][:2], cat["n_relics"], cat["merger_tsc"], cat["mass_ratio"],
+                             cat["mass_ratio"], hid4)["shapes"]
+print("    relic agreement flags a changed peak distance, a legacy/current mass-ratio mismatch, an infinite "
+      "catalogue distance (finite-mask mismatch) and a shape mismatch")
 yv = np.array([0.5, 1.0, 2.0])
 R.check_clean_arrays(hid4, yv, yv.astype(np.float32), np.array([14.5, 14.6, 14.7]),
                      np.array([14.5, 14.6, 14.7], np.float32), [10, 11, 12, 13])
@@ -174,17 +183,21 @@ raises(R.Fail, R.check_clean_arrays, hid4, yv, yv, np.ones(3), np.ones(3) + 1e-3
 raises(R.Fail, R.check_clean_arrays, hid4, yv, yv, np.ones(3), np.ones(3), [10, 11, 12, 12],
        what="duplicate catalogue ids")
 
-print("== synthetic production world (4 parents): validators and real task paths")
+print("== synthetic production world (4 parents): producers, validators and real task paths")
 import h5py
 import json
-import shutil
 import detect_relics_radio as DR
+import manifest_cells_1400 as MB
+import prov_utils as PU
 W = os.path.join(TMP, "world")
 os.makedirs(W)
 NP_ = 4
 R.PROTO["n_clusters"] = NP_
+MB.EXPECT_ATTRS["n_clusters"] = NP_
 HID = np.array([101, 205, 307, 409])
 Y = np.array([0.3, 1.2, 2.5, 4.0], np.float32)
+mp = lambda n: os.path.join(W, n)
+st = lambda d_: json.load(open(os.path.join(d_, "manifest.json")))
 
 
 def write_maps(path, img, cells_dir, size):
@@ -200,89 +213,183 @@ def write_maps(path, img, cells_dir, size):
             f.attrs[k] = np.array(v, dtype=object) if isinstance(v, list) else v
 
 
-raises(R.Fail, lambda: R.validate_maps(h5py.File(os.path.join(W, "bad.h5"), "w"), 128), what="map file without protocol attributes")
-mp = lambda n: os.path.join(W, n)
+raises(R.Fail, lambda: R.validate_maps(h5py.File(mp("bad.h5"), "w"), 128), what="map file without protocol attributes")
 R.IN.update(ds128=mp("d128.h5"), ds1400=mp("d1400.h5"), ratio_table=mp("ratio.npz"), cells144=mp("c144"),
             cells1400=mp("c1400"), ds512=mp("d512.h5"), relic_cat=mp("relic.h5"), tsc_legacy=mp("tsc.h5"),
             ds_legacy=mp("dl.h5"))
 img = rng.random((NP_, 3, 128, 128))
 write_maps(R.IN["ds128"], np.arcsinh(img), R.IN["cells144"], 128)
-write_maps(R.IN["ds1400"], np.arcsinh(img * rng.uniform(0.8, 1.2, img.shape)), R.IN["cells1400"], 128)
 with h5py.File(R.IN["ds128"]) as f:
     R.validate_maps(f, 128)
     raises(R.Fail, R.validate_maps, f, 512, what="wrong declared image size")
 np.savez(R.IN["ratio_table"], x=np.arange(3))
-os.makedirs(R.IN["cells144"]); os.makedirs(R.IN["cells1400"])
-ratio = np.array([12.0, 13.0, 11.0, 12.5])
-for h, rc in zip(HID, ratio):
-    w144 = rng.random(50) + 0.1
-    np.savez(os.path.join(R.IN["cells144"], f"cells_FOF{h}_sub{h}.npz"), w=w144)
-    w14 = w144 * (w144.sum() / (rc * 16.48 / 206.0)) / w144.sum()       # sums give ratio rc * 16.48/206
-    np.savez(os.path.join(R.IN["cells1400"], f"cells_FOF{h}_sub{h}.npz"),
-             w=w144 / (rc * 16.48 / 206.0))
+for dname in ("radio", "cut", "c144", "call", "gc", "srcids"):
+    os.makedirs(mp(dname))
 
 
-def write_phase(path, ids=HID, prod=True, limit=0, nu_hi=1.4, table=None, manifest=True, rat=ratio):
-    n = len(ids)
-    cfg = dict(R.PHASE_CONFIG, nu_hi_ghz=nu_hi)
-    pv = dict(config=cfg, production_complete=prod, limit=limit, n_check_failures=0, n_parents=n,
-              ratio_table=table or PU.sha(R.IN["ratio_table"]), cells_cut={})
-    arr = {k: rng.random(n) for k in ("frac_above", "frac_cold", "top_all", "top_cut", "mach_all", "mach_cut",
-                                      "ratio_all", "w_out_of_range")}
-    np.savez(path, halo_id=np.array(ids), H_n=rng.random((n, 70, 50)) / 3500, H_w=rng.random((n, 70, 50)) / 3500,
-             nh_edges=np.linspace(-7, 0, 71), t_edges=np.linspace(-3.5, 1.5, 51), ratio_cut=np.array(rat[:n]),
-             n_cells=np.full(n, 50), n_invalid=np.zeros(n, int), n_zero_w=np.zeros(n, int),
-             n_out_of_range=np.zeros(n, int), w_total=np.ones(n), cut_status=np.array(["ok"] * n),
-             provenance=np.array(json.dumps(pv)), **arr)
-    if manifest:
-        json.dump(dict(status="complete", artifact=path, artifact_sha256=PU.sha(path)), open(path + ".manifest.json", "w"))
-    return path
+def cells_of(h):
+    g = np.random.default_rng(int(h))
+    n = 60
+    w = g.random(n) + 0.1
+    w[0] = 0.0
+    nH = 10 ** g.uniform(-6, -3, n)
+    T = 10 ** g.uniform(-2, 0.5, n)
+    M = g.uniform(1.4, 6.0, n)
+    return np.zeros((n, 3)), w, np.ones(n), T, nH, M
 
 
-def write_bman(nu=1.4, sha=None):
-    p = R.IN["ds1400"] + ".manifest.json"
-    if os.path.exists(p):
-        os.remove(p)
-    json.dump(dict(status="complete", kind="cells_1400", prescription=dict(R.B_PRESCRIPTION, nu_ghz=nu),
-                   dataset=dict(sha256=sha or PU.sha(R.IN["ds1400"]))), open(p, "w"))
+for h in HID:
+    np.savez(mp(f"radio/radio_FOF{h}_sub{h}.npz"), x=0)
+    np.savez(mp(f"srcids/radio_FOF{h}_sub{h}.npz"), x=0)
+    open(mp(f"cut/cutout_sub{h}_FOF{h}.hdf5"), "wb").write(os.urandom(1000))
+    _, w, _, T, nH, M = cells_of(h)
+    keep = nH <= 1e-4
+    np.savez(mp(f"c144/cells_FOF{h}_sub{h}.npz"), w=w[keep] / 206.0)
+    np.savez(mp(f"call/cells_FOF{h}_sub{h}.npz"), w=w / 206.0)
+open(mp("gc/fof_subhalo_tab_099.0.hdf5"), "wb").write(os.urandom(500))
+for nm in ("pkl.pkl", "cat.h5"):
+    open(mp(nm), "wb").write(os.urandom(100))
+E.brc.make_ratio = lambda p: None
+E.brc.generate = lambda cut, interp, nu_ghz, phase, model: cells_of(int(re.search(r"_FOF(\d+)\.hdf5", cut).group(1)))
+import re
+A_ARGS = lambda out, extra=(): ["--out", out, "--radio-dir", mp("radio"), "--cutout-dir", mp("cut"),
+                                "--ratio-table", R.IN["ratio_table"], "--cells-cut", mp("c144"),
+                                "--cells-all", mp("call"), "--cohort", R.IN["ds128"], *extra]
+E.main(A_ARGS(mp("phase_good.npz")))
+assert os.path.exists(mp("phase_good.npz.manifest.json"))
+print("    job A producer (real main, stubbed cell generator): production artifact and success manifest written")
+raises(SystemExit, E.main, A_ARGS(mp("phase_lim.npz"), ["--limit", "2"]), what="job A limited (smoke) run")
+assert os.path.exists(mp("phase_lim.npz")) and not os.path.exists(mp("phase_lim.npz.manifest.json"))
+orig_gen = E.brc.generate
+def gen_touch(cut, *a_, **k_):
+    np.savez(mp("ratio2.npz"), x=np.arange(4))      # the run's ratio table changes mid-run
+    return orig_gen(cut, *a_, **k_)
+E.brc.generate = gen_touch
+np.savez(mp("ratio2.npz"), x=np.arange(3))
+raises(SystemExit, E.main, ["--out", mp("phase_chg.npz"), "--radio-dir", mp("radio"),
+       "--cutout-dir", mp("cut"), "--ratio-table", mp("ratio2.npz"), "--cells-cut", mp("c144"), "--cells-all",
+       mp("call"), "--cohort", R.IN["ds128"]], what="job A source changed during the run")
+assert not os.path.exists(mp("phase_chg.npz.manifest.json"))
+E.brc.generate = orig_gen
+# job B two-stage producer
+B_ARGS = lambda stage, table=R.IN["ratio_table"]: [
+    "--stage", stage, "--dataset", R.IN["ds1400"], "--cells-dir", R.IN["cells1400"], "--radio-dir", mp("radio"),
+    "--cutout-dir", mp("cut"), "--ratio-table", table, "--pkl", mp("pkl.pkl"), "--catalog", mp("cat.h5"),
+    "--groupcat", mp("gc"), "--source-ids", mp("srcids"), "--nu-ghz", "1.4", "--w-scale", "16.48",
+    "--max-nh", "1e-4", "--img-size", "128"]
 
 
-import prov_utils as PU
-good = write_phase(mp("phase_good.npz"))
-d, pv, _ = R.validate_phase(good, HID[::-1], R.IN["ratio_table"])
+def build_b():                                     # stands in for build_radio_cells + build_dataset
+    os.makedirs(R.IN["cells1400"])
+    for h in HID:
+        _, w, _, T, nH, M = cells_of(h)
+        keep = nH <= 1e-4
+        fac = (1.4 / 0.144) ** (-0.5 * brc.s_of_M(M[keep]))
+        np.savez(os.path.join(R.IN["cells1400"], f"cells_FOF{h}_sub{h}.npz"), w=w[keep] * fac / 16.48)
+    write_maps(R.IN["ds1400"], np.arcsinh(img * rng.uniform(0.8, 1.2, img.shape)), R.IN["cells1400"], 128)
+
+
+MB.main(B_ARGS("begin"))
+build_b()
+raises(SystemExit, MB.main, B_ARGS("begin"), what="job B begin with existing outputs")
+open(mp("pkl.pkl"), "ab").write(b"x")                # a builder input changes mid-job
+raises(SystemExit, MB.main, B_ARGS("end"), what="job B source changed between begin and end")
+assert not os.path.exists(R.IN["ds1400"] + ".manifest.json")
+import shutil
+shutil.rmtree(R.IN["cells1400"]); os.remove(R.IN["ds1400"]); os.remove(R.IN["ds1400"] + ".begin.json")
+MB.main(B_ARGS("begin"))
+build_b()
+MB.main(B_ARGS("end"))
+assert os.path.exists(R.IN["ds1400"] + ".manifest.json")
+print("    job B two-stage producer: success manifest only when sources are unchanged between begin and end")
+R.IN["cells144"] = mp("c144")
+with h5py.File(R.IN["ds128"], "a") as f:
+    f.attrs["cells_dir"] = R.IN["cells144"]
+# the cohort file changed (attribute fix) after job A: A must be rerun so its recorded cohort matches
+for f_ in ("phase_good.npz", "phase_good.npz.manifest.json", "phase_lim.npz", "phase_chg.npz"):
+    if os.path.exists(mp(f_)):
+        os.remove(mp(f_))
+E.main(A_ARGS(mp("phase_good.npz")))
+good = mp("phase_good.npz")
+dig = lambda d_: PU.dir_digest(d_)["digest"]
+RS = PU.sha(R.IN["ratio_table"])
+d, pv, _ = R.validate_phase(good, HID[::-1], RS, dig(R.IN["cells144"]))
 assert list(d["halo_id"]) == list(HID[::-1])
-print("    complete job-A product accepted and reindexed to the adopted parent order")
-for nm, kw, what in (("p1", dict(ids=HID[:3]), "partial parent set"),
-                     ("p2", dict(ids=np.array([101, 101, 307, 409])), "duplicate parents"),
-                     ("p3", dict(ids=np.array([101, 205, 307, 999])), "wrong parent"),
-                     ("p4", dict(prod=False), "not production-complete"),
-                     ("p5", dict(limit=3), "limited smoke artifact"),
-                     ("p6", dict(nu_hi=1.5), "configuration mismatch"),
-                     ("p7", dict(table="0" * 64), "different ratio table"),
-                     ("p8", dict(manifest=False), "no success manifest")):
-    raises(R.Fail, R.validate_phase, write_phase(mp(nm + ".npz"), **kw), HID, R.IN["ratio_table"], what=what)
-tam = write_phase(mp("p9.npz"))
-with open(tam, "ab") as f:
-    f.write(b"x")
-raises(R.Fail, R.validate_phase, tam, HID, R.IN["ratio_table"], what="artifact changed after its manifest")
-raises(R.Fail, R.validate_b_manifest, R.IN["ds1400"], what="job B manifest missing")
-write_bman(nu=0.144)
-raises(R.Fail, R.validate_b_manifest, R.IN["ds1400"], what="job B prescription mismatch")
-write_bman(sha="0" * 64)
-raises(R.Fail, R.validate_b_manifest, R.IN["ds1400"], what="job B dataset hash mismatch")
-write_bman()
-R.validate_b_manifest(R.IN["ds1400"])
-st = lambda d_: json.load(open(os.path.join(d_, "manifest.json")))["status"]
-R.main(["--run-dir", mp("run_w3_ok"), "--tasks", "w3", "--phase-npz", good])
-assert st(mp("run_w3_ok"))["w3"] == "ok", st(mp("run_w3_ok"))
+R.validate_b_manifest(R.IN["ds1400"], dig(R.IN["cells1400"]), RS)
+print("    real job A/B products accepted; phase arrays reindexed to the adopted parent order")
+
+
+def variant(name, mutate):
+    """Copy the good artifact, apply one defect, re-save with a fresh matching
+    manifest so that only the planted defect is tested."""
+    dd = dict(np.load(good, allow_pickle=True))
+    pv_ = json.loads(str(dd["provenance"]))
+    mutate(dd, pv_)
+    dd["provenance"] = np.array(json.dumps(pv_))
+    p_ = mp(name + ".npz")
+    np.savez(p_, **dd)
+    man_ = json.load(open(good + ".manifest.json"))
+    man_["artifact_sha256"] = PU.sha(p_)
+    json.dump(man_, open(p_ + ".manifest.json", "w"))
+    return p_
+
+
+def m_trunc(dd, pv_): dd["ratio_cut"] = dd["ratio_cut"][:-1]
+def m_trunc2(dd, pv_): dd["frac_above"] = dd["frac_above"][:-1]
+def m_edges(dd, pv_): dd["nh_edges"] = dd["nh_edges"] + 0.1
+def m_norm(dd, pv_): pv_["config"]["normalisation"] = "per parent by its in-range population"
+def m_rule(dd, pv_): pv_["config"]["nh_cut_rule"] = "kept: n_H < nh_cut"
+def m_npar(dd, pv_): pv_["n_parents"] = 5
+def m_dup(dd, pv_): dd["halo_id"] = np.array([101, 101, 307, 409])
+def m_wrong(dd, pv_): dd["halo_id"] = np.array([101, 205, 307, 999])
+def m_part(dd, pv_):
+    for k in R.PHASE_PER_PARENT + ("H_n", "H_w"):
+        dd[k] = dd[k][:3]
+    pv_["n_parents"] = 3
+def m_nu(dd, pv_): pv_["config"]["nu_hi_ghz"] = 1.5
+def m_src(dd, pv_): pv_["sources_verified_unchanged"] = False
+def m_cells(dd, pv_): pv_["cells_cut"]["digest"] = "0" * 64
+
+
+for nm, mut, what in (("v1", m_trunc, "full ids but truncated ratio_cut"), ("v2", m_trunc2, "truncated frac_above"),
+                      ("v3", m_edges, "altered histogram edges"), ("v4", m_norm, "altered normalisation"),
+                      ("v5", m_rule, "altered density-boundary rule"), ("v6", m_npar, "n_parents inconsistent"),
+                      ("v7", m_dup, "duplicate parents"), ("v8", m_wrong, "wrong parent"),
+                      ("v9", m_part, "partial parent set"), ("v10", m_nu, "configuration mismatch"),
+                      ("v11", m_src, "sources not verified unchanged"), ("v12", m_cells, "different 144 MHz cells")):
+    raises(R.Fail, R.validate_phase, variant(nm, mut), HID, RS, dig(R.IN["cells144"]), what=what)
+raises(R.Fail, R.validate_phase, mp("phase_lim_missing.npz"), HID, RS, dig(R.IN["cells144"]), what="missing artifact")
+raises(R.Fail, R.validate_phase, good, HID, "0" * 64, dig(R.IN["cells144"]), what="different ratio table")
+raises(R.Fail, R.validate_b_manifest, R.IN["ds1400"], "0" * 64, RS, what="job B cells differ from its manifest")
+bm = json.load(open(R.IN["ds1400"] + ".manifest.json"))
+for k, v, what in (("prescription", dict(bm["prescription"], nu_ghz=0.144), "job B prescription mismatch"),
+                   ("sources_verified_unchanged", False, "job B not source-verified")):
+    bad_m = dict(bm, **{k: v})
+    json.dump(bad_m, open(R.IN["ds1400"] + ".manifest.json", "w"))
+    raises(R.Fail, R.validate_b_manifest, R.IN["ds1400"], dig(R.IN["cells1400"]), RS, what=what)
+json.dump(bm, open(R.IN["ds1400"] + ".manifest.json", "w"))
+# real task paths, promotable success and source-change rejection
+rc = R.main(["--run-dir", mp("run_w3_ok"), "--tasks", "w3", "--phase-npz", good])
+man3 = st(mp("run_w3_ok"))
+assert rc == 0 and man3["status"]["w3"] == "ok" and man3["promotable"] and not man3["sources_changed"], man3
 assert os.path.exists(mp("run_w3_ok/w3_arrays.npz")) and os.path.exists(mp("run_w3_ok/fig_phase.pdf"))
-R.main(["--run-dir", mp("run_w3_partial"), "--tasks", "w3", "--phase-npz", mp("p1.npz")])
-assert st(mp("run_w3_partial"))["w3"].startswith("failed check")
-bad_r = write_phase(mp("p10.npz"), rat=ratio * 1.01)
-R.main(["--run-dir", mp("run_w3_b"), "--tasks", "w3", "--phase-npz", bad_r])
-assert "do not reproduce" in st(mp("run_w3_b"))["w3"]
-print("    real task w3: ok on the consistent world; failed status for a partial job-A product and for job-B "
-      "cells that do not reproduce job A's frequency ratio")
+print("    real task w3 on real producer outputs: status ok, promotable, exit 0")
+rc = R.main(["--run-dir", mp("run_dep_fail"), "--tasks", "w2,w3", "--phase-npz", variant("v13", m_trunc)])
+manf = st(mp("run_dep_fail"))
+assert rc == 1 and all(manf["status"][t].startswith("unavailable: prerequisite failed") for t in ("w2", "w3"))
+assert not os.path.exists(mp("run_dep_fail/w2.json")), "W2 must not fit after a failed prerequisite"
+print("    D prerequisite gate: invalid job-A product -> w2 and w3 unavailable before any fit")
+TMPIN = mp("touched.txt")
+open(TMPIN, "w").write("a")
+def t_touch(run, a):
+    run.use("touch_t", f=TMPIN)
+    open(TMPIN, "a").write("b")
+    run.record("touch_t", {})
+R.TASKS["touch_t"] = t_touch
+rc = R.main(["--run-dir", mp("run_touch"), "--tasks", "touch_t"])
+mt_ = st(mp("run_touch"))
+assert rc == 1 and TMPIN in mt_["sources_changed"] and not mt_["promotable"] and mt_["status"]["touch_t"] == "ok"
+print("    an input modified during the run -> sources_changed, not promotable, exit 1")
 # W9 world: blobs at 1 R500 so peaks exist; catalogue produced by the same detector
 im512 = np.zeros((NP_, 3, 512, 512))
 yy, xx = np.mgrid[:512, :512]
@@ -321,19 +428,34 @@ def write_w9(tsc_ids=HID, alter=False):
         f["meta/mass_ratio"] = np.array([0.2, 0.05, 0.5, 0.3], np.float32)
 
 
+
+
+def write_w9_inf():
+    write_w9()
+    with h5py.File(R.IN["relic_cat"], "a") as f:
+        dm = f["d_max"][:]
+        i, j = np.argwhere(np.isfinite(dm))[0]
+        dm[i, j] = np.inf
+        f["d_max"][...] = dm
+
+
 write_w9()
-R.main(["--run-dir", mp("run_w9_ok"), "--tasks", "w9"])
-assert st(mp("run_w9_ok"))["w9"] == "ok", st(mp("run_w9_ok"))
+rc = R.main(["--run-dir", mp("run_w9_ok"), "--tasks", "w9"])
+assert st(mp("run_w9_ok"))["status"]["w9"] == "ok" and rc == 0, st(mp("run_w9_ok"))
 write_w9(alter=True)
 R.main(["--run-dir", mp("run_w9_alt"), "--tasks", "w9"])
-assert st(mp("run_w9_alt"))["w9"].startswith("failed check: review required")
+assert st(mp("run_w9_alt"))["status"]["w9"].startswith("failed check: review required")
 assert os.path.exists(mp("run_w9_alt/w9_arrays.npz")) and os.path.exists(mp("run_w9_alt/w9.json"))
+write_w9_inf()
+rc = R.main(["--run-dir", mp("run_w9_inf"), "--tasks", "w9"])
+mi = st(mp("run_w9_inf"))
+assert rc == 1 and mi["status"]["w9"].startswith("failed check: review required") and not mi["promotable"]
 write_w9(tsc_ids=np.array([101, 205, 307, 307, 409]))
 R.main(["--run-dir", mp("run_w9_dup"), "--tasks", "w9"])
-assert "duplicate keys" in st(mp("run_w9_dup"))["w9"]
+assert "duplicate keys" in st(mp("run_w9_dup"))["status"]["w9"]
 write_w9(tsc_ids=np.array([101, 205, 307, 999]))
 R.main(["--run-dir", mp("run_w9_miss"), "--tasks", "w9"])
-assert "missing from the source" in st(mp("run_w9_miss"))["w9"]
-print("    real task w9: ok when redetection reproduces the catalogue; 'review required' (diagnostics saved) on a "
-      "changed peak; failed status for duplicate or missing legacy join keys")
+assert "missing from the source" in st(mp("run_w9_miss"))["status"]["w9"]
+print("    real task w9: ok/promotable when redetection reproduces the catalogue; 'review required' for a changed "
+      "peak and for a +inf catalogue distance (not promotable); failed for duplicate or missing join keys")
 print("ALL REGEN FIXTURE CHECKS PASSED")

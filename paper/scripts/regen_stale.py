@@ -62,7 +62,14 @@ TOL_CELL_RATIO = 1e-9
 PROTO = dict(snapshot=99, redshift=0.0, center_mode="grouppos", extent_r500=4.0, spread_cells=False,
              n_clusters=352, n_projections=3, projections=["xy", "yz", "xz"])
 PHASE_CONFIG = dict(snapshot=99, z=0.0, model="synch", nu_lo_ghz=0.144, nu_hi_ghz=1.4, nh_cut=1e-4,
-                    t_cold_kev=0.1, w_scale_cells=206.0, shock="Machnumber > 1.3 & EnergyDissipation > 0")
+                    nh_cut_rule="kept: n_H <= nh_cut", t_cold_kev=0.1, w_scale_cells=206.0,
+                    shock="Machnumber > 1.3 & EnergyDissipation > 0", nh_edges=[-7.0, 0.0, 71],
+                    t_edges=[-3.5, 1.5, 51], normalisation="per parent by its whole valid population")
+PHASE_PER_PARENT = ("halo_id", "n_cells", "n_invalid", "n_valid", "n_zero_w", "w_total", "n_out_of_range",
+                    "w_out_of_range", "n_kept", "w_kept", "frac_above", "frac_cold", "top_all", "top_cut",
+                    "mach_all", "mach_cut", "ratio_all", "ratio_cut", "check_cut_n", "check_cut_wrel",
+                    "check_all_n", "cut_status")
+DEPS = {"w2": ("B",), "w3": ("A", "B")}
 B_PRESCRIPTION = dict(model="synch", nu_ghz=1.4, w_scale=16.48, max_nh=1e-4, snapshot=99, z=0.0,
                       spread_cells=False)
 
@@ -345,67 +352,90 @@ def legacy_join(hid, keys, values, name):
 
 def relic_agreement(cat, d_max, n_rel, mt, mr, mr_now, hid):
     """Element-wise agreement of a redetection with the stored catalogue.
-    Any disagreement -> Fail('review required ...') AFTER the caller saved
-    both sets of diagnostics."""
-    agree = dict(halo_order=bool(np.array_equal(cat["halo_id"], hid)),
-                 d_max_nan_pattern=bool(np.array_equal(np.isnan(cat["d_max"]), np.isnan(d_max))),
+    NaN is the only supported missing/no-peak value; any infinity, shape
+    mismatch or finite-mask mismatch is a disagreement. Every finite entry is
+    compared. The caller saves both diagnostics and then fails on any False."""
+    N = len(hid)
+    shapes = dict(d_max=(N, 3), n_relics=(N, 3), merger_tsc=(N,), mass_ratio=(N,))
+    agree = dict(shapes=all(np.shape(cat[k]) == v for k, v in shapes.items())
+                 and np.shape(d_max) == (N, 3) and np.shape(n_rel) == (N, 3)
+                 and np.shape(mt) == (N,) and np.shape(mr) == (N,) and np.shape(mr_now) == (N,),
+                 halo_order=bool(np.array_equal(cat["halo_id"], hid)),
+                 no_infinities=not any(np.isinf(np.asarray(v, float)).any()
+                                       for v in (cat["d_max"], d_max, cat["merger_tsc"], mt, cat["mass_ratio"], mr,
+                                                 mr_now)))
+    if not agree["shapes"]:
+        return agree
+    same = lambda u, v, atol, rtol: bool(np.array_equal(np.isfinite(u), np.isfinite(v))
+                                         and np.allclose(np.asarray(u, float)[np.isfinite(u)],
+                                                         np.asarray(v, float)[np.isfinite(v)], rtol=rtol, atol=atol))
+    agree.update(d_max=same(cat["d_max"], d_max, 0, 1e-6),
                  n_relics=bool(np.array_equal(cat["n_relics"], n_rel)),
-                 merger_tsc=bool(np.array_equal(np.isnan(cat["merger_tsc"]), np.isnan(mt))
-                                 and np.allclose(cat["merger_tsc"], mt, equal_nan=True, rtol=0, atol=1e-6)),
-                 mass_ratio=bool(np.allclose(cat["mass_ratio"], mr, equal_nan=True, rtol=0, atol=TOL_RATIO)),
-                 legacy_vs_current_mass_ratio=bool(np.array_equal(np.isnan(mr), np.isnan(mr_now))
-                                                   and np.allclose(mr, mr_now, equal_nan=True, rtol=0,
-                                                                   atol=TOL_RATIO)))
-    fin = np.isfinite(d_max) & np.isfinite(cat["d_max"])
-    agree["d_max_values"] = bool(agree["d_max_nan_pattern"]
-                                 and np.allclose(cat["d_max"][fin], d_max[fin], rtol=1e-6, atol=0))
+                 merger_tsc=same(cat["merger_tsc"], mt, 1e-6, 0),
+                 mass_ratio=same(cat["mass_ratio"], mr, TOL_RATIO, 0),
+                 legacy_vs_current_mass_ratio=same(mr, mr_now, TOL_RATIO, 0))
     return agree
 
 
-def validate_phase(path, expected_ids, ratio_table):
-    """Job A artifact: production-complete, success manifest with matching
-    hash, declared configuration, ratio table, and EXACTLY the expected unique
-    parents (reindexed to their order)."""
+def validate_phase(path, expected_ids, ratio_sha, cells144_digest):
+    """Job A artifact: success manifest with matching hash; production-complete
+    with sources verified unchanged; every declared configuration value; the
+    adopted ratio table and 144 MHz cell directory; exactly the expected unique
+    parents; EVERY per-parent array of length N (then reindexed to the cohort
+    order); histogram dimensions and edges as declared."""
     check(path and os.path.exists(path), f"phase artifact {path} missing")
     man_p = path + ".manifest.json"
     check(os.path.exists(man_p), f"no success manifest {man_p}: not a completed job A product")
     man = json.load(open(man_p))
-    check(man.get("status") == "complete" and man.get("artifact_sha256") == PU.sha(path),
-          "job A manifest is not complete or its hash does not match the artifact")
+    check(man.get("status") == "complete" and man.get("artifact_sha256") == PU.sha(path)
+          and man.get("sources_verified_unchanged") is True,
+          "job A manifest is not complete, not source-verified, or its hash does not match the artifact")
     d = dict(np.load(path, allow_pickle=True))
     pv = json.loads(str(d["provenance"]))
-    check(pv.get("production_complete") is True and int(pv.get("limit", -1)) == 0,
-          "job A artifact is a smoke/limited or failed product")
+    check(pv.get("production_complete") is True and int(pv.get("limit", -1)) == 0
+          and pv.get("sources_verified_unchanged") is True, "job A artifact is a smoke/limited or failed product")
     check(pv.get("n_check_failures") == 0, "job A reported cell-file check failures")
     cfg = pv.get("config", {})
     for k, v in PHASE_CONFIG.items():
-        check(k in cfg and (cfg[k] == v if not isinstance(v, float) else abs(float(cfg[k]) - v) < 1e-12),
-              f"job A config {k} = {cfg.get(k)!r}, expected {v!r}")
-    check(pv.get("ratio_table") == PU.sha(ratio_table), "job A used a different ratio table")
+        ok_ = k in cfg and (abs(float(cfg[k]) - v) < 1e-12 if isinstance(v, float) else
+                            (len(cfg[k]) == len(v) and np.allclose(cfg[k], v)) if isinstance(v, list) else cfg[k] == v)
+        check(ok_, f"job A config {k} = {cfg.get(k)!r}, expected {v!r}")
+    check(pv.get("ratio_table") == ratio_sha, "job A used a different ratio table")
+    check(pv.get("cells_cut", {}).get("digest") == cells144_digest,
+          "job A's reference 144 MHz cell directory differs from the current one")
     ids = [int(h) for h in d["halo_id"]]
-    check(len(set(ids)) == len(ids), "job A artifact has duplicate parents")
-    exp = [int(h) for h in expected_ids]
-    check(set(ids) == set(exp) and len(ids) == len(exp),
-          f"job A parents differ from the adopted cohort ({len(set(ids) ^ set(exp))} mismatched)")
-    order = np.array([ids.index(h) for h in exp])
     n = len(ids)
-    check(d["H_n"].shape == (n, len(d["nh_edges"]) - 1, len(d["t_edges"]) - 1)
-          and d["H_w"].shape == d["H_n"].shape, "job A histogram dimensions inconsistent")
-    out = {k: (v[order] if isinstance(v, np.ndarray) and v.ndim >= 1 and v.shape[0] == n
-               and k not in ("nh_edges", "t_edges") else v) for k, v in d.items()}
+    check(len(set(ids)) == n, "job A artifact has duplicate parents")
+    exp = [int(h) for h in expected_ids]
+    check(set(ids) == set(exp) and n == len(exp),
+          f"job A parents differ from the adopted cohort ({len(set(ids) ^ set(exp))} mismatched)")
+    check(int(pv.get("n_parents", -1)) == n, "job A n_parents disagrees with its arrays")
+    for k in PHASE_PER_PARENT:
+        check(k in d and np.shape(d[k]) == (n,), f"job A array {k} missing or not of length {n}")
+    ne, te = np.linspace(*PHASE_CONFIG["nh_edges"]), np.linspace(*PHASE_CONFIG["t_edges"])
+    check(np.allclose(d["nh_edges"], ne) and np.allclose(d["t_edges"], te), "job A histogram edges differ")
+    check(d["H_n"].shape == (n, len(ne) - 1, len(te) - 1) and d["H_w"].shape == d["H_n"].shape,
+          "job A histogram dimensions inconsistent")
+    order = np.array([ids.index(h) for h in exp])
+    out = {k: d[k][order] for k in PHASE_PER_PARENT + ("H_n", "H_w")}
+    out.update(nh_edges=d["nh_edges"], t_edges=d["t_edges"])
     return out, pv, man
 
 
-def validate_b_manifest(ds_path):
+def validate_b_manifest(ds_path, cells_digest, ratio_sha):
     man_p = ds_path + ".manifest.json"
     check(os.path.exists(man_p), f"no success manifest {man_p}: not a completed job B product")
     man = json.load(open(man_p))
-    check(man.get("status") == "complete" and man.get("kind") == "cells_1400", "job B manifest not complete")
+    check(man.get("status") == "complete" and man.get("kind") == "cells_1400"
+          and man.get("sources_verified_unchanged") is True and isinstance(man.get("sources"), dict),
+          "job B manifest not complete or not source-verified")
     pr = man.get("prescription", {})
     for k, v in B_PRESCRIPTION.items():
         check(k in pr and (pr[k] == v if not isinstance(v, float) else abs(float(pr[k]) - v) < 1e-12),
               f"job B prescription {k} = {pr.get(k)!r}, expected {v!r}")
-    check(man["dataset"]["sha256"] == PU.sha(ds_path), "job B dataset hash does not match its manifest")
+    check(man.get("dataset", {}).get("sha256") == PU.sha(ds_path), "job B dataset hash does not match its manifest")
+    check(man.get("cells", {}).get("digest") == cells_digest, "job B cell directory differs from its manifest")
+    check(man.get("ratio_table", {}).get("sha256") == ratio_sha, "job B used a different ratio table")
     return man
 
 
@@ -425,10 +455,13 @@ class Run:
         os.makedirs(run_dir)
         self.dir, self.argv, self.t0 = run_dir, argv, time.time()
         self.head = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
-        self.dirty = subprocess.run(["git", "status", "--porcelain", "--"] + HELPERS,
-                                    capture_output=True, text=True).stdout.strip()
+        self.dirty = self.git_dirty()
         self.helpers = {h: PU.sha(h) for h in HELPERS if os.path.exists(h)}
-        self.fp, self.task_inputs, self.status = {}, {}, {}
+        self.fp, self.task_inputs, self.status, self.cache = {}, {}, {}, {}
+
+    def git_dirty(self):
+        return subprocess.run(["git", "status", "--porcelain", "--"] + HELPERS,
+                              capture_output=True, text=True).stdout.strip()
 
     def use(self, task, **paths):
         """Fingerprint inputs BEFORE they are read (cached per path)."""
@@ -475,10 +508,12 @@ class Run:
         m = dict(requested=requested, status=self.status, git_head=self.head, command=" ".join(self.argv),
                  seconds=round(time.time() - self.t0, 1), sources_changed=changed,
                  uncommitted_helpers=self.dirty, complete=complete,
-                 promotable=bool(complete and not changed and not self.dirty))
+                 promotable=bool(complete and not changed and not self.dirty),
+                 limitations="C/D inputs: full sha256 before use, size/mtime re-checked at the end (ordinary "
+                             "concurrent changes); A/B raw cutouts: partial fingerprints (see producer records)")
         with open(self.path("manifest.json"), "w") as f:
             json.dump(m, f, indent=1)
-        return m["promotable"] if requested and all(t in TASKS_REAL for t in requested) else complete
+        return m["promotable"]
 
 
 def style():
@@ -676,6 +711,49 @@ def task_w1(run, a):
           f"5 scalars {out['baseline_5 scalars']['mean']:.3f}; calibration available {allfull}")
 
 
+# ======================================================================= D prerequisites
+def prerequisites(run, a, need, tasks):
+    """Validate the job A/B products ONCE, before any dependent fit: cohort,
+    success manifests, recorded cell-directory digests and ratio table, map
+    protocol, and (A and B) the per-parent summed-weight cross-check. Results
+    are cached for the tasks."""
+    import h5py
+    paths = dict(ds128=IN["ds128"], ds1400=IN["ds1400"], b_manifest=IN["ds1400"] + ".manifest.json",
+                 cells1400=IN["cells1400"], ratio_table=IN["ratio_table"])
+    if "A" in need:
+        check(a.phase_npz, "--phase-npz (job A output) is required")
+        paths |= dict(phase_npz=a.phase_npz, phase_manifest=a.phase_npz + ".manifest.json",
+                      cells144=IN["cells144"])
+    for t in tasks:
+        run.use(t, **paths)
+    with h5py.File(IN["ds128"]) as f1, h5py.File(IN["ds1400"]) as f2:
+        at1, hid = validate_maps(f1, 128)
+        at2, hid2 = validate_maps(f2, 128)
+        check(np.array_equal(hid, hid2), "map sets differ in halo order")
+        check(at1.get("cells_dir") == IN["cells144"] and at2.get("cells_dir") == IN["cells1400"],
+              "map sets were not built from the declared cell directories")
+    ratio_sha = run.fp[IN["ratio_table"]]["sha256"]
+    run.cache["bman"] = validate_b_manifest(IN["ds1400"], run.fp[IN["cells1400"]]["digest"], ratio_sha)
+    if "A" in need:
+        run.cache["phase"] = validate_phase(a.phase_npz, hid, ratio_sha, run.fp[IN["cells144"]]["digest"])
+        d = run.cache["phase"][0]
+        sc = B_PRESCRIPTION["w_scale"] / PHASE_CONFIG["w_scale_cells"]
+        rel = []
+        for h, rc in zip(hid, d["ratio_cut"]):
+            f144 = glob.glob(os.path.join(IN["cells144"], f"cells_FOF{int(h)}_sub*.npz"))
+            f14 = glob.glob(os.path.join(IN["cells1400"], f"cells_FOF{int(h)}_sub*.npz"))
+            check(len(f144) == 1 and len(f14) == 1, f"parent {h}: cell files missing or duplicated")
+            w1, w2 = np.load(f144[0])["w"], np.load(f14[0])["w"]
+            check(len(w1) == len(w2), f"parent {h}: 144 MHz and 1.4 GHz cell counts differ")
+            check(np.isfinite(rc) and rc > 0, f"parent {h}: unavailable job-A frequency ratio")
+            rel.append(abs(w1.sum() / w2.sum() - rc * sc) / (rc * sc))
+        rel = np.array(rel)
+        check(len(rel) == len(hid) and np.all(rel <= TOL_CELL_RATIO),
+              f"job B cells do not reproduce job A's 144/1400 ratio (max rel {np.max(rel):.2e})")
+        run.cache["cells_ratio_rel"] = rel
+    run.cache["hid"] = hid
+
+
 # ======================================================================= W2
 def mf_block(images):
     from minkowski_functionals import FRACS, mf_curves
@@ -694,8 +772,7 @@ def task_w2(run, a):
     from xgboost import XGBRegressor
     from minkowski_functionals import FRACS, oof_r2
     plt = style()
-    run.use("w2", ds128=IN["ds128"], ds1400=IN["ds1400"])
-    bman = validate_b_manifest(IN["ds1400"])
+    bman = run.cache["bman"]
     out, keep = dict(job_b_manifest=dict(path=IN["ds1400"] + ".manifest.json", prescription=bman["prescription"],
                                          dataset_sha256=bman["dataset"]["sha256"])), {}
     ref = None
@@ -775,18 +852,12 @@ def task_w2(run, a):
 def task_w3(run, a):
     import h5py
     plt = style()
-    check(a.phase_npz, "--phase-npz (job A output) is required for w3")
-    run.use("w3", phase_npz=a.phase_npz, phase_manifest=a.phase_npz + ".manifest.json", ds128=IN["ds128"],
-            ds1400=IN["ds1400"], ratio_table=IN["ratio_table"], cells144=IN["cells144"], cells1400=IN["cells1400"])
-    bman = validate_b_manifest(IN["ds1400"])
-    with h5py.File(IN["ds128"]) as f1, h5py.File(IN["ds1400"]) as f2:
-        at1, hid = validate_maps(f1, 128)
-        at2, hid2 = validate_maps(f2, 128)
-        check(np.array_equal(hid, hid2), "map sets differ in halo order")
-        check(at2.get("cells_dir") == IN["cells1400"] and at1.get("cells_dir") == IN["cells144"],
-              "map sets were not built from the declared cell directories")
+    import h5py as _h5
+    bman = run.cache["bman"]
+    d, pv, aman = run.cache["phase"]
+    hid = run.cache["hid"]
+    with _h5.File(IN["ds128"]) as f1, _h5.File(IN["ds1400"]) as f2:
         m1, m2 = f1["images"][:].astype(np.float64), f2["images"][:].astype(np.float64)
-    d, pv, aman = validate_phase(a.phase_npz, hid, IN["ratio_table"])
     out = dict(job_a=dict(path=a.phase_npz, config=pv["config"], n_parents=pv["n_parents"],
                           cells_cut=pv["cells_cut"], ratio_table=pv["ratio_table"]),
                job_b=dict(prescription=bman["prescription"], dataset_sha256=bman["dataset"]["sha256"]))
@@ -803,25 +874,16 @@ def task_w3(run, a):
                         zero_weight=int(d["n_zero_w"].sum()), out_of_range=int(d["n_out_of_range"].sum()),
                         weight_out_of_range_frac_median=float(np.median(d["w_out_of_range"] / d["w_total"])),
                         cut_status={str(s): int((d["cut_status"] == s).sum()) for s in np.unique(d["cut_status"])})
-    # B cross-check: stored-cell sums at the two frequencies must reproduce A's physical ratio
-    sc = B_PRESCRIPTION["w_scale"] / PHASE_CONFIG["w_scale_cells"]
-    rel = []
-    for h, rc in zip(hid, d["ratio_cut"]):
-        f144 = glob.glob(os.path.join(IN["cells144"], f"cells_FOF{int(h)}_sub*.npz"))
-        f14 = glob.glob(os.path.join(IN["cells1400"], f"cells_FOF{int(h)}_sub*.npz"))
-        check(len(f144) == 1 and len(f14) == 1, f"parent {h}: cell files missing or duplicated")
-        w1, w2 = np.load(f144[0])["w"], np.load(f14[0])["w"]
-        check(len(w1) == len(w2), f"parent {h}: 144 MHz and 1.4 GHz cell counts differ")
-        rel.append(abs(w1.sum() / w2.sum() - rc * sc) / (rc * sc))
-    rel = np.array(rel)
-    check(np.all(rel <= TOL_CELL_RATIO), f"job B cells do not reproduce job A's 144/1400 ratio "
-                                         f"(max rel {np.max(rel):.2e})")
+    rel = run.cache["cells_ratio_rel"]
     G = float(np.median(d["ratio_cut"]))
     out["frequency_cells"] = dict(
         G_median_ratio_cut=G, sd_log10_ratio_cut=float(np.std(np.log10(d["ratio_cut"]), ddof=1)),
         G_median_ratio_all=float(np.median(d["ratio_all"])),
         sd_log10_ratio_all=float(np.std(np.log10(d["ratio_all"]), ddof=1)), n=len(hid),
         job_b_cross_check_max_rel=float(np.max(rel)),
+        job_b_cross_check_scope="per-parent summed-weight ratio and cell count only; it does not establish "
+                                "cell-by-cell or spatial identity (bound instead by the recorded cell-directory "
+                                "digests)",
         estimand="per parent sum(w144)/sum(w1400) over density-cut cells, unscaled physical weights; SD over "
                  "parents (ddof 1) of log10 of that ratio; w1400 = w144 (1.4/0.144)^(-s/2) at fixed cell "
                  "properties (implementation check, not independent physics validation)")
@@ -1268,7 +1330,6 @@ def task_w9(run, a):
 
 TASKS = dict(w1=task_w1, w2=task_w2, w3=task_w3, w4=task_w4, w5=task_w5, w6=task_w6, w7=task_w7, w8=task_w8,
              w9=task_w9)
-TASKS_REAL = set(TASKS)
 
 
 def main(argv=None):
@@ -1283,7 +1344,19 @@ def main(argv=None):
     if bad or len(set(req)) != len(req) or not req:
         raise SystemExit(f"unknown, duplicate or empty task list: {a.tasks}")
     run = Run(a.run_dir, [os.path.relpath(__file__)] + argv)
+    dep_tasks = [t for t in req if t in DEPS]
+    need = set().union(*(DEPS[t] for t in dep_tasks)) if dep_tasks else set()
+    if need:
+        print(f"== prerequisites {sorted(need)} for {dep_tasks}", flush=True)
+        try:
+            prerequisites(run, a, need, dep_tasks)
+        except Exception as e:
+            for t in dep_tasks:
+                run.status[t] = f"unavailable: prerequisite failed: {type(e).__name__}: {e}"
+            print(f"  PREREQUISITE FAILED: {e}")
     for t in req:
+        if t in run.status:
+            continue
         print(f"== {t}", flush=True)
         try:
             TASKS[t](run, a)
