@@ -28,24 +28,34 @@ def mfs(imgs):
     return np.array([[binary_mfs(im > t) for t in thr] for im in imgs])[:, :, COLS]
 
 
-rows = []
-for arg in sys.argv[1:]:
-    lab, path = arg.split("=", 1)
-    with h5py.File(path) as f:
-        mock = f["mock/images"][:]
-        # each set against the real cutouts made at ITS box size and from its
-        # own field set (an earlier version reused the first file's)
-        obs_mf = mfs(f["obs/images"][:])
-        n_obs = len(f["obs/images"])
-        attrs = dict(f.attrs)
-        attrs["n_obs"] = n_obs
-    m = mfs(mock.reshape(-1, *mock.shape[-2:]))
-    sep = (np.median(obs_mf, 0) - np.median(m, 0)) / (m.std(0) + 1e-9)   # (k, 4)
-    a = np.abs(sep)
-    rows.append((lab, np.median(a), a.max(), np.median(a, axis=0), attrs))
-print(f"thresholds {np.round(KS, 1)} sigma; real targets per set in brackets")
-print(f"{'set':<28}{'median|sep|':>12}{'max|sep|':>10}  " + "".join(f"{n:>11}" for n in NAMES))
-for lab, med, mx, per, at in rows:
-    print(f"{lab:<28}{med:>12.3f}{mx:>10.2f}  " + "".join(f"{v:>11.3f}" for v in per)
-          + f"   [recipe={at.get('recipe', 'legacy')}, box={at.get('box_kpc', 1000)}, "
-            f"control={at.get('control', False)}, n_obs={at['n_obs']}]")
+def separation(obs_mf, mock_mf):
+    """(k, 4) |median(real) - median(mock)| / sd(mock), the adopted metric."""
+    return (np.median(obs_mf, 0) - np.median(mock_mf, 0)) / (mock_mf.std(0) + 1e-9)
+
+
+def main(argv):
+    rows = []
+    for arg in argv:
+        lab, path = arg.split("=", 1)
+        with h5py.File(path) as f:
+            mock = f["mock/images"][:]
+            # each set against the real cutouts made at ITS box size and from its
+            # own field set (an earlier version reused the first file's)
+            obs_mf = mfs(f["obs/images"][:])
+            n_obs = len(f["obs/images"])
+            attrs = dict(f.attrs)
+            attrs["n_obs"] = n_obs
+        m = mfs(mock.reshape(-1, *mock.shape[-2:]))
+        sep = separation(obs_mf, m)                                        # (k, 4)
+        a = np.abs(sep)
+        rows.append((lab, np.median(a), a.max(), np.median(a, axis=0), attrs))
+    print(f"thresholds {np.round(KS, 1)} sigma; real targets per set in brackets")
+    print(f"{'set':<28}{'median|sep|':>12}{'max|sep|':>10}  " + "".join(f"{n:>11}" for n in NAMES))
+    for lab, med, mx, per, at in rows:
+        print(f"{lab:<28}{med:>12.3f}{mx:>10.2f}  " + "".join(f"{v:>11.3f}" for v in per)
+              + f"   [recipe={at.get('recipe', 'legacy')}, box={at.get('box_kpc', 1000)}, "
+                f"control={at.get('control', False)}, n_obs={at['n_obs']}]")
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])
