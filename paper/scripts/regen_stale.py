@@ -920,8 +920,9 @@ def task_w3(run, a):
         a_.set_xlabel(r"log $n_{\rm H}$ [cm$^{-3}$]")
         fig.colorbar(im, ax=a_, pad=0.01, label="log fraction per bin")
     ax[0].set_ylabel(r"log $kT$ [keV]")
-    ax[1].text(0.03, 0.97, f"{out['frac_above']['median']:.0%} of the weight\nat $n_{{\\rm H}} > 10^{{-4}}$",
-               transform=ax[1].transAxes, ha="left", va="top", fontsize=7)
+    ax[1].text(0.03, 0.97, f"median {100 * out['frac_above']['median']:.1f}% of the weight\nat $n_{{\\rm H}} > 10^{{-4}}$",
+               transform=ax[1].transAxes, ha="left", va="top", fontsize=7,
+               bbox=dict(facecolor="white", alpha=0.85, edgecolor="none", pad=1.5))
     fig.tight_layout()
     run.save_fig(fig, "phase")
     run.record("w3", out)
@@ -1328,7 +1329,7 @@ def task_w9(run, a):
     ax.set_ylabel("outermost radio peak distance [Mpc]")
     ax.set_xlim(0, 2.05)
     ax.set_ylim(0, np.max(x[a_p]) * 1.05)
-    ax.legend()
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.2), ncol=2, fontsize=6, frameon=False)
     run.save_fig(fig, "relic")
     run.record("w9", out)
     print(f"  redetection agreement: {agree}; active rho {out['active']['rho']:+.3f} "
