@@ -1,5 +1,74 @@
 \section{Negative results}
 \label{app:negative}
+
+% Earlier-history diagnostic: logs/history_diag_8936281.out and
+% history_diag_8936281.npz; accepted interpretation in
+% CODEX_CLAUDE_REVIEW.md, rounds 46--47 (2026-11-12).
+% Artifact SHA-256:
+% 76940ff77515d7bc5eda4d7cb469aa28111a77e4f334b0cae8d67550da64109f
+\suggestion{Consider adding a subsection titled ``Earlier merger activity
+and learned predictions''. If adopted here, ``Additional diagnostics and
+negative results'' would better describe the appendix: this experiment
+finds a descriptive association but does not meet its criterion for
+advancing to a new training target. Suggested text follows.
+
+We tested whether the learned predictions were associated with merger
+activity preceding the latest recorded collision. This separate
+diagnostic used the Huber-loss X-ray models trained on catalogue time
+since the latest first-pericentre event, capped at 4\,Gyr. For each
+snapshot-99 parent halo, we averaged the five-seed ensemble predictions
+over its nine simulated observations. Earlier activity was defined as
+$M_{\rm prev}=\sum_{k\in\mathcal{P}}\mu_k
+\exp(-\Delta t_k/\tau)$, where $\mu_k$ is the catalogue mass ratio,
+$\Delta t_k$ is the elapsed time since event $k$, and $\tau=1$\,Gyr.
+The set $\mathcal{P}$ contains only events strictly earlier than the
+latest recorded collision; all events tied at the latest epoch were
+excluded. The analysis included 308 haloes with finite latest-event
+ages between 0 and 4\,Gyr and complete earlier-event weights. Of the
+352 snapshot-99 haloes, six had no recorded past event, 37 had older
+latest-event ages, and one had an invalid earlier-event mass ratio.
+
+After adjustment for a fixed piecewise-linear time basis and original
+cross-validation fold, greater earlier activity was associated with
+lower predicted ages. The coefficient per unit $M_{\rm prev}$ was
+$-1.170$\,Gyr, with a 95 per cent conditional bootstrap interval of
+$[-1.858,-0.795]$\,Gyr, equivalent to $-0.141$\,Gyr per reference
+standard deviation of activity. The in-sample partial $R^2$ was 0.059.
+The association persisted with a prespecified natural-cubic time basis.
+Joint adjustment for true halo mass, latest-group summed mass ratio and
+latest-group multiplicity reduced the coefficient magnitude to
+$-0.723$\,Gyr ($[-1.254,-0.476]$\,Gyr), on the same cohort.
+Because these controls were added together, this attenuation cannot be
+attributed to mass alone.
+
+We separately tested whether earlier activity improved held-out tracking
+of the learned output. Within each original CNN test fold, we divided
+eligible parents into two fixed halves, fitted on one half and evaluated
+on the other, then exchanged their roles. Neither half had been used to
+fit or select the corresponding CNNs. Using the same piecewise-linear
+time basis in both second-stage models, adding $M_{\rm prev}$ changed
+held-out tracking $R^2$ from 0.126 to $-0.017$ across all 308 parents:
+$\Delta R^2=-0.143$, with interval $[-0.482,+0.072]$.
+These scores describe prediction of the CNN output, not recovery of
+true collision time. All quoted intervals used 4000 parent bootstrap
+draws stratified by original fold: the association fits were refitted
+in each draw, whereas the held-out contrast used fixed second-stage
+predictions. The intervals are conditional on the stored CNN outputs
+and, for the held-out comparison, the fitted second-stage models;
+they do not propagate CNN retraining uncertainty.
+
+The prespecified criterion for advancing to activity-target training
+required both the negative association to persist under the alternate
+time basis and a positive held-out increment with its interval excluding
+zero. The latter criterion was not met, so we did not advance to new
+target training. These exploratory results support a conditional
+association with catalogue-defined earlier activity, but do not identify
+a causal contribution from earlier mergers or demonstrate improved
+physical-time prediction. Conversely, the unresolved held-out increment
+does not establish the absence of earlier-merger information. Catalogue
+selection, the mass-ratio convention and history-correlated properties
+such as halo mass remain limitations of the physical interpretation.}
+
 \begin{figure}
   \centering
   \includegraphics[width=\columnwidth]{fig_relic.pdf}
