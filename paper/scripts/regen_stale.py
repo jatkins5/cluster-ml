@@ -335,6 +335,13 @@ def boot_spearman(x, y, n=BOOT, seed=BOOT_SEED):
                 interval_status="ok" if ok else f"unavailable: {bad} invalid draws")
 
 
+def rounded_match(value, reported, decimals):
+    """True if `value` is consistent with a number REPORTED at `decimals`
+    places, i.e. within half a unit in the last place (implementation-
+    independent; numpy round() and %-formatting disagree at exact halves)."""
+    return bool(np.isfinite(value) and abs(float(value) - reported) <= 0.5 * 10.0 ** -decimals + 1e-12)
+
+
 def norm_key(s):
     return re.sub(r"[\s_]+", "", s.decode() if isinstance(s, bytes) else str(s)).upper()
 
@@ -1109,7 +1116,7 @@ def task_w5(run, a):
     mq, oq = np.percentile(M, [16, 50, 84], axis=0), np.percentile(O, [16, 50, 84], axis=0)
     out = dict(gallery=gal, n_mock=len(M), n_obs=len(O), thresholds_sigma=KS, functionals=NAMES,
                separation=sep, D=D, D_rounded=round(D, 3), D_expected_rounded=0.093,
-               D_reproduced=bool(round(D, 3) == 0.093), max_abs_sep_above_3sigma=float(np.abs(sep[KS > 3.0]).max()),
+               D_reproduced=rounded_match(D, 0.093, 3), max_abs_sep_above_3sigma=float(np.abs(sep[KS > 3.0]).max()),
                mock_sd_convention="numpy std, ddof 0, +1e-9 (check_radio_realism.separation)")
     run.sidecar("w5", thresholds=KS, mock_pct=mq, obs_pct=oq, separation=sep, obs_names=np.array(on),
                 gallery_halo_ids=np.array([int(mh[i]) for i in pick]))
@@ -1158,7 +1165,7 @@ def task_w6(run, a):
                               at_cap=cap_stats(y_r, p_r), single_view_5model_r2=sv,
                               single_view_estimand="compare_syn.single: every (realisation, projection) "
                                                    "observation, 5-seed ensemble, snapshot 99",
-                              single_view_expected_rounded=0.426, single_view_reproduced=bool(round(sv, 3) == 0.426)))
+                              single_view_expected_rounded=0.426, single_view_reproduced=rounded_match(sv, 0.426, 3)))
     for k in ("clean", "realistic"):
         out[k]["youngest_bin"] = out[k]["bins"][0]
     run.sidecar("w6", clean_halo_id=hid, clean_y=y_c, clean_pred=p_c, realistic_group_id=ds[0]["group_id"][m],
@@ -1232,8 +1239,10 @@ def task_w8(run, a):
                error_bars="SD (ddof 1) across the five seeds' fold-averaged predictions; not 25-model scatter "
                           "or a calibrated age uncertainty",
                ensemble="25 models: 5 seeds x 5 folds, equal weights")
-    out["reproduction"] = dict(n=out["n"] == 15, rho=round(rho, 2) == 0.67, p=round(p, 3) == 0.006,
-                               offset=round(out["median_offset"], 2) == 0.49, older=out["n_radio_older"] == 14)
+    out["reproduction"] = dict(n=out["n"] == 15, rho=rounded_match(rho, 0.67, 2), p=rounded_match(p, 0.006, 3),
+                               offset=rounded_match(out["median_offset"], 0.49, 2), older=out["n_radio_older"] == 14,
+                               rule="consistent with the retained rounded value (within half a unit in the last "
+                                    "reported place)")
     check(all(out["reproduction"].values()), f"observed summary does not reproduce compare_syn: {out['reproduction']}")
     fig, ax = plt.subplots(figsize=(COL, COL * 0.9))
     vmin, vmax = np.nanmin(lmv), np.nanmax(lmv)

@@ -110,6 +110,9 @@ bc = R.boot_spearman(np.ones(30), np.arange(30.0), n=50)
 assert bc["interval_status"].startswith("unavailable") and bc["invalid_draws"] == 50
 print("    halo summary excludes zero-peak halos; bootstrap counts invalid draws -> interval unavailable")
 assert R.norm_key(b"RXC J1217.6+0339") == R.norm_key("RXCJ1217.6+0339")
+assert R.rounded_match(0.6749999999999999, 0.67, 2) and R.rounded_match(0.675, 0.68, 2)
+assert not R.rounded_match(0.6751, 0.67, 2) and not R.rounded_match(np.nan, 0.67, 2)
+print("    rounded-value reproduction: an exact half (rho = 0.675) is consistent with the reported 0.67")
 
 print("== W3 per-parent cell statistics (extract_phase_syn.parent_stats)")
 w = np.array([1.0, 0.0, 2.0, 4.0, 3.0, np.nan, 5.0])
