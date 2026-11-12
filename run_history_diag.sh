@@ -8,4 +8,5 @@ set -euo pipefail
 cd /oscar/data/idellant/cluster-ml
 ./venv/bin/python -u diagnose_history.py \
     --expect-manifest f08136fd6d1a32083c8ea6287fa6a64ff350e8bf2ca5e0a2a7187cf33461df4d \
+    --mode production \
     --out history_diag_${SLURM_JOB_ID:?run under SLURM}.npz
