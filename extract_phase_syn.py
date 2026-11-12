@@ -90,7 +90,17 @@ def parent_stats(w, T, nH, M):
     return out
 
 
+CONFIG = dict(snapshot=99, z=0.0, model="synch", nu_lo_ghz=NU_LO, nu_hi_ghz=NU_HI, nh_cut=NH_CUT,
+              nh_cut_rule="kept: n_H <= nh_cut", t_cold_kev=T_COLD_KEV, w_scale_cells=W_SCALE,
+              shock="Machnumber > 1.3 & EnergyDissipation > 0", nh_edges=[NH_EDGES[0], NH_EDGES[-1], len(NH_EDGES)],
+              t_edges=[T_EDGES[0], T_EDGES[-1], len(T_EDGES)],
+              normalisation="per parent by its whole valid population")
+HELPERS = ("extract_phase_syn.py", "build_radio_cells.py", "prov_utils.py")
+
+
 def main():
+    import h5py
+    import prov_utils as PU
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", required=True)
     ap.add_argument("--radio-dir", default=f"{C}/Radio_Snap99_new")
@@ -98,16 +108,26 @@ def main():
     ap.add_argument("--ratio-table", default="Radio_Data_new/radio_spectral_ratio_table.npz")
     ap.add_argument("--cells-cut", default="Radio_Cells_syn_nh4_144")
     ap.add_argument("--cells-all", default="Radio_Cells_syn_144")
-    ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--cohort", default="dataset_syn_nh4_144_128.h5",
+                    help="adopted snapshot-99 map set whose parents define the production cohort")
+    ap.add_argument("--limit", type=int, default=0, help="SMOKE ONLY: the artifact is then never production")
     a = ap.parse_args()
     if not a.out.endswith(".npz"):
         raise SystemExit("--out must end in .npz")
-    if os.path.exists(a.out):
-        raise SystemExit(f"refusing to overwrite {a.out}")
+    man_path = a.out + ".manifest.json"
+    for p_ in (a.out, man_path):
+        if os.path.exists(p_):
+            raise SystemExit(f"refusing to overwrite {p_}")
     here = os.path.dirname(os.path.abspath(__file__))
     head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=here, capture_output=True, text=True).stdout.strip()
-    dirty = subprocess.run(["git", "status", "--porcelain", "extract_phase_syn.py", "build_radio_cells.py"],
+    dirty = subprocess.run(["git", "status", "--porcelain", "--"] + list(HELPERS),
                            cwd=here, capture_output=True, text=True).stdout.strip()
+    helpers0 = {f: PU.sha(os.path.join(here, f)) for f in HELPERS}
+    with h5py.File(a.cohort) as f:
+        cohort = [int(h) for h in f["meta/halo_id"][:]]
+        check_attrs = dict(snapshot=int(f.attrs["snapshot"]), redshift=float(f.attrs["redshift"]))
+    if check_attrs != dict(snapshot=99, redshift=0.0):
+        raise SystemExit(f"cohort file is not snapshot 99 / z = 0: {check_attrs}")
     brc.set_redshift(0.0)
     interp = brc.make_ratio(a.ratio_table)
     srcs = sorted(glob.glob(os.path.join(a.radio_dir, "radio_FOF*.npz")))
@@ -117,13 +137,15 @@ def main():
             "w_out_of_range", "n_kept", "w_kept", "frac_above", "frac_cold", "top_all", "top_cut",
             "mach_all", "mach_cut", "ratio_all", "ratio_cut", "check_cut_n", "check_cut_wrel", "check_all_n"]
     rec = {k: [] for k in keys}
-    status, Hn, Hw = [], [], []
+    status, Hn, Hw, cut_fp, src_fp = [], [], [], {}, {}
     t0 = time.time()
     for i, src in enumerate(srcs):
         fof, sub = re.search(r"radio_FOF(\d+)_sub(\d+)\.npz", os.path.basename(src)).groups()
         cut = os.path.join(a.cutout_dir, f"cutout_sub{sub}_FOF{fof}.hdf5")
         if not os.path.exists(cut):
             raise SystemExit(f"missing cutout for FOF{fof}")
+        src_fp[os.path.basename(src)] = PU.stat_fp(src)
+        cut_fp[os.path.basename(cut)] = PU.partial_fp(cut)
         out = brc.generate(cut, interp, nu_ghz=NU_LO, phase=True, model="synch")
         if out is None:
             raise SystemExit(f"FOF{fof}: no shock cells (the cell build had none missing)")
@@ -147,19 +169,31 @@ def main():
             print(f"  {i + 1}/{len(srcs)} ({time.time() - t0:.0f}s)", flush=True)
     arr = {k: np.array(v) for k, v in rec.items()}
     bad = (arr["check_cut_n"] != 0) | (arr["check_all_n"] != 0) | ~(arr["check_cut_wrel"] <= 1e-9)
-    prov = dict(head=head, uncommitted=dirty, args=vars(a), w_scale_cells=W_SCALE, nh_cut=NH_CUT,
-                t_cold_kev=T_COLD_KEV, nu=[NU_LO, NU_HI], z=0.0, shock="Machnumber > 1.3 & EnergyDissipation > 0",
-                normalisation="per parent by its whole valid population",
-                sources={f: sha(os.path.join(here, f)) for f in ("extract_phase_syn.py", "build_radio_cells.py")},
-                ratio_table=sha(a.ratio_table), n_parents=len(srcs), n_check_failures=int(bad.sum()),
-                seconds=round(time.time() - t0, 1))
+    ids = [int(h) for h in arr["halo_id"]]
+    unique = len(set(ids)) == len(ids)
+    full = unique and set(ids) == set(cohort) and len(ids) == len(cohort)
+    helpers1 = {f: PU.sha(os.path.join(here, f)) for f in HELPERS}
+    production = bool(a.limit == 0 and full and not bad.any() and helpers0 == helpers1)
+    prov = dict(head=head, uncommitted=dirty, args=vars(a), config=CONFIG, helpers=helpers0,
+                helpers_unchanged=helpers0 == helpers1, ratio_table=PU.sha(a.ratio_table),
+                cohort_file=dict(path=a.cohort, sha256=PU.sha(a.cohort)), n_parents=len(srcs),
+                ids_unique=unique, cohort_complete=full, n_check_failures=int(bad.sum()),
+                limit=a.limit, production_complete=production,
+                cells_cut=PU.dir_digest(a.cells_cut), cells_all=PU.dir_digest(a.cells_all),
+                radio_dir_listing=src_fp, cutouts_partial=cut_fp, seconds=round(time.time() - t0, 1))
     np.savez(a.out, H_n=np.array(Hn), H_w=np.array(Hw), nh_edges=NH_EDGES, t_edges=T_EDGES,
              cut_status=np.array(status), provenance=np.array(json.dumps(prov)), **arr)
-    print(json.dumps({k: v for k, v in prov.items() if k != "args"}, indent=1))
-    if bad.any():
-        raise SystemExit(f"cell-file consistency check FAILED for {int(bad.sum())} parents "
-                         f"(results saved for diagnosis in {a.out})")
-    print(f"saved {a.out}: {len(srcs)} parents; all cell-file checks passed")
+    print(json.dumps({k: v for k, v in prov.items()
+                      if k not in ("args", "radio_dir_listing", "cutouts_partial")}, indent=1))
+    if not production:
+        raise SystemExit(f"NOT a production artifact (limit {a.limit}, cohort complete {full}, unique {unique}, "
+                         f"check failures {int(bad.sum())}, helpers unchanged {helpers0 == helpers1}); "
+                         f"saved {a.out} for diagnosis only, no manifest written")
+    man = dict(status="complete", artifact=a.out, artifact_sha256=PU.sha(a.out), config=CONFIG,
+               n_parents=len(ids), head=head, helpers=helpers0)
+    with open(man_path, "x") as f:
+        json.dump(man, f, indent=1)
+    print(f"saved {a.out} and {man_path}: {len(srcs)} parents; production complete")
 
 
 if __name__ == "__main__":

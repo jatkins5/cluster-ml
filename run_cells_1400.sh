@@ -13,10 +13,13 @@ export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK OPENBLAS_NUM_THREADS=$SLURM_CPUS_PER
 C=/oscar/data/idellant/Chuiyang
 OUTC=Radio_Cells_syn_nh4_1400
 OUTD=dataset_syn_nh4_1400_128.h5
-for p in $OUTC $OUTD; do [ -e "$p" ] && { echo "refusing to overwrite $p"; exit 1; }; done
+for p in $OUTC $OUTD $OUTD.manifest.json; do [ -e "$p" ] && { echo "refusing to overwrite $p"; exit 1; }; done
 PY="./venv/bin/python -u"
 $PY build_radio_cells.py --model synch --max-nh 1e-4 --nu-ghz 1.4 --w-scale 16.48 \
     --radio-dir $C/Radio_Snap99_new --cutout-dir $C/TNGCluster_Cutout/snap99 \
     --out-dir $OUTC
 $PY build_dataset.py --center grouppos --cells-dir $OUTC --img-size 128 --output $OUTD
-sha256sum $OUTD
+# success-only producer manifest (binds prescription, sources, builders and hash)
+$PY manifest_cells_1400.py --dataset $OUTD --cells-dir $OUTC --radio-dir $C/Radio_Snap99_new \
+    --cutout-dir $C/TNGCluster_Cutout/snap99 --ratio-table Radio_Data_new/radio_spectral_ratio_table.npz \
+    --nu-ghz 1.4 --w-scale 16.48 --max-nh 1e-4 --img-size 128
