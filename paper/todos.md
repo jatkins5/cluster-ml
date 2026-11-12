@@ -76,27 +76,23 @@ These do not belong in a queue of experiments still waiting to be scored.
   Source: `runs/spatial_20261103T021803Z/results.txt` and `provenance.json`.
   A current-prescription claim needs a matched rerun, not rewording alone.
 
-## 3. Stale measurements and figures
+## 3. Stale measurements and figures (regenerated)
 
-The following need current-model evidence **if retained as current results**;
-removing or explicitly retaining a result as historical is also an option.
-Update the measurement, figure and caption together. The figure recipes in
-[README.md](README.md) describe existing assets and still point to older
-inputs; audit those paths before rebuilding.
+All 17 `\stale{}` annotations were replaced with regenerated evidence
+(review rounds 48--55): `scripts/regen_stale.py`, consolidated run
+`staged/regen_final_8942495` (W1--W7, W9) and W8 refresh
+`staged/regen_W8_8945384`; provenance in `staged/PROMOTED_PACKAGE.json`;
+annotation-to-evidence checklist in `CODEX_CLAUDE_REVIEW.md` (round 56).
+Replacement estimands that differ from the historical ones are stated in
+the text: the half-sample scalar+CNN comparison replaces the leaky stacked
+0.541; the Minkowski lowest threshold selects the emitting footprint; the
+aperture fractions are medians over projections; the frequency scatter and
+redistribution use explicitly defined replacement statistics; the
+power--mass fits use the log of projection-averaged linear power.
 
-| Item | Required update | Manuscript/figure affected |
-|---|---|---|
-| Clean ensemble and scalar/mass controls | Recompute the five-seed clean ensemble score; rerun scalar baselines and combined models using current features and matched folds; refresh mass-tercile scores, partial correlations and luminosity–prediction regressions. Existing CNN predictions may be reused where protocols match. | Results radio-only; `fig_baselines.pdf`; dependent claims in Abstract, Discussion, Conclusions |
-| Intrinsic morphology | Re-extract current-map Minkowski features and rerun their predictive/threshold summaries, including any frequency comparison retained. This is separate from the completed compressed-source sensitivity experiment. | Results radio-only; `fig_mf_tsc.pdf` |
-| Gas phase and frequency | Remeasure dense/cold fractions, brightest-cell contributions, radio-weighted Mach summaries, and the 144 MHz/1.4 GHz scatter and flux redistribution. Clarify cell versus projected pixel. | Simulations radio subsection; `fig_phase.pdf`; 99% statements in Discussion/Conclusions |
-| Aperture retention | Recompute the emission fractions retained in 1 and 3 Mpc boxes from current maps. | Forward modelling (old 4% and 65%) |
-| Mock images and realism curves | Regenerate the radio gallery and threshold-dependent morphology curves. Scalar agreement is already updated to 0.093/0.159/0.635, but the plotted curves are old. | `fig_radio_gallery.pdf`, `fig_radio_mf.pdf` |
-| Prediction plots and age-dependent bias | Plot reviewed current predictions and recompute the bias summaries using the stated snapshot, target and ensemble. Do not substitute catalogue-TSC diagnostic values into the main pseudo-TSC result. | Results; `fig_tsc_pred.pdf`; old +0.35 and −1.2 to −1.4 Gyr statements |
-| Radio power–mass relation | Refit slopes, scatter and residual correlation using current radio weights and the stated flux calibration. | Results/Discussion; `fig_pm_relation.pdf` |
-| Observed predictions | Regenerate the plot from current radio predictions and recompute the separate radio/X-ray medians. The paired median offset and rank statistics are already updated; median differences do not determine separate medians. | LoVoCCS Results; `fig_real_preds.pdf`; old separate medians 1.10/0.83 Gyr |
-| Projected peak/relic null test | If retained, verify the current catalogue's provenance and recompute peak statistics and plot for the regenerated 144 MHz maps. The small 3-D pilot does not replace this population diagnostic. | Discussion and negative-results appendix; `fig_relic.pdf` |
+- [ ] Author review of the replaced text and the blue suggestions that now
+  reference regenerated results (Results, Discussion, Conclusions, Abstract).
 
-Do not classify every figure as stale merely because radio was regenerated.
 The X-ray-only, optical, label-distribution and CAMELS analyses have separate
 inputs/protocols. `fig_labels.pdf` needs revision only if its clock/label
 comparison is changed; `fig_aug.pdf` remains a historical, non-independent
@@ -104,14 +100,11 @@ augmentation experiment and cannot substantiate a current augmentation gain.
 
 ## 4. New work or deferred experiments (no completed result to analyze)
 
-- [ ] **Earlier-merger history diagnostic (B1/B2).** The separate analysis
-  workflow has prepared `diagnose_history.py`, fixtures and a CPU launcher.
-  The latest retained handoff is implementation review (round 44), with
-  the B2 time-basis amendment and bootstrap-coverage qualification still
-  under discussion. No production result is recorded there yet. Review
-  production results when available; fixture results are not science results.
-  This is a separate ongoing follow-up, not a prerequisite for publishing
-  the already reviewed manuscript numbers.
+- [x] **Earlier-merger history diagnostic (B1/B2).** Completed and closed
+  (production job 8936281; review rounds 42--47). B1 passed; the held-out
+  B2 criterion failed, so no activity-target training. The proposed text is
+  the blue suggestion in `B_negative_results.tex`; deferred follow-ups are
+  not reopened.
 - [ ] **Diffusion augmentation with independent test clusters.** Deferred.
   A valid new comparison must exclude downstream test clusters from generator
   training and selection as well as regressor training. The old comparison

@@ -5,8 +5,8 @@
 
 We recovered the linear emission values from the arcsinh-stretched radio images, and then cropped and rebinned the data onto a 128$\times$128 pixel grid using pixel-overlap weights which conserved the integrated emission.
 The radio-only inputs to our predictive models cover square regions of physical side length 3 Mpc, corresponding to 23.4 kpc per pixel.
-This aperture retains 65\% of the uncropped emission, while the central 1 Mpc section only retains 4\%.
-\stale{These aperture-retention fractions were measured with the previous radio prescription; their regenerated-model values are pending.}
+Relative to the full projected map footprint ($\pm4\,R_{500}$), the 3 Mpc and 1 Mpc square apertures retain median fractions of 68.5 and 0.91 per cent of the linear emission, respectively, across the 1056 projections of 352 parent halos.
+The distributions are broad, with 16th--84th percentiles of 17.7--96.4 per cent and 0.006--14.7 per cent, respectively.
 
 The radio power assigned to each image is proportional to its integrated linear emission:
 \begin{align*}
@@ -49,27 +49,29 @@ Measuring this precisely would require visibility-domain injection, in e.g. \cit
 \begin{figure*}
   \centering
   \includegraphics[width=\textwidth]{fig_radio_gallery.pdf}
-  \caption{\stale{Previous radio prescription; regenerate the displayed maps from the new inputs.}
-  Top: simulated 144\,MHz maps (GroupPos-centred, $n_{\rm H} <
-  10^{-4}$\,cm$^{-3}$ shock cells, $\pm2\,r_{500}$) for four clusters
-  spanning merger time. Middle: the same clusters forward-modelled over a
-  3\,Mpc box at a LoVoCCS redshift and injected into a real LoTSS DR3
+  \caption{Top: simulated 144\,MHz maps (regenerated synchrotron weights,
+  GroupPos-centred, $n_{\rm H} \leq 10^{-4}$\,cm$^{-3}$ shock cells,
+  central $\pm2\,r_{500}$, one projection, each panel on its own arcsinh scale)
+  for the four clusters closest to pseudo-TSC of 0.2, 0.8, 1.8 and 4\,Gyr.
+  Middle: the same clusters and projection forward-modelled over a
+  3\,Mpc box at a LoVoCCS redshift (first realization) and injected into a real LoTSS DR3
   field with the simulation's own flux. Bottom: real LoTSS targets over the
-  same box; the circular regions are masked compact sources.}
+  same box; the circular regions are masked compact sources. The A1650 panel
+  retains the blank strip present in the prepared observed cutout.}
   \label{fig:radio_gallery}
 \end{figure*}
 
 \begin{figure*}
   \centering
   \includegraphics[width=\textwidth]{fig_radio_mf.pdf}
-  \caption{\stale{Previous radio prescription; this plot and its threshold-specific offsets have not been regenerated. The updated scalar realism comparison is given in the text.}
-  Minkowski functionals of the 3168 injected mocks (3\,Mpc box;
+  \caption{Minkowski functionals of the 3168 injected mocks (3\,Mpc box;
   band: 16--84 per cent) against the 26 LoTSS targets over the same box
   (points: median and 16--84 per cent), at thresholds 1--20$\sigma$ of each
   map's noise. Bottom: the median offset of the real maps in units of the
-  mock scatter. Above 3$\sigma$ every offset is within 0.2 mock
+  mock scatter; the median of the absolute offsets over all panels and thresholds is the
+  agreement statistic $D = 0.093$ quoted in the text. Above 3$\sigma$ every offset is within 0.2 mock
   standard deviations; at 1--2$\sigma$ the real maps have fewer connected
-  components and shorter perimeters than the mocks (offsets up to 0.73).}
+  components and shorter perimeters than the mocks (offsets up to 0.71).}
   \label{fig:radio_mf}
 \end{figure*}
 

@@ -4,24 +4,26 @@
 All simulation scores quantify OOF recovery of pseudo-TSC, as defined in section~\ref{sec:sims}.
 Unless otherwise stated, quoted scatter is the standard deviation across five training seeds.
 Intervals on paired model differences use the parent-halo bootstrap described in section~\ref{sec:methods}.
-% Numerical update: logs/compare_syn_8428907.out; implementation accepted
-% in CODEX_CLAUDE_REVIEW.md, round 29 (67e96bd). No figures regenerated.
-The updated radio CNN results use the regenerated synchrotron prescription.
-Older diagnostics and figures awaiting regeneration are explicitly marked below.
+% Numerical update: logs/compare_syn_8428907.out (review round 29, 67e96bd).
+% Regenerated diagnostics and figures: paper/staged/PROMOTED_PACKAGE.json
+% (regen_final_8942495, regen_W8_8945384; review rounds 48-55).
+The radio results and diagnostics use the regenerated synchrotron prescription.
 
 \subsection{Radio-only}
 
 The 144 MHz radio images contain information beyond the realistic baselines considered here.
 On the 352 clusters imaged at snapshot-99, the CNN that pooled all three orthogonal projections achieved $R^2 = 0.498 \pm 0.028$.
-\stale{The previously reported five-seed ensemble score of 0.530 and the following scalar, mass-tercile and partial-correlation diagnostics use the previous radio prescription; their replacements are not in the reviewed results.}
-This is compared to $R^2 = 0.314$ from ridge regression on the halo mass, 0.440 using integrated radio emission, and 0.459 using all five scalar features.
-Combining the scalar features with the CNN gave $R^2 = 0.541$, an increment of 0.082 over the scalar model.
+The mean of the five seeds' predictions achieved $R^2 = 0.531$.
+This is compared to $R^2 = 0.310 \pm 0.006$ from ridge regression on the halo mass, $0.432 \pm 0.004$ using integrated radio emission, and $0.457 \pm 0.005$ using all five scalar features, each evaluated on the five seeds' CNN test partitions.
+To test whether the CNN output adds to the scalar features without reusing its out-of-fold predictions across folds, we fitted the second-stage regressions within halves of each original CNN test fold, which no CNN saw during training or checkpoint selection.
+In this half-sample comparison, adding the CNN output to the five scalars increased $R^2$ from $0.395 \pm 0.031$ to $0.453 \pm 0.031$, a mean increment of $0.058$ (95 per cent parent-bootstrap interval $[0.016, 0.097]$, conditional on the fitted CNNs).
+These calibration fits use roughly 35 clusters each, so their absolute scores are lower than those of the full outer-fold models.
 
-The CNN remained predictive within each mass tercile, with $R^2$ values of 0.332, 0.328, and 0.239 in the lowest, medium, and highest mass bins, respectively.
-In comparison, the five-scalar model achieved $R^2=$ 0.295, 0.250, and $-0.287$.
-The partial rank correlation between pseudo-TSC and the CNN predictions after controlling for halo mass was 0.480.
-Thus, as the CNN achieved greater $R^2$ for each tercile, its performance is not explained solely by the overall association between mass and pseudo-TSC.
-However, the scalar features predicted the CNN prediction with $R^2=0.732$, and thus they have substantial overlap.
+The CNN remained predictive within each mass tercile, with mean single-seed $R^2$ values of $0.289 \pm 0.041$, $0.296 \pm 0.051$, and $0.140 \pm 0.079$ in the lowest, medium, and highest mass bins, respectively (0.331, 0.353 and 0.198 for the five-seed mean).
+In comparison, the five-scalar model achieved $R^2=$ 0.288, 0.243, and $-0.255$.
+The partial rank correlation between pseudo-TSC and the CNN predictions after controlling for halo mass was $0.453 \pm 0.028$.
+Thus, as the CNN matched or exceeded the scalar model in every tercile and remained positive in the highest-mass tercile, where the scalar model failed, its performance is not explained solely by the overall association between mass and pseudo-TSC.
+However, the scalar features predicted the CNN output of held-out clusters with $R^2 = 0.637 \pm 0.035$, using the same within-fold halves, and thus they have substantial overlap.
 
 Normalizing each radio projection to a common integrated emission value reduced the mean CNN score to $R^2=0.413 \pm 0.020$.
 Performance decreased in all five random seeds, with a mean paired change of $-0.085\pm0.043$ and a paired-seed p-value of $0.012$.
@@ -31,58 +33,63 @@ wording: Equalizing integrated emission reduces predictive performance,
 but the normalized images retain substantial predictive signal. This
 does not separate morphology from luminosity or mass, which remain
 correlated.}
-\stale{Under the previous prescription, original integrated emission predicted the normalized-map model's output with $R^2=0.602$; that diagnostic has not been updated.}
+The original integrated emission predicted the normalized-map model's output for held-out clusters with $R^2 = 0.562 \pm 0.047$, again within halves of each original test fold.
 
-\stale{The following Minkowski-functional results use the previous radio prescription and have not been regenerated.}
 Part of the signal could also be recovered from a representation of the morphology.
-An XGBoost decision tree model applied to 48 Minkowski-functional measurements predicted pseudo-TSC at $R^2 = 0.304$ for individual projections, and at $R^2 = 0.415$ after averaging predictions across all three cluster projections.
-At the lowest intensity threshold, selecting approximately the brightest 50\% of pixels, the component count had Spearman correlation $\rho=0.62$ with pseudo-TSC.
-Older proxy ages were thus associated with more fragmented emission.
-Repeating the analysis at 1.4 GHz changed the scores by no more than 0.02.
+An XGBoost decision tree model applied to 48 Minkowski-functional measurements predicted pseudo-TSC at $R^2 = 0.313$ for individual projections, and at $R^2 = 0.417$ after averaging predictions across all three cluster projections.
+At the lowest intensity threshold (nominal area fraction $f=0.5$), the sparse intrinsic maps are thresholded at zero, selecting their emitting footprint, which occupies a median of approximately 17 per cent of the pixels.
+The projection-averaged number of connected components has Spearman correlation $\rho=0.616$ with pseudo-TSC; older proxy ages are associated with more fragmented emitting footprints under this map construction.
+Repeating the analysis at 1.4 GHz, on the same clusters and folds, changed the scores by no more than 0.01.
 
 \begin{figure*}
   \centering
   \includegraphics[width=\textwidth]{fig_mf_tsc.pdf}
-  \caption{\stale{Previous radio prescription; plot and numerical diagnostics await regeneration.}
-  Minkowski functionals of the simulated radio maps
-  (144\,MHz, \texttt{dataset\_nh4\_144\_128}) against merger time. Left and middle:
-  connected components and Euler characteristic vs area-fraction threshold
-  for the three pseudo-TSC terciles (mean and standard deviation). Right:
-  out-of-fold XGBoost prediction from the functionals, averaged over
-  projections.}
+  \caption{Minkowski functionals of the simulated radio maps
+  (144\,MHz, \texttt{dataset\_syn\_nh4\_144\_128}) against merger time. Left and middle:
+  connected components and Euler characteristic vs nominal area-fraction threshold
+  $f$ for the three pseudo-TSC terciles (mean and standard deviation over parents
+  of the projection-averaged curves). Each mask keeps pixels strictly above the
+  $(1-f)$ quantile of the map; for $f \gtrsim 0.2$ that quantile is zero, so the
+  mask is the emitting footprint (a median 17 per cent of the pixels) and the
+  curves flatten. Right: out-of-fold XGBoost prediction from the functionals,
+  averaged over projections ($R^2 = 0.417$).}
   \label{fig:mf}
 \end{figure*}
 \begin{figure*}
   \centering
   \includegraphics[width=\textwidth]{fig_baselines.pdf}
-  \caption{\stale{Previous radio prescription; scalar, ensemble and mass-bin comparisons have not been updated.}
-  What the radio image adds. Left: out-of-fold $R^2$ for
-  pseudo-TSC on the same 352 clusters and folds -- ridge regression on
+  \caption{What the radio image adds. Left: out-of-fold $R^2$ for
+  pseudo-TSC on the same 352 clusters -- ridge regression on
   halo mass, on total radio flux, and on five scalars (mass, \rfive, total
-  flux, mean and filling fraction of the stretched map); the pooled CNN on
+  flux, mean and filling fraction of the stretched map), each on the five
+  seeds' CNN test partitions; the pooled CNN on
   flux-normalised maps (equal integrated emission) and on full maps (mean and s.d.\
-  over 5 seeds); the mean of the 5 seeds' predictions; and the five scalars
-  plus that mean. Right: $R^2$ within terciles of \mfive; a mass-only
-  model scores 0.04, $-0.02$ and $-0.11$ there; the scalars fail in the high-mass
-  tercile, the CNN does not.}
+  over 5 seeds); and the mean of the 5 seeds' predictions. Hatched bars:
+  the separate half-sample comparison, in which the five scalars without and
+  with one seed's CNN output are fitted within halves of each original test
+  fold (about 35 clusters per fit) and scored on the other half; these are not
+  comparable to the outer-fold bars. Right: mean single-seed $R^2$ within terciles of \mfive\
+  (bars: s.d.\ over seeds); a mass-only model scores 0.03, $-0.03$ and $-0.10$
+  there; the scalars fail in the high-mass tercile, the CNN does not.}
   \label{fig:baselines}
 \end{figure*}
 
 \begin{figure*}
   \centering
   \includegraphics[width=\textwidth]{fig_tsc_pred.pdf}
-  \caption{\stale{This plot and its scores/residual summaries use the previous radio prescription; they do not depict the updated CNN results in the text and Table~\ref{tab:realistic}.}
-  Predicted against true pseudo-TSC for the 352 snapshot-99
+  \caption{Predicted against true pseudo-TSC for the 352 snapshot-99
   clusters, each the mean of 5 seeds' out-of-fold predictions (so $R^2$ is
-  above the per-seed values quoted in the text). Left: clean radio maps.
-  Middle: the realistic radio (1\,Mpc) + X-ray model under the corrected
-  forward models, trained on snapshots 99 and 91 ($R^2 = 0.485$ for the
+  above the per-seed values quoted in the text). Left: clean radio maps
+  ($R^2 = 0.531$). Middle: the joint model of 1\,Mpc realistic radio and X-ray,
+  trained on snapshots 99 and 91 ($R^2 = 0.482$ for the
   5-seed mean of cluster predictions that pool projections and average
-  realizations; its historical single-observation score is 0.436).
+  realizations; scored instead on every single observation, the 5-model
+  ensemble gives 0.426, as in Table~\ref{tab:realistic}).
   Right: median and 16--84 per cent range of the residual in bins of true
-  TSC. Both models regress to the mean: the youngest mergers are
-  predicted $\sim$0.35\,Gyr too old, and clusters at the 4\,Gyr cap
-  $\sim$1.2--1.4\,Gyr too young.}
+  pseudo-TSC, the last bin including the 4\,Gyr cap. Both models regress to the mean: the youngest mergers
+  (pseudo-TSC $<0.5$\,Gyr, 108 clusters) are predicted 0.39 (clean) and
+  0.36\,Gyr (realistic) too old, and the 34 clusters at the 4\,Gyr cap 1.30
+  and 1.54\,Gyr too young (medians).}
   \label{fig:tsc_pred}
 \end{figure*}
 
@@ -150,15 +157,14 @@ Exposures are in Cycle-22-equivalent units.
 This experiment used three seeds and trained only on snapshot-99 data, unlike the five-model, two-epoch single-observation results in Table~\ref{tab:realistic}.
 It measures depth sensitivity within the background model, but doesn't isolate the benefit of adding snapshot-91 data.
 
-\stale{The following regression-bias magnitudes and Figure~\ref{fig:tsc_pred} have not been updated for the regenerated radio models.}
-Figure \ref{fig:tsc_pred} shows that the recovered age range is systematically compressed for the forward-modelled data.
-The youngest mergers are predicted about 0.35 Gyr too old, while systems at the 4 Gyr maximum were predicted about 1.2-1.4 Gyr below the maximum.
+Figure \ref{fig:tsc_pred} shows that the recovered age range is systematically compressed for both the clean and the forward-modelled data.
+The youngest mergers (pseudo-TSC below 0.5 Gyr) are predicted a median of about 0.4 Gyr too old, while the 34 systems at the 4 Gyr maximum were predicted a median of 1.30 Gyr (clean radio) and 1.54 Gyr (1 Mpc radio with X-ray) below the maximum.
 
-\stale{The following power--mass fits and Figure~\ref{fig:pm} use the previous radio prescription; their slopes, scatter and residual correlation await remeasurement.}
 The simulated radio power also varied systematically with the merger state and the mass.
-After applying the density cut, the total 144 MHz power had a fitted mass slope of $2.67\pm0.16$ and scatter of $0.78$ dex.
-Restricting the emission to the 3 Mpc injection box resulted in a slope of $2.36\pm0.19$ and scatter of 0.93 dex.
-Residuals from the total-power relation decreased with pseudo-TSC, with Spearman $\rho=-0.33$.
+After applying the density cut, the 144 MHz power of the full projected map ($\pm4\,R_{500}$) had a fitted mass slope of $2.65\pm0.16$ and an rms scatter of $0.79$ dex.
+Restricting the emission to the 3 Mpc injection box resulted in a slope of $2.39\pm0.18$ and scatter of 0.91 dex.
+Both use the logarithm of each cluster's projection-averaged linear power.
+Residuals from the full-map relation decreased with pseudo-TSC, with Spearman $\rho=-0.32$.
 Thus, recently disturbed systems tend to be brighter at a fixed mass.
 The normalization was set globally, anchored to the observed halo-power relation; the simulated slope was not imposed.
 Comparisons with observed halo and relic relations remain contextual, as frequency, source definition, fitting method, and selection differ, and the slope alone does not establish agreement with one particular source population.
@@ -200,15 +206,17 @@ Comparisons with observed halo and relic relations remain contextual, as frequen
 \begin{figure*}
   \centering
   \includegraphics[width=\textwidth]{fig_pm_relation.pdf}
-  \caption{\stale{Previous radio prescription; plot, slopes, scatter and residual correlation await regeneration.}
-  The simulation's own 144\,MHz power against \mfive, coloured by
-  pseudo-TSC. Left: total power of the shock cells within $\pm4$\,\rfive\
-  (arbitrary zero point): slope $2.67 \pm 0.16$, scatter 0.78\,dex,
+  \caption{The simulation's own 144\,MHz power against \mfive, coloured by
+  pseudo-TSC; each point is the logarithm of a cluster's linear power averaged over its three projections.
+  Left: power of the full projected map (a $\pm4$\,\rfive\ square footprint),
+  on the same global flux scale: slope $2.65 \pm 0.16$, scatter 0.79\,dex,
   reference slopes of 2.83 for radio relics \todo{cite de Gasperin 2014} and 3.55 for radio halos \citep{Cuciti2023} are drawn through the median for context; source definitions and selections differ.
   Middle: power inside the 3\,Mpc box the injected mocks carry, from the linear emission
   (one global constant, fixed on total power, puts it in W\,Hz$^{-1}$):
-  slope $2.36 \pm 0.19$, scatter 0.93\,dex. Right: residuals from the total-power fit fall with merger age
-  (Spearman $-0.33$): recent mergers are over-luminous for their mass.}
+  slope $2.39 \pm 0.18$, scatter 0.91\,dex. Right: residuals from the full-map fit fall with merger age
+  (Spearman $-0.32$): recent mergers are over-luminous for their mass. The common
+  global constant sets the amplitude only; it neither imposes the slopes nor
+  calibrates the absolute power independently.}
   \label{fig:pm}
 \end{figure*}
 
@@ -253,24 +261,24 @@ Thus, this experiment measures performance only with idealized combined inputs, 
 Finally, we applied our predictive models to LoVoCCS clusters, obtaining radio predictions for 26 systems, and X-ray predictions for 15.
 All 15 X-ray systems were present in the 3 Mpc radio sample; the 1 Mpc joint input sample contains 14 systems.
 Each observed prediction averaged 25 models spanning five folds and five seeds.
-Among the systems with both data sources, radio and X-ray predictions had Spearman $\rho = 0.67$ ($p=0.006$).
+Among the systems with both data sources, radio and X-ray predictions had Spearman $\rho = 0.675$ ($p=0.006$).
 After controlling for redshift, the partial-rank correlation was 0.74, with a Freedman-Lane permutation $p=0.003$.
 Controlling instead for weak-lensing mass gave a partial correlation of 0.58 among the 11 systems with available masses, with $p=0.078$.
 This latter comparison does not establish agreement independent of mass.
 
 Radio assigned older proxy ages to 14 of the 15 systems, with a median paired offset of 0.49 Gyr.
-\stale{The previously quoted separate radio and X-ray medians, 1.10 and 0.83 Gyr, have not been replaced by a reviewed current-model summary. The median paired offset above is updated.}
+The median radio and X-ray predictions for these 15 systems were 1.16 and 0.83 Gyr, respectively; the difference of these medians is not the median paired offset.
 The origin of this offset remains unidentified.
 The correlated rankings show cross-band consistency, but the age scales are not interchangable, and neither has been validated against independent constraints on the merger time.
 
 \begin{figure}
   \centering
   \includegraphics[width=\columnwidth]{fig_real_preds.pdf}
-  \caption{\stale{The plot and the numerical summary that follows use the previous radio models. Updated text gives $\rho=0.67$, $p=0.006$ and a median offset of 0.49\,Gyr; regenerate the plot before replacing its numerical caption.}
-  Radio (3\,Mpc) against X-ray predictions for the 15 LoVoCCS
+  \caption{Radio (3\,Mpc) against X-ray predictions for the 15 LoVoCCS
   clusters with both, each the mean of 25 models (5 folds $\times$ 5 seeds;
-  bars: seed s.d.), coloured by weak-lensing \mfive\ (grey: no weak-lensing
-  mass). The ranks agree (Spearman 0.61, $p = 0.015$); the radio
-  predictions are older for 14 of 15 clusters (median offset 0.44\,Gyr).}
+  bars: s.d.\ across the five seeds' fold-averaged predictions, not a calibrated
+  age uncertainty), coloured by weak-lensing \mfive\ (grey: no weak-lensing
+  mass). The ranks agree (Spearman 0.675, $p = 0.006$); the radio
+  predictions are older for 14 of 15 clusters (median paired offset 0.49\,Gyr).}
   \label{fig:real}
 \end{figure}

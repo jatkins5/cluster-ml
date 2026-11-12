@@ -1,0 +1,147 @@
+{
+ "note": "Promoted stale-regeneration package (review rounds 48-55): W1-W7/W9 from the consolidated run, W8 from the W8-only layout refresh; both manifests preserved unchanged.",
+ "runs": {
+  "paper/staged/regen_final_8942495": {
+   "requested": [
+    "w1",
+    "w2",
+    "w3",
+    "w4",
+    "w5",
+    "w6",
+    "w7",
+    "w8",
+    "w9"
+   ],
+   "status": {
+    "w1": "ok",
+    "w2": "ok",
+    "w3": "ok",
+    "w4": "ok",
+    "w5": "ok",
+    "w6": "ok",
+    "w7": "ok",
+    "w8": "ok",
+    "w9": "ok"
+   },
+   "git_head": "e3f8b42124fcc622d0cac5dff5b8a876f602c0c2",
+   "command": "paper/scripts/regen_stale.py --run-dir paper/staged/regen_final_8942495 --tasks w1,w2,w3,w4,w5,w6,w7,w8,w9 --phase-npz phase_cells_syn_144_8941185.npz",
+   "seconds": 412.2,
+   "sources_changed": [],
+   "uncommitted_helpers": "",
+   "complete": true,
+   "promotable": true,
+   "limitations": "C/D inputs: full sha256 before use, size/mtime re-checked at the end (ordinary concurrent changes); A/B raw cutouts: partial fingerprints (see producer records)"
+  },
+  "paper/staged/regen_W8_8945384": {
+   "requested": [
+    "w8"
+   ],
+   "status": {
+    "w8": "ok"
+   },
+   "git_head": "5dcee568774d61058cb5b0fe1cf11ad2acfe4584",
+   "command": "paper/scripts/regen_stale.py --run-dir paper/staged/regen_W8_8945384 --tasks w8",
+   "seconds": 9.2,
+   "sources_changed": [],
+   "uncommitted_helpers": "",
+   "complete": true,
+   "promotable": true,
+   "limitations": "C/D inputs: full sha256 before use, size/mtime re-checked at the end (ordinary concurrent changes); A/B raw cutouts: partial fingerprints (see producer records)"
+  }
+ },
+ "figures": {
+  "fig_baselines.pdf": {
+   "source": "paper/staged/regen_final_8942495/fig_baselines.pdf",
+   "sha256": "5a31e2a6c29d2ff4ea099edbd24b05c9e98d5e98747fbd6a64831bb0ab9be481",
+   "replaced_sha256": "ab9a629d18a66591ea512fd5bde1ea9535eb00f7c2b01fa8a6bee95de4c7bb12"
+  },
+  "fig_mf_tsc.pdf": {
+   "source": "paper/staged/regen_final_8942495/fig_mf_tsc.pdf",
+   "sha256": "44e74afb19ad978b2360ff13fdb95ddb993279945e2a90a935b013135d8b00d5",
+   "replaced_sha256": "880dacaf957d0cc7df98d9bd690cc4e86289cd27f935c78ff34629f64452c45b"
+  },
+  "fig_phase.pdf": {
+   "source": "paper/staged/regen_final_8942495/fig_phase.pdf",
+   "sha256": "b89afa5ce5a7a03706630fa6e24e0fa069733325cac9b3f91712fcd11a7e4884",
+   "replaced_sha256": "e5e3644406367854943a198ab94cecad1d87662b14fc7fdcc1a0efaea98f895a"
+  },
+  "fig_radio_gallery.pdf": {
+   "source": "paper/staged/regen_final_8942495/fig_radio_gallery.pdf",
+   "sha256": "b4dc1f46f72ea6881e6d1c56e0094340e863ea51c3638695d4c29cbe1518efa2",
+   "replaced_sha256": "be45b723bb2ca7c7d7a24c15de6dfb33259a71ca0fbb0e3ef6d67d7765fa6de3"
+  },
+  "fig_radio_mf.pdf": {
+   "source": "paper/staged/regen_final_8942495/fig_radio_mf.pdf",
+   "sha256": "575ca140d5de5084fd5d893d66ae20e9e8541438460982a7d1684db26afc95f9",
+   "replaced_sha256": "bb52d565e1e864776fb5d82e66e5b0bebc325853e538970604aa8f281a4e589e"
+  },
+  "fig_tsc_pred.pdf": {
+   "source": "paper/staged/regen_final_8942495/fig_tsc_pred.pdf",
+   "sha256": "ccd6fa600877063ed457b0a6f77999b3d39d8de3ec3cc5b7eba497411780f9c9",
+   "replaced_sha256": "dfd96c4702fad584457a4c4dc4ef238868d5a2c04376cbacfdabef436c9ca3ca"
+  },
+  "fig_pm_relation.pdf": {
+   "source": "paper/staged/regen_final_8942495/fig_pm_relation.pdf",
+   "sha256": "3ff67526bfb814b19b853ed7ab788a301517239026f10a07f2786bb313cebbe7",
+   "replaced_sha256": "3346281ecf10a9cf5cc7a794e4697183dd7c9112bd325cbaac127fae559a5e05"
+  },
+  "fig_relic.pdf": {
+   "source": "paper/staged/regen_final_8942495/fig_relic.pdf",
+   "sha256": "4fa6783baa178bcf3dd7a8d89df43fcd5b41fe17a6695334da334f4eeff71951",
+   "replaced_sha256": "3658ef29fccc71a15ae30bd05ce9a66887a935476f4910853d8bf1f25a70e9c2"
+  },
+  "fig_real_preds.pdf": {
+   "source": "paper/staged/regen_W8_8945384/fig_real_preds.pdf",
+   "sha256": "ae2181b40e3fa3ed98cf206af227487929e1a964d53dd3e550b44704e7f4ffe3",
+   "replaced_sha256": "73520c4dc5971df1014a8a1f4bbdf8a5aa0050bdc12be5687c6e1fe78226b8fe"
+  }
+ },
+ "records": {
+  "w1": {
+   "json": "paper/staged/regen_final_8942495/w1.json",
+   "sha256": "096c8798a0eed92e72065593b562b8fc51c06bd5d672744dc43add2f6fb7fb03",
+   "arrays": "paper/staged/regen_final_8942495/w1_arrays.npz"
+  },
+  "w2": {
+   "json": "paper/staged/regen_final_8942495/w2.json",
+   "sha256": "2b42bab0efbcdf0da66d12cb2faf5759ae0c37a278aa1dbff6e98f21e9dff153",
+   "arrays": "paper/staged/regen_final_8942495/w2_arrays.npz"
+  },
+  "w3": {
+   "json": "paper/staged/regen_final_8942495/w3.json",
+   "sha256": "980ee54ec34efdcbc585f43172e6f3dfb0e9a2d18778376adeabbe65615e9bd3",
+   "arrays": "paper/staged/regen_final_8942495/w3_arrays.npz"
+  },
+  "w4": {
+   "json": "paper/staged/regen_final_8942495/w4.json",
+   "sha256": "82428f630314b7f8a631f853a85193942b80d9b3f6a1a082dbedd024c2e45e8d",
+   "arrays": "paper/staged/regen_final_8942495/w4_arrays.npz"
+  },
+  "w5": {
+   "json": "paper/staged/regen_final_8942495/w5.json",
+   "sha256": "5f23b7e3f7bbfd217b5ff3f6852985ca1206be8143d3381e4647923d4db0699c",
+   "arrays": "paper/staged/regen_final_8942495/w5_arrays.npz"
+  },
+  "w6": {
+   "json": "paper/staged/regen_final_8942495/w6.json",
+   "sha256": "c4e539c833b0f90eee146592449af22449fe9f8ea70a173b43046485f90ea6fd",
+   "arrays": "paper/staged/regen_final_8942495/w6_arrays.npz"
+  },
+  "w7": {
+   "json": "paper/staged/regen_final_8942495/w7.json",
+   "sha256": "b81f520f625644f512374d1ad1e2e48e7742bb55833a9f9603fe33e0b630a8f6",
+   "arrays": "paper/staged/regen_final_8942495/w7_arrays.npz"
+  },
+  "w9": {
+   "json": "paper/staged/regen_final_8942495/w9.json",
+   "sha256": "29e5b3aac576ac0d78c54ed9f168b70102ab9fab68a517d8142cd18a3b453016",
+   "arrays": "paper/staged/regen_final_8942495/w9_arrays.npz"
+  },
+  "w8": {
+   "json": "paper/staged/regen_W8_8945384/w8.json",
+   "sha256": "6b48018494ef7b65a41f98454a8b7d6b39d6a4aff396ea3ee55238cca1a7cace",
+   "arrays": "paper/staged/regen_W8_8945384/w8_arrays.npz"
+  }
+ }
+}

@@ -35,22 +35,21 @@ Integrated emission carries substantial merger history information, but it does 
 These tests do not separate morphology, luminosity, and mass into independent contributions, because those properties remain correlated in the simulated population. 
 The decline of residual radio power with pseudo-TSC at fixed mass is qualitatively consistent with the evolving shock-powered radio light curves of \citet{Nuza2024}.
 \suggestion{The scalar, mass-bin, Minkowski-functional and power--mass
-results cited in this paragraph still use the previous radio
-prescription. Until those diagnostics are updated, distinguish them
-from the regenerated normalization experiment. Suggested current-result
+results cited in this paragraph have been regenerated with the current
+radio prescription (section~\ref{sec:results}). Suggested current-result
 sentence: Normalizing each radio projection reduces mean $R^2$ from
-0.498 to 0.413, showing that predictive signal remains after equalizing
-integrated emission without isolating morphology from correlated
-luminosity and mass.}
+0.498 to 0.413, and in a half-sample comparison within the CNN test folds
+the CNN output adds $0.058$ ($[0.016, 0.097]$) to five scalar features,
+showing that predictive signal remains beyond integrated emission without
+isolating morphology from correlated luminosity and mass.}
 
-Before the density cut, a median of approximately 99\% of the radio weight arises in gas with $n_\text{H} > 10^{-4}$ cm$^{-3}$, including in a substantial cold component.
+Before the density cut, a median 99.6 per cent of each cluster's radio weight arises in gas with $n_\text{H} > 10^{-4}$ cm$^{-3}$, including in a substantial cold component.
 The cold, dense gas is consistent with stripped satellite material, but we did not investigate its origin.
 Our shock emission model assumes non-radiative ICM shocks and neglects Coulomb losses \citep{HoeftBruggen2007}, motivating a check of the gas phases to which it is applied.
 Our density cut is intended to restrict the model to its domain of applicability; the clean-map scores are $R^2 = 0.488\to0.498$ after applying the cut (paired-seed $p = 0.197$).
 \suggestion{Replace a claim of ``no accuracy gain'' with ``no
 statistically resolved gain in this five-seed comparison''; the paired
-change is $+0.010\pm0.015$. The preceding 99 per cent gas-phase statistic
-is historical and has not been updated for the regenerated weights.}
+change is $+0.010\pm0.015$.}
 Sensitivity to the chosen gas selection remains to be quantified.
 
 The radio amplitude is anchored to an observed radio-halo relation, although the simulated emission is powered by shocks, and the X-ray brightness correction is fitted using the observed sample.
@@ -87,8 +86,8 @@ Testing the event-associated relation would therefore require matching the \cite
 \suggestion{Update this TODO to reflect the existing six-halo feasibility
 pilot in \texttt{runs/followup\_20261103T180830Z/}. It found candidate
 opposite-side structures in five halos, but the event associations remain
-unvalidated. It does not yet test a population separation--age relation,
-and the historical projected-peak figure has not been regenerated.}
+unvalidated. It does not yet test a population separation--age relation;
+the projected-peak figure has been regenerated for the current maps.}
 
 Agreement in the selected morphological summaries (section~\ref{sec:fwd}) does not establish agreement in all features available to the CNN, including component positions and orientations.
 Unmodelled interferometric flux recovery and observation-specific X-ray response can therefore still affect transfer to observed clusters.
@@ -138,8 +137,8 @@ measurements prevent attributing their differences solely to the
 emission prescription. This does not establish equivalence of the
 models or validate the physical emission calculation. The revised Methods
 derivation should be checked against the implemented lookup table;
-the marked morphology, power--mass and figure diagnostics remain
-pending. Sensitivity to emitting-gas selection and observing conditions
+the morphology, power--mass, gas-phase and figure diagnostics have also
+been regenerated. Sensitivity to emitting-gas selection and observing conditions
 remains an open scientific question.}
 Validation should combine matched observing models with tests across independent simulation suites using consistent collision labels.
 For real clusters, external dynamical constraints can test the inferred ordering and timescale; weak-lensing and spectroscopic modelling of A3376 \citep{MonteiroOliveira2017} provides one example.

@@ -84,7 +84,7 @@ To evaluate the increased predictive power from access to raw image data, we com
 A five-feature ridge regression model was fit from log(halo mass), log(halo radius), log(integrated emission), mean intensity in the arcsinh-stretched image, and the fraction of pixels with non-zero intensity.
 We standardized features over the training data, with ridge regularization strength selected within the training sample.
 
-For each radio projection, we threshold the image data at 12 logarithmically-spaced upper-area fractions, $f=0.005$--0.5, using the $(1-f)$ intensity quantile.
+For each radio projection, we threshold the image data at 12 logarithmically-spaced upper-area fractions, $f=0.005$--0.5, keeping pixels strictly above the $(1-f)$ intensity quantile; in the sparse intrinsic maps the largest fractions reach a zero quantile and therefore select the emitting footprint.
 At each threshold, we record the number of foreground--background pixel transitions, divided by the total number of image pixels, together with component count, hole count, and Euler characteristic $\chi=N_{\rm comp}-N_{\rm holes}$.
 Only transitions between adjacent pixels are counted.
 Foreground pixels are connected when they share an edge or corner (8-connectivity), while background pixels are connected only when sharing an edge (4-connectivity).

@@ -35,29 +35,39 @@ are tracked in the source and current checklist.
 
 ## Figures
 
-`fig_*.pdf` were made by `scripts/make_figures.py` from the datasets listed below
-(run from the repo root through SLURM:
-`sbatch paper/scripts/run_py.sh paper/scripts/make_figures.py [name ...]`);
-it prints the numbers each caption quotes. Audit the script's input paths
-before regeneration: this table records the existing assets, not an updated
-recipe for the regenerated radio model. The `.png` files are copies of
-older plots from the repo root, kept under their original names.
+Nine figures were regenerated for the current (synchrotron) radio
+prescription by `scripts/regen_stale.py` (review rounds 48--55); their exact
+provenance (source run, file hash, replaced hash, task records) is in
+`staged/PROMOTED_PACKAGE.json`. Each task writes `<task>.json` (every quoted
+number, estimand, checks, input fingerprints) and `<task>_arrays.npz` into its
+run directory. The remaining figures were made by `scripts/make_figures.py`
+(historical recipe; its radio input paths predate the regenerated model, so
+do not use it for the nine figures below). Run everything from the repo root
+through SLURM. The `.png` files are copies of older plots from the repo root,
+kept under their original names.
+
+Regeneration chain: `run_phase_syn.sh` (job A, `extract_phase_syn.py`, raw
+cutouts -> `phase_cells_syn_144_8941185.npz` + manifest),
+`run_cells_1400.sh` (job B, 1.4 GHz cells -> `dataset_syn_nh4_1400_128.h5` +
+manifest), then `run_regen_final.sh` (all nine tasks, run 8942495) and
+`run_regen_w8.sh` (W8 layout refresh, run 8945384).
 
 | figure | made by | inputs |
 |---|---|---|
-| `fig_radio_gallery.pdf` | `make_figures.py radio_gallery` | `dataset_nh4_144_512.h5`, `injected_nh4_144_simflux.h5` |
-| `fig_radio_mf.pdf` | `make_figures.py radio_mf` | `injected_nh4_144_simflux.h5` (25 LoTSS targets) |
-| `fig_mf_tsc.pdf` | `make_figures.py mf_tsc` | `dataset_nh4_144_128.h5` |
+| `fig_baselines.pdf` | `regen_stale.py` w1 (run 8942495) | `dataset_syn_nh4_144_128{,_shape}.h5`, `cnn_preds/pooled_{,shape_}syn_inner_s*.npz`, TNG catalogue |
+| `fig_mf_tsc.pdf` | `regen_stale.py` w2 (run 8942495) | `dataset_syn_nh4_144_128.h5`, `dataset_syn_nh4_1400_128.h5` (job B) |
+| `fig_phase.pdf` | `regen_stale.py` w3 (run 8942495) | job A product, `dataset_syn_nh4_{144,1400}_128.h5`, `Radio_Cells_syn_nh4_{144,1400}` |
+| `fig_radio_gallery.pdf`, `fig_radio_mf.pdf` | `regen_stale.py` w5 (run 8942495) | `injected_syn_phys_b3000.h5`, `dataset_syn_nh4_144_512.h5` (26 LoTSS targets) |
+| `fig_tsc_pred.pdf` | `regen_stale.py` w6 (run 8942495) | `cnn_preds/pooled_syn_inner_s*.npz`, `cnn_preds/syn_phys_b1000_joint_s*_preds.npz` |
+| `fig_pm_relation.pdf` | `regen_stale.py` w7 (run 8942495) | `dataset_syn_nh4_144_512.h5`, `injected_syn_phys_b3000.h5` |
+| `fig_real_preds.pdf` | `regen_stale.py` w8 (run 8945384) | `cnn_preds/syn_phys_b3000_sfimg_s*`, `cnn_preds/fix_x_s*`, `lovoccs_wl_masses.csv` |
+| `fig_relic.pdf` | `regen_stale.py` w9 (run 8942495; redetection agrees element-wise with `relic_catalog_radio_syn_nh4_144.h5`) | `dataset_syn_nh4_144_512.h5`, `TSC_Cutimages/TSC_eachhalo_snap99.hdf5`, `dataset.h5` (legacy labels) |
 | `fig_lx_mass.pdf` | `make_figures.py lx_mass` | TNG catalogue, LoVoCCS target list, `lovoccs_wl_masses.csv`, `xray_placed_144.h5` |
 | `fig_xray_gallery.pdf` | `make_figures.py xray_gallery` | `xray_placed_144.h5` |
-| `fig_relic.pdf` | `detect_relics_radio.py --dataset dataset_nh4_144_512.h5`, then `make_figures.py relic` | `relic_catalog_radio_nh4_144.h5` |
-| `fig_aug.pdf` | `submit_cnn_aug_oof_inner.sh`, then `make_figures.py aug` | `cnn_aug_oof_128_inner/` |
+| `fig_aug.pdf` | `submit_cnn_aug_oof_inner.sh`, then `make_figures.py aug` | `cnn_aug_oof_128_inner/` (historical, non-independent) |
 | `fig_obs_gallery.pdf` | `make_figures.py obs_gallery` | `injected_nh4_144_simflux.h5`, `xray_placed_144.h5` (obs groups) |
-| `fig_phase.pdf` | `extract_phase.py`, then `make_figures.py phase` | snapshot-99 cutouts -> `phase_cells_144.npz` |
-| `fig_labels.pdf`, `fig_baselines.pdf`, `fig_tsc_pred.pdf` | `make_figures.py labels baselines tsc_pred` | datasets, label files, saved CNN predictions |
-| `fig_pm_relation.pdf` | `make_figures.py pm_relation` | `dataset_nh4_144_512.h5`, `injected_nh4_144_simflux.h5` |
+| `fig_labels.pdf` | `make_figures.py labels` | datasets, label files |
 | `fig_xray_depth.pdf` | `submit_fig_data.sh`, `submit_xray_depth.sh`, then `make_figures.py xray_depth` | `cnn_preds/xdepth_*` |
-| `fig_real_preds.pdf` | `make_figures.py real_preds` | `cnn_preds/s9991_{sfimg,x}_*` |
 | `camels_mass_tsc.png` | CAMELS label scripts | negative result |
 
 
