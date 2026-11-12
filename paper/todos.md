@@ -6,7 +6,9 @@ the [previous checklist](todos_archive_20261112.md) is archived because many
 of its prose fixes and experiment requests have been completed.
 
 This update publishes the regenerated-radio numerical edits and existing
-blue suggestions. It does not regenerate figures or adopt every suggestion.
+blue suggestions; the stale figures and diagnostics were subsequently
+regenerated and the PDF rebuilt (section 3). Blue suggestions are not adopted
+on the author's behalf.
 The paper still uses **pseudo-TSC** as its primary endpoint. Source logs and
 prediction archives named below are on Oscar and are not included in this
 manuscript push; the linked relic review bundle is already tracked.
@@ -131,9 +133,8 @@ augmentation experiment and cannot substantiate a current augmentation gain.
   and 0.197, respectively. An interval spanning zero is not equivalence.
   Describe shape normalization as retaining predictive signal, not retaining
   a measured percentage of physical merger-history information.
-- [ ] Remove dependence on stale scalar/mass-bin, power–mass and gas-phase
-  evidence from summary claims until those diagnostics are updated, or mark
-  the historical scope explicitly where the claim is made.
+- [x] Summary claims that depended on stale scalar/mass-bin, power–mass and
+  gas-phase evidence now cite the regenerated diagnostics.
 - [ ] Check the revised radio derivation against the implemented lookup
   table. The old request to regenerate all radio CNN inputs is completed;
   physical validation and stale ancillary measurements remain separate tasks.
@@ -147,9 +148,9 @@ augmentation experiment and cannot substantiate a current augmentation gain.
 - [ ] Review the existing ERGO-ML comparison suggestion and consolidate the
   repeated cross-study qualification. Complete the de Gasperin citation TODO
   if the radio power–mass comparison is retained.
-- [ ] After choosing which results to keep, update figure inputs/captions,
-  remove resolved annotations, compile the paper and inspect the PDF. This
-  source-only push has not regenerated assets or compiled a new PDF.
+- [x] Update figure inputs/captions, remove resolved stale annotations,
+  compile the paper and inspect the PDF (done with the regeneration package;
+  section 3).
 
 Resolved older requests include the 352/351 snapshot description and grouping
 by parent halo, the explicit pseudo-TSC definition, the expanded X-ray mock

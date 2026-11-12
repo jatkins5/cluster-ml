@@ -39,8 +39,9 @@ Nine figures were regenerated for the current (synchrotron) radio
 prescription by `scripts/regen_stale.py` (review rounds 48--55); their exact
 provenance (source run, file hash, replaced hash, task records) is in
 `staged/PROMOTED_PACKAGE.json`. Each task writes `<task>.json` (every quoted
-number, estimand, checks, input fingerprints) and `<task>_arrays.npz` into its
-run directory. The remaining figures were made by `scripts/make_figures.py`
+number, estimand, checks, input fingerprints) into its run directory, and all
+except W8 also write `<task>_arrays.npz` (W8 keeps its target, prediction and
+error-bar vectors in `w8.json`). The remaining figures were made by `scripts/make_figures.py`
 (historical recipe; its radio input paths predate the regenerated model, so
 do not use it for the nine figures below). Run everything from the repo root
 through SLURM. The `.png` files are copies of older plots from the repo root,
@@ -91,15 +92,13 @@ matched to the 3 Mpc **radio** experiment (R² 0.403) is reported separately;
 the box label does not describe a different X-ray crop. Existing X-ray-only,
 optical, loss/head and contrastive experiments keep their separate protocols.
 
-No figures or PDF were regenerated in this source update. Orange annotations
-identify retained figures and diagnostics from the previous radio prescription;
-their numerical captions describe those older plots. The figure-input table
-above is therefore a record of the existing assets, not a claim that they use
-the regenerated model. Scalar/mass-bin, power–mass, gas-phase, intrinsic
-Minkowski-functional, relic/peak and residual-bias summaries still need updated
-evidence before their historical numbers can be replaced. Do not silently
-substitute current scores into an unchanged plot's caption.
+An earlier source-only update replaced the regenerated CNN scores but left
+the ancillary radio diagnostics and their figures marked stale. Those 17
+annotations were then replaced with regenerated evidence (review rounds
+48--56): nine figures and their captions/prose come from the mixed package in
+`staged/PROMOTED_PACKAGE.json` (W1--W7 and W9 from consolidated run 8942495,
+W8 from its layout refresh), with both run manifests retained unchanged. The
+paper was rebuilt with `sbatch build.sh` and every page inspected; no `[STALE`
+text remains.
 
-See [todos.md](todos.md) for the update inventory and prose decisions. The
-standard build remains `sbatch build.sh`; this update did not submit that job
-or change the running experiments.
+See [todos.md](todos.md) for the remaining author decisions.

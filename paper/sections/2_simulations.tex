@@ -285,7 +285,8 @@ this a brightest image pixel without a separate map-level measurement.}
 
 The frequency factor is applied separately to each shock cell, since its spectral index is dependent on Mach number.
 For the density-cut cells, the median ratio of a cluster's total 144 MHz to 1.4 GHz weight is 12.39, and the per-cluster logarithmic ratio has standard deviation 0.033 dex across clusters.
-Between the unit-normalized 144 MHz and 1.4 GHz maps of the same projection, a median of 4.3 per cent of the flux (16--84 per cent: 3.1--6.0, averaging each cluster's three projections) is redistributed between pixels.
+To measure the spatial redistribution, we normalized each projection's linear-emission map at both frequencies to unit sum and computed the total-variation distance $D_\text{TV} = \frac{1}{2}\sum_\text{pixels} |p_{144} - p_{1400}|$, the fraction of the flux that moves between pixels.
+Averaging the three projections of each cluster, the median $D_\text{TV}$ across clusters is 4.3 per cent (16--84 per cent: 3.1--6.0).
 
 \begin{figure*}
   \centering

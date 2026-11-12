@@ -141,7 +141,8 @@
   "w8": {
    "json": "paper/staged/regen_W8_8945384/w8.json",
    "sha256": "6b48018494ef7b65a41f98454a8b7d6b39d6a4aff396ea3ee55238cca1a7cace",
-   "arrays": "paper/staged/regen_W8_8945384/w8_arrays.npz"
+   "arrays": null,
+   "note": "W8 writes no arrays sidecar; its target, prediction and error-bar vectors are in w8.json"
   }
  }
 }

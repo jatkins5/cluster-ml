@@ -15,9 +15,10 @@ The 144 MHz radio images contain information beyond the realistic baselines cons
 On the 352 clusters imaged at snapshot-99, the CNN that pooled all three orthogonal projections achieved $R^2 = 0.498 \pm 0.028$.
 The mean of the five seeds' predictions achieved $R^2 = 0.531$.
 This is compared to $R^2 = 0.310 \pm 0.006$ from ridge regression on the halo mass, $0.432 \pm 0.004$ using integrated radio emission, and $0.457 \pm 0.005$ using all five scalar features, each evaluated on the five seeds' CNN test partitions.
-To test whether the CNN output adds to the scalar features without reusing its out-of-fold predictions across folds, we fitted the second-stage regressions within halves of each original CNN test fold, which no CNN saw during training or checkpoint selection.
-In this half-sample comparison, adding the CNN output to the five scalars increased $R^2$ from $0.395 \pm 0.031$ to $0.453 \pm 0.031$, a mean increment of $0.058$ (95 per cent parent-bootstrap interval $[0.016, 0.097]$, conditional on the fitted CNNs).
-These calibration fits use roughly 35 clusters each, so their absolute scores are lower than those of the full outer-fold models.
+To test whether the CNN output adds to the scalar features without reusing its out-of-fold predictions across folds, for each seed and original outer test fold we split its parents into two fixed halves, fitted each second-stage regression on one half and scored it on the other, then exchanged their roles.
+Neither half was used to train or select the corresponding CNN.
+In this half-sample comparison, adding the CNN output to the five scalars increased $R^2$ from $0.395 \pm 0.031$ to $0.453 \pm 0.031$, a mean increment of $0.058$ (95 per cent parent-bootstrap interval $[0.016, 0.097]$, conditional on the fitted CNNs and second-stage calibration regressions).
+Each calibration fit uses roughly 35 clusters; these scores therefore describe a different training design and are not directly comparable with the ordinary outer-fold scores.
 
 The CNN remained predictive within each mass tercile, with mean single-seed $R^2$ values of $0.289 \pm 0.041$, $0.296 \pm 0.051$, and $0.140 \pm 0.079$ in the lowest, medium, and highest mass bins, respectively (0.331, 0.353 and 0.198 for the five-seed mean).
 In comparison, the five-scalar model achieved $R^2=$ 0.288, 0.243, and $-0.255$.
@@ -49,9 +50,11 @@ Repeating the analysis at 1.4 GHz, on the same clusters and folds, changed the s
   connected components and Euler characteristic vs nominal area-fraction threshold
   $f$ for the three pseudo-TSC terciles (mean and standard deviation over parents
   of the projection-averaged curves). Each mask keeps pixels strictly above the
-  $(1-f)$ quantile of the map; for $f \gtrsim 0.2$ that quantile is zero, so the
-  mask is the emitting footprint (a median 17 per cent of the pixels) and the
-  curves flatten. Right: out-of-fold XGBoost prediction from the functionals,
+  $(1-f)$ quantile of the map. Once a map's quantile reaches zero, its mask
+  selects the positive emitting footprint; individual maps reach this plateau
+  at different thresholds. At the three largest sampled nominal fractions
+  (approximately 0.216, 0.329 and 0.5), the median selected area is 16.9 per
+  cent; at $f = 0.5$ the masks select the emitting footprints. Right: out-of-fold XGBoost prediction from the functionals,
   averaged over projections ($R^2 = 0.417$).}
   \label{fig:mf}
 \end{figure*}
