@@ -51,7 +51,7 @@ Regeneration chain: `run_phase_syn.sh` (job A, `extract_phase_syn.py`, raw
 cutouts -> `phase_cells_syn_144_8941185.npz` + manifest),
 `run_cells_1400.sh` (job B, 1.4 GHz cells -> `dataset_syn_nh4_1400_128.h5` +
 manifest), then `run_regen_final.sh` (all nine tasks, run 8942495) and
-`run_regen_w8.sh` (W8 layout refresh, run 8945384).
+`run_regen_w8.sh` (W8 layout refresh, run 8945948; the earlier refresh 8945384 is retained as superseded).
 
 | figure | made by | inputs |
 |---|---|---|
@@ -61,7 +61,7 @@ manifest), then `run_regen_final.sh` (all nine tasks, run 8942495) and
 | `fig_radio_gallery.pdf`, `fig_radio_mf.pdf` | `regen_stale.py` w5 (run 8942495) | `injected_syn_phys_b3000.h5`, `dataset_syn_nh4_144_512.h5` (26 LoTSS targets) |
 | `fig_tsc_pred.pdf` | `regen_stale.py` w6 (run 8942495) | `cnn_preds/pooled_syn_inner_s*.npz`, `cnn_preds/syn_phys_b1000_joint_s*_preds.npz` |
 | `fig_pm_relation.pdf` | `regen_stale.py` w7 (run 8942495) | `dataset_syn_nh4_144_512.h5`, `injected_syn_phys_b3000.h5` |
-| `fig_real_preds.pdf` | `regen_stale.py` w8 (run 8945384) | `cnn_preds/syn_phys_b3000_sfimg_s*`, `cnn_preds/fix_x_s*`, `lovoccs_wl_masses.csv` |
+| `fig_real_preds.pdf` | `regen_stale.py` w8 (run 8945948) | `cnn_preds/syn_phys_b3000_sfimg_s*`, `cnn_preds/fix_x_s*`, `lovoccs_wl_masses.csv` |
 | `fig_relic.pdf` | `regen_stale.py` w9 (run 8942495; redetection agrees element-wise with `relic_catalog_radio_syn_nh4_144.h5`) | `dataset_syn_nh4_144_512.h5`, `TSC_Cutimages/TSC_eachhalo_snap99.hdf5`, `dataset.h5` (legacy labels) |
 | `fig_lx_mass.pdf` | `make_figures.py lx_mass` | TNG catalogue, LoVoCCS target list, `lovoccs_wl_masses.csv`, `xray_placed_144.h5` |
 | `fig_xray_gallery.pdf` | `make_figures.py xray_gallery` | `xray_placed_144.h5` |

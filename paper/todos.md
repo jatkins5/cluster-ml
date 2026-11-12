@@ -83,7 +83,7 @@ These do not belong in a queue of experiments still waiting to be scored.
 All 17 `\stale{}` annotations were replaced with regenerated evidence
 (review rounds 48--55): `scripts/regen_stale.py`, consolidated run
 `staged/regen_final_8942495` (W1--W7, W9) and W8 refresh
-`staged/regen_W8_8945384`; provenance in `staged/PROMOTED_PACKAGE.json`;
+`staged/regen_W8_8945948` (earlier refresh 8945384 retained as superseded); provenance in `staged/PROMOTED_PACKAGE.json`;
 annotation-to-evidence checklist in `CODEX_CLAUDE_REVIEW.md` (round 56).
 Replacement estimands that differ from the historical ones are stated in
 the text: the half-sample scalar+CNN comparison replaces the leaky stacked
@@ -136,8 +136,9 @@ augmentation experiment and cannot substantiate a current augmentation gain.
 - [x] Summary claims that depended on stale scalar/mass-bin, power–mass and
   gas-phase evidence now cite the regenerated diagnostics.
 - [ ] Check the revised radio derivation against the implemented lookup
-  table. The old request to regenerate all radio CNN inputs is completed;
-  physical validation and stale ancillary measurements remain separate tasks.
+  table. The old request to regenerate all radio CNN inputs is completed,
+  and the ancillary measurements have been regenerated (section 3);
+  physical validation remains a separate task.
   Keep the density-cut explanation in its current locations for now, as
   requested; check the brightest-cell/pixel terminology.
 - [ ] If adding catalogue-TSC training results, distinguish their continuous
