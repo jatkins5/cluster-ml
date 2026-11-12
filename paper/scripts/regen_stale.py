@@ -1274,7 +1274,7 @@ def task_w8(run, a):
     ax.set_ylabel("X-ray prediction [Gyr]")
     sm = plt.cm.ScalarMappable(cmap="viridis", norm=plt.Normalize(vmin, vmax))
     fig.colorbar(sm, ax=ax, pad=0.01, label=r"weak-lensing log $M_{500}$")
-    ax.set_title(f"{len(both)} LoVoCCS clusters, Spearman {rho:.2f}", fontsize=7)
+    ax.set_title(f"{len(both)} LoVoCCS clusters, Spearman {rho:.3f}", fontsize=7)
     run.save_fig(fig, "real_preds")
     run.record("w8", out)
     print(f"  n {len(both)}, rho {rho:.2f}, offset {out['median_offset']:+.2f}; medians radio "
