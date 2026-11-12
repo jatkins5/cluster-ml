@@ -271,6 +271,16 @@ raises(SystemExit, E.main, ["--out", mp("phase_chg.npz"), "--radio-dir", mp("rad
        mp("call"), "--cohort", R.IN["ds128"]], what="job A source changed during the run")
 assert not os.path.exists(mp("phase_chg.npz.manifest.json"))
 E.brc.generate = orig_gen
+np.savez(mp("ratio3.npz"), x=np.arange(3))
+def ratio_swap(path):                               # table replaced immediately after being loaded
+    np.savez(path, x=np.arange(5))
+    return None
+E.brc.make_ratio = ratio_swap
+raises(SystemExit, E.main, ["--out", mp("phase_swap.npz"), "--radio-dir", mp("radio"), "--cutout-dir", mp("cut"),
+                            "--ratio-table", mp("ratio3.npz"), "--cells-cut", mp("c144"), "--cells-all", mp("call"),
+                            "--cohort", R.IN["ds128"]], what="job A ratio table replaced right after loading")
+assert not os.path.exists(mp("phase_swap.npz.manifest.json"))
+E.brc.make_ratio = lambda p: None
 # job B two-stage producer
 B_ARGS = lambda stage, table=R.IN["ratio_table"]: [
     "--stage", stage, "--dataset", R.IN["ds1400"], "--cells-dir", R.IN["cells1400"], "--radio-dir", mp("radio"),

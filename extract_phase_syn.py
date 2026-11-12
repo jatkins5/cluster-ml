@@ -132,6 +132,10 @@ def main(argv=None):
     head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=here, capture_output=True, text=True).stdout.strip()
     dirty = subprocess.run(["git", "status", "--porcelain", "--"] + list(HELPERS),
                            cwd=here, capture_output=True, text=True).stdout.strip()
+    srcs = sorted(glob.glob(os.path.join(a.radio_dir, "radio_FOF*.npz")))
+    if a.limit:
+        srcs = srcs[:a.limit]
+    begin = sources_record(a, here, srcs)            # captured BEFORE the cohort, table or any cell is read
     with h5py.File(a.cohort) as f:
         cohort = [int(h) for h in f["meta/halo_id"][:]]
         check_attrs = dict(snapshot=int(f.attrs["snapshot"]), redshift=float(f.attrs["redshift"]))
@@ -139,10 +143,6 @@ def main(argv=None):
         raise SystemExit(f"cohort file is not snapshot 99 / z = 0: {check_attrs}")
     brc.set_redshift(0.0)
     interp = brc.make_ratio(a.ratio_table)
-    srcs = sorted(glob.glob(os.path.join(a.radio_dir, "radio_FOF*.npz")))
-    if a.limit:
-        srcs = srcs[:a.limit]
-    begin = sources_record(a, here, srcs)            # captured BEFORE any scientific read
     keys = ["halo_id", "n_cells", "n_invalid", "n_valid", "n_zero_w", "w_total", "n_out_of_range",
             "w_out_of_range", "n_kept", "w_kept", "frac_above", "frac_cold", "top_all", "top_cut",
             "mach_all", "mach_cut", "ratio_all", "ratio_cut", "check_cut_n", "check_cut_wrel", "check_all_n"]
