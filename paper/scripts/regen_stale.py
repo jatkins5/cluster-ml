@@ -767,9 +767,14 @@ def mf_block(images):
     N, P = images.shape[:2]
     curves = np.array([[mf_curves(images[i, p].astype(np.float64)) for p in range(P)] for i in range(N)])
     dev = curves[..., 0] / FRACS - 1.0
+    per = [dict(nominal_f=float(f), n_maps_dev_gt_10pct=int((np.abs(dev[..., j]) > 0.1).sum()),
+                median_selected_area=float(np.median(curves[..., j, 0])),
+                min_selected_area=float(np.min(curves[..., j, 0]))) for j, f in enumerate(FRACS)]
     return curves, dict(max_abs_rel_area_dev=float(np.max(np.abs(dev))),
                         n_maps_area_dev_gt_10pct=int((np.abs(dev) > 0.1).any(-1).sum()),
-                        median_abs_rel_area_dev=float(np.median(np.abs(dev))))
+                        median_abs_rel_area_dev=float(np.median(np.abs(dev))), per_threshold=per,
+                        rule="mask = image > quantile(image, 1 - f) (strict); once the quantile is 0 the mask is "
+                             "the emitting footprint and tied zero pixels are excluded")
 
 
 def task_w2(run, a):
@@ -837,9 +842,10 @@ def task_w2(run, a):
             a_.plot(FRACS, mu, color=c, label=lab)
             a_.fill_between(FRACS, mu - sd, mu + sd, color=c, alpha=0.15)
         a_.set_xscale("log")
-        a_.set_xlabel("area-fraction threshold")
+        a_.set_xlabel("nominal area-fraction threshold")
         a_.set_ylabel(name)
-    ax[0].legend()
+    h_, l_ = ax[0].get_legend_handles_labels()
+    fig.legend(h_, l_, loc="lower center", ncol=3, fontsize=6.5, frameon=False, bbox_to_anchor=(0.36, -0.06))
     pm_ = k1["pmean"]
     lo, hi = min(-0.1, pm_.min() - 0.1), max(4.2, pm_.max() + 0.1)
     ax[2].scatter(y, pm_, s=4, alpha=0.5, color=C_SIM)
