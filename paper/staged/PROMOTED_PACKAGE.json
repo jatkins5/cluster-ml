@@ -1,5 +1,5 @@
 {
- "note": "Promoted stale-regeneration package (review rounds 48-55): W1-W7/W9 from the consolidated run, W8 from the W8-only layout refresh; both manifests preserved unchanged.",
+ "note": "Promoted stale-regeneration package (review rounds 48-55): W1-W7/W9 from the consolidated run, W8 from the W8-only layout refresh; both manifests preserved unchanged. W8 was refreshed again (run 8945948, A1307 label offset only); its results and input fingerprints equal run 8945384, which is kept as superseded.",
  "runs": {
   "paper/staged/regen_final_8942495": {
    "requested": [
@@ -43,6 +43,22 @@
    "git_head": "5dcee568774d61058cb5b0fe1cf11ad2acfe4584",
    "command": "paper/scripts/regen_stale.py --run-dir paper/staged/regen_W8_8945384 --tasks w8",
    "seconds": 9.2,
+   "sources_changed": [],
+   "uncommitted_helpers": "",
+   "complete": true,
+   "promotable": true,
+   "limitations": "C/D inputs: full sha256 before use, size/mtime re-checked at the end (ordinary concurrent changes); A/B raw cutouts: partial fingerprints (see producer records)"
+  },
+  "paper/staged/regen_W8_8945948": {
+   "requested": [
+    "w8"
+   ],
+   "status": {
+    "w8": "ok"
+   },
+   "git_head": "04a53946f7e7bbab66eeed76efc079c849c07022",
+   "command": "paper/scripts/regen_stale.py --run-dir paper/staged/regen_W8_8945948 --tasks w8",
+   "seconds": 7.6,
    "sources_changed": [],
    "uncommitted_helpers": "",
    "complete": true,
@@ -92,9 +108,10 @@
    "replaced_sha256": "3658ef29fccc71a15ae30bd05ce9a66887a935476f4910853d8bf1f25a70e9c2"
   },
   "fig_real_preds.pdf": {
-   "source": "paper/staged/regen_W8_8945384/fig_real_preds.pdf",
-   "sha256": "ae2181b40e3fa3ed98cf206af227487929e1a964d53dd3e550b44704e7f4ffe3",
-   "replaced_sha256": "73520c4dc5971df1014a8a1f4bbdf8a5aa0050bdc12be5687c6e1fe78226b8fe"
+   "source": "paper/staged/regen_W8_8945948/fig_real_preds.pdf",
+   "sha256": "681506be90d6330491ba783b555ab5abd40b9fffcf122d26d1ca178c5c7cff1f",
+   "replaced_sha256": "ae2181b40e3fa3ed98cf206af227487929e1a964d53dd3e550b44704e7f4ffe3",
+   "superseded_run": "paper/staged/regen_W8_8945384"
   }
  },
  "records": {
@@ -139,8 +156,8 @@
    "arrays": "paper/staged/regen_final_8942495/w9_arrays.npz"
   },
   "w8": {
-   "json": "paper/staged/regen_W8_8945384/w8.json",
-   "sha256": "6b48018494ef7b65a41f98454a8b7d6b39d6a4aff396ea3ee55238cca1a7cace",
+   "json": "paper/staged/regen_W8_8945948/w8.json",
+   "sha256": "b443f37e4ac3c05cdf876f7812777aeea80787c5b2dba1c4015d1e6901f95692",
    "arrays": null,
    "note": "W8 writes no arrays sidecar; its target, prediction and error-bar vectors are in w8.json"
   }
