@@ -1210,6 +1210,11 @@ def task_w6(run, a):
 
 
 # ======================================================================= W8
+# label placement only (points/bars unchanged): offsets in points for crowded targets
+LABEL_OFFSETS = {"MKW3S": (3, 5), "A2033": (-4, 4), "A2063": (3, -7), "A401": (-3, 3), "A119": (-3, -7),
+                 "A2147": (3, 4), "A2443": (-3, 4), "A2440": (3, -7), "A399": (3, -6)}
+
+
 def task_w8(run, a):
     import pandas as pd
     from scipy import stats
@@ -1258,8 +1263,11 @@ def task_w8(run, a):
         ax.errorbar(r[i], x[i], xerr=ens["radio3"][k][1], yerr=ens["xray"][k][1], fmt="o", ms=4, color=c,
                     mec="k", mew=0.4, lw=0.7, capsize=0)
         lab = ens["radio3"][k][2].replace("_", " ").replace("RXC J1217.6+0339", "RXC J1217")
-        ax.annotate(lab, (r[i], x[i]), fontsize=4.5, xytext=(3, 2), textcoords="offset points")
-    lim = [min(0, r.min() - 0.3, x.min() - 0.3), max(r.max(), x.max()) + 0.3]
+        ax.annotate(lab, (r[i], x[i]), fontsize=4.5, xytext=LABEL_OFFSETS.get(k, (3, 2)),
+                    textcoords="offset points", ha="right" if LABEL_OFFSETS.get(k, (3, 2))[0] < 0 else "left")
+    rs, xs = np.array(out["radio_seed_sd"]), np.array(out["xray_seed_sd"])
+    lim = [min(0, (r - rs).min() - 0.1, (x - xs).min() - 0.1), max((r + rs).max(), (x + xs).max()) + 0.1]
+    out["figure_limits"] = dict(xy=lim, rule="cover every point and seed-sd error bar")
     ax.plot(lim, lim, "k:", lw=0.8)
     ax.set_xlim(lim), ax.set_ylim(lim)
     ax.set_xlabel("radio prediction [Gyr]")
