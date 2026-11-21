@@ -81,11 +81,7 @@ Measuring this precisely would require visibility-domain injection, in e.g. \cit
 We degraded the 2 Ms ACIS-I Cycle-22 mocks described in section~\ref{sec:sims} to approximate the redshifts and observing depths of the Chandra targets.
 The images cover the observed 0.1-2.0 keV band on a common physical grid, with pixel size of approximately 18.9 kpc.
 The X-ray images inherit their redshift values from the corresponding simulated radio observations.
-\suggestion{Clarify the aperture labels in the comparisons: The separate
-X-ray mock sets use the same physical grid and observing model, but
-match the placement-redshift draws of the corresponding radio-box
-experiment. A control matched to the 3\,Mpc radio inputs is not a
-separate 3\,Mpc X-ray crop.}
+Thus, Separate X-ray mock sets are generated for each radio experiment, all with the same aperture, physical grid, and observing model, differing only in redshift draws.
 In cases when a true ACIS-I target exists at the assigned redshift, we use the exposure properties of that target; otherwise, those of a randomly-selected ACIS-I target are used.
 
 Source counts are reduced by binomial thinning, with retainment probability:

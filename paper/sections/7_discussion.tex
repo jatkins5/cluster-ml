@@ -5,51 +5,30 @@ Our results show that radio and X-ray observations are informative about recent 
 For individual simulated observations, the five-model ensemble achieves $R^2 = 0.196$ from the 3 Mpc radio images, and $R^2 = 0.406$ from the retained X-ray reference.
 These results extend image-based studies of cluster dynamical state toward continuous inference of a proxy for the merger history.
 They also address observational limitations noted by \cite{Arendt2024}, which used idealized X-ray and Compton-y maps for classification.
-Differences in targets, sample selection, and evaluation prevent a direct numerical comparison to their results.
-\suggestion{Add the comparison requested in \texttt{todos.md}:
-The ERGO-ML study of \citet{Chadayammuri2026} provides a complementary
-view of the information in TNG-Cluster X-ray images. Their contrastive
-representation of idealized maps captures variation in mass, dynamical
-state, and merger history. Our supervised pseudo-TSC regression instead
-tests recovery of a specified merger-history indicator, including from
-individual forward-modelled observations. Differences in labels,
-image construction, and evaluation prevent a direct accuracy comparison.
-Their discussion of observational transfer motivates accounting for
-effective area, detector gaps, and background noise, and testing
-sensitivity to simulation physics. Our approximate forward model
-addresses some of these effects but does not reproduce every observed
-detector footprint or establish robustness across simulation suites.}
+
+The ERGO-ML study in \citet{Chadayammuri2026} trained a self-supervised contrastive model on idealized X-ray emission maps of TNG-Cluster halos, without physical labels.
+They found that their representations were organized primarily by halo mass, which was recovered to about 5\%, while TSC appeared as a visible, though noisy, secondary trend, only recoverable to within an order of magnitude from their low-dimensional representational embedding.
+Our supervised regression instead directly trains on a merger-history indicator, with clean X-ray images reaching $R^2=0.511$, and the radio CNN remaining predictive within mass terciles, as well as when controlling for mass (section~\ref{sec:results}).
+Together, these results suggest that information about merger histories is present in cluster images, but is not a dominant axis of variation, and training has to be directed towards it.
+Mass still accounts for a substantial part of the information used by our model, as shown by the overlap between CNN predictions and scalar features.
+Both studies also find strong dependence on viewing direction: our single-projection scores are lower than those which use pooled projections, and \citet{Chadayammuri2026} report different projections being represented differently.
+When applying to observations, \citet{Chadayammuri2026} recommend training on forward-modelled mock observations, including effects such as instrument effective area, chip gaps, and background noise.
+Our forward model includes most of these effects, though not chip gaps or individual exposure footprints, and we quantify the performance loss in section~\ref{sec:results}.
+Because our prediction targets are different, with \citet{Chadayammuri2026} measuring a linear fit to a two-dimensional embedding compared to our supervised regression method, we cannot directly compare our results with theirs or with \citet{Arendt2024}.
 
 The strong association between pseudo-TSC and the catalogue collision metric supports using the predictions to study relative merger activity.
 The 4 Gyr endpoint groups histories that the sampled window cannot resolve (section~\ref{sec:sims}), making compression of predictions near that endpoint especially important.
 
-\suggestion{
-if the existing ERGO-ML suggestion above is adopted, place
-one shared qualification after the Arendt and ERGO-ML comparisons:
-Differences in prediction targets, image construction, sample selection,
-and evaluation prevent direct accuracy comparisons with either study.
-This would replace the similar qualification currently made separately
-for each study; the unresolved substantive literature comparison remains.}
-
-Integrated emission carries substantial merger history information, but it does not account for all of the radio CCN's performance; normalized maps, explicit morphological descriptors, and tests within mass bins remain predictive (Section~\ref{sec:results}).
-These tests do not separate morphology, luminosity, and mass into independent contributions, because those properties remain correlated in the simulated population. 
+Integrated emission carries substantial merger history information, but it does not account for all of the radio CNN's performance; normalized maps, explicit morphological descriptors, and tests within mass bins remain predictive (Section~\ref{sec:results}).
+Normalizing each radio projection reduces the mean $R^2$ from 0.498 to 0.413.
+In a half-sample comparison within the CNN test folds, its output adds 0.058 ($[0.016, 0.097]$) to the five scalar features prediction, showing that predictive signal remains beyond integrated emission.
+Morphology, luminosity, and mass are correlated in the simulated population, so our results do not separate their contributions. 
 The decline of residual radio power with pseudo-TSC at fixed mass is qualitatively consistent with the evolving shock-powered radio light curves of \citet{Nuza2024}.
-\suggestion{The scalar, mass-bin, Minkowski-functional and power--mass
-results cited in this paragraph have been regenerated with the current
-radio prescription (section~\ref{sec:results}). Suggested current-result
-sentence: Normalizing each radio projection reduces mean $R^2$ from
-0.498 to 0.413, and in a half-sample comparison within the CNN test folds
-the CNN output adds $0.058$ ($[0.016, 0.097]$) to five scalar features,
-showing that predictive signal remains beyond integrated emission without
-isolating morphology from correlated luminosity and mass.}
 
 Before the density cut, a median 99.6 per cent of each cluster's radio weight arises in gas with $n_\text{H} > 10^{-4}$ cm$^{-3}$, including in a substantial cold component.
 The cold, dense gas is consistent with stripped satellite material, but we did not investigate its origin.
 Our shock emission model assumes non-radiative ICM shocks and neglects Coulomb losses \citep{HoeftBruggen2007}, motivating a check of the gas phases to which it is applied.
-Our density cut is intended to restrict the model to its domain of applicability; the clean-map scores are $R^2 = 0.488\to0.498$ after applying the cut (paired-seed $p = 0.197$).
-\suggestion{Replace a claim of ``no accuracy gain'' with ``no
-statistically resolved gain in this five-seed comparison''; the paired
-change is $+0.010\pm0.015$.}
+Our density cut is intended to restrict the model to its domain of applicability; it changes the clean-map scores are $R^2 = 0.488$ to $0.498$ (paired change $+0.010\pm 0.015$, paired-seed $p=0.197$) after applying the cut.
 Sensitivity to the chosen gas selection remains to be quantified.
 
 The radio amplitude is anchored to an observed radio-halo relation, although the simulated emission is powered by shocks, and the X-ray brightness correction is fitted using the observed sample.
@@ -115,6 +94,7 @@ Interpreting predictions as physical collision ages requires independent merger 
 
 The contrastive pilot's poor performance applies to the tested frozen-encoder configuration (section~\ref{sec:loss_head}).
 Its cause remains unresolved; alternative pair construction and encoder fine-tuning require controlled comparisons before broader conclusions about contrastive learning can be drawn \citep{Chadayammuri2026}.
+\suggestion{Give the citation a reason: One plausible contributor is that contrastive representations of cluster images are organized mainly by mass, with merger history as a weaker secondary trend \citep{Chadayammuri2026}; a frozen encoder with a small regression head may therefore expose merger timing poorly, which encoder fine-tuning would test.}
 
 Using the diffusion model to generate synthetic data did not provide any performance improvement.
 \suggestion{Use ``did not demonstrate a reliable improvement in this

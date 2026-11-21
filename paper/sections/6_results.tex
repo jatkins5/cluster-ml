@@ -28,12 +28,6 @@ However, the scalar features predicted the CNN output of held-out clusters with 
 
 Normalizing each radio projection to a common integrated emission value reduced the mean CNN score to $R^2=0.413 \pm 0.020$.
 Performance decreased in all five random seeds, with a mean paired change of $-0.085\pm0.043$ and a paired-seed p-value of $0.012$.
-\suggestion{The normalized-map score is 83 per cent of the full-map
-$R^2$, not 83 per cent of physical merger-history information. Suggested
-wording: Equalizing integrated emission reduces predictive performance,
-but the normalized images retain substantial predictive signal. This
-does not separate morphology from luminosity or mass, which remain
-correlated.}
 The original integrated emission predicted the normalized-map model's output for held-out clusters with $R^2 = 0.562 \pm 0.047$, again within halves of each original test fold.
 
 Part of the signal could also be recovered from a representation of the morphology.
@@ -107,12 +101,10 @@ Using $\operatorname{arcsinh}(x/a)$ with a global scale $a$ compresses bright co
 
 Combining the stretched X-ray images with the 144 MHz radio maps yields a mean $R^2 = 0.535\pm0.020$.
 The mean paired increment over radio alone was $0.037\pm0.032$, with improvement in all five seeds (paired-seed $p=0.064$).
-This supports the hypothesis that there is complementary information in the clean radio and X-ray inputs.
-\suggestion{Qualify the preceding sentence: The joint point estimate
-exceeds the radio-only value in each seed, but the paired five-seed test
-does not resolve an improvement at the 5 per cent level. Do not infer
-that the increment significantly decreased merely because the old and
-new p-values fall on different sides of that threshold.}
+While the joint point estimate exceeds the radio-only value in each seed, the paired improvement was not statistically significant.
+\todo{run the paired parent-halo bootstrap (as for the forward-modelled
+comparisons) on the five-seed ensemble predictions for clean radio vs
+radio + X-ray, and report the 95 per cent interval on the $R^2$ increment}
 
 \subsection{With Forward-Modelling}
 \label{sec:flux}
@@ -143,12 +135,7 @@ The $95\%$ interval was $[-0.032, +0.074]$.
 
 In the separate matched comparison using 3 Mpc radio images, the X-ray control scored $R^2=0.403$ and the joint model scored $0.401$.
 The paired difference was $-0.002$, with a $95\%$ interval of $[-0.057,+0.057]$.
-\suggestion{Use this matched comparison for the main inference about
-adding radio to X-rays: No improvement was resolved for the tested
-3\,Mpc joint model. The interval does not establish equivalence or rule
-out useful gains under other conditions. Keep the 1\,Mpc descriptive
-comparison separate. The older mass-only baseline also used different
-noisy inputs, so its change cannot be attributed to folds alone.}
+Thus, we did not see a significant improvement from adding the 3 Mpc radio images.
 
 We separately compared pooled-view and single-view X-ray training using the same persistent parent-halo folds, identical inner-selection halos, and single-view checkpoint scoring.
 Pooled-view training achieved ensemble $R^2=0.425$ and MAE 0.649 Gyr, compared with $R^2=0.421$ and MAE 0.659 Gyr for single-view training.
