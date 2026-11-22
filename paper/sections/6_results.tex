@@ -123,6 +123,12 @@ While the models predicting on larger boxes performed better, injection placemen
 The new radio/mass comparison and the separate 3 Mpc joint/X-ray comparison use matching outer folds and inner-selection halos between conditions.
 The mass comparison also uses the same fixed noisy-mass measurements in both conditions and across seeds.
 The 1 Mpc joint/X-ray comparison reuses an older X-ray reference with different folds and is therefore descriptive.
+\suggestion{A matched X-ray control for the 1\,Mpc joint model has now
+been trained (same X-ray inputs and observing placements as that joint
+model, identical outer folds and inner-selection halos; review rounds
+59--61). Suggested replacement for the preceding sentence: The 1\,Mpc
+joint/X-ray comparison likewise uses an X-ray control matched in observing
+placements, outer folds and inner-selection halos.}
 All bootstrap intervals remain conditional on the fitted models.
 
 Despite significantly decreased performance, the radio images retained useful information beyond noisy mass measurements.
@@ -132,6 +138,21 @@ The paired difference was $+0.129$, with a $95\%$ interval of $[+0.068, +0.190]$
 X-ray images showed much stronger performance under forward-modelling, achieving a single-observation ensemble $R^2 = 0.406$.
 The joint model using radio images with 1 Mpc box size scored $0.426$, a descriptive difference of $+0.020$ from that reference.
 The $95\%$ interval was $[-0.032, +0.074]$.
+\suggestion{Replace the descriptive 1\,Mpc contrast with the matched
+result: On snapshot 99, the five-model single-observation ensemble
+achieved $R^2 = 0.426$ for the 1\,Mpc radio + X-ray model and 0.414 for
+an X-ray control matched in observing placements, outer folds and
+inner-selection halos. The paired difference was $+0.011$, with a 95 per
+cent parent-bootstrap interval of $[-0.033, +0.056]$, conditional on the
+fitted models. Thus, no improvement from adding radio was resolved under
+this protocol. (Quote $+0.011$ from the unrounded scores, not
+$0.426-0.414$. Using both snapshots the difference is $+0.005$
+$[-0.030, +0.042]$. The interval establishes neither a gain nor
+equivalence. Because the 1 and 3\,Mpc families use different mock
+placements, the two matched comparisons do not isolate the effect of
+radio aperture.) The retained X-ray reference ($R^2=0.406$) can still be
+quoted where labelled as that model, e.g.\ for the observed-cluster
+predictions.}
 
 In the separate matched comparison using 3 Mpc radio images, the X-ray control scored $R^2=0.403$ and the joint model scored $0.401$.
 The paired difference was $-0.002$, with a $95\%$ interval of $[-0.057,+0.057]$.
@@ -193,6 +214,16 @@ Comparisons with observed halo and relic relations remain contextual, as frequen
   {\footnotesize $^a$ Source profile compressed with arcsinh and rescaled to preserve total physical flux before beam convolution and background injection.
   $^b$ The same fixed blurred-mass measurements across both arms and all seeds, with matching outer and inner partitions.}
 \end{table*}
+\suggestion{Table~\ref{tab:realistic}: optionally add matched X-ray control rows so every joint row
+has a directly comparable X-ray baseline: ``X-ray control matched to
+1\,Mpc radio'' $0.460 \pm 0.016$ / 0.414 / 0.316 / $-0.74$, and
+``X-ray control matched to 3\,Mpc radio'' $0.445 \pm 0.027$ / 0.403 /
+0.315 / $-0.75$. Then replace ``the X-ray control matched to the 3\,Mpc
+radio experiment is reported separately in the text'' with ``each
+matched X-ray control shares its joint model's X-ray inputs, outer folds
+and inner-selection halos; the two controls differ in mock placements,
+so the rows do not isolate the effect of radio aperture''. Keep the
+retained-reference row, which supplies the observed-cluster predictions.}
 \begin{figure*}
   \centering
   \includegraphics[width=\textwidth]{fig_pm_relation.pdf}
