@@ -105,6 +105,25 @@ While the joint point estimate exceeds the radio-only value in each seed, the pa
 \todo{run the paired parent-halo bootstrap (as for the forward-modelled
 comparisons) on the five-seed ensemble predictions for clean radio vs
 radio + X-ray, and report the 95 per cent interval on the $R^2$ increment}
+\suggestion{The requested bootstrap is complete (review rounds 62--64);
+it can replace the TODO. Suggested text: For the five-seed ensemble of
+pooled clean predictions, adding X-ray images increased $R^2$ from 0.531
+to 0.570, an increment of 0.039 (95 per cent paired parent-bootstrap
+interval $[0.003, 0.075]$, conditional on the fitted networks). The
+conditional interval narrowly excludes zero. The mean per-seed increment
+remained $0.037\pm0.032$, with paired-seed $p=0.064$. These summaries
+address different estimands and sources of uncertainty: the bootstrap
+resamples parents while holding the fitted networks fixed, whereas the
+paired-seed test compares seed-dependent training and partition
+realizations. If the preceding sentence is kept, qualify it as ``the
+paired-seed improvement was not statistically significant''. (Optional:
+the parent-bootstrap interval for the mean per-seed increment is
+$[0.001, 0.073]$, with the same fixed-network qualification. This analysis
+was requested after the seed-level result was known, so it is not an
+independent confirmation; the original split memberships were not saved.
+It concerns clean three-projection pooled inputs, adds X-rays to radio,
+and does not bear on the forward-modelled comparisons or observed
+clusters.)}
 
 \subsection{With Forward-Modelling}
 \label{sec:flux}
